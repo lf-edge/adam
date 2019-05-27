@@ -1,8 +1,10 @@
 package cmd
 
 const (
-	defaultCertPath = "./run/server.pem"
-	defaultKeyPath  = "./run/server-key.pem"
+	defaultCertPath               = "./run/server.pem"
+	defaultKeyPath                = "./run/server-key.pem"
+	defaultDeviceDatabasePath     = "./run/device"
+	defaultOnboardingDatabasePath = "./run/onboard"
 )
 
 var (

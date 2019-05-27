@@ -76,8 +76,13 @@ var generateDeviceCmd = &cobra.Command{
 		}
 		re := regexp.MustCompile(`[^a-zA-Z0-9\\.\\-]`)
 		cnSquashed := re.ReplaceAllString(cn, "_")
-		certPath := path.Join(deviceDatabasePath, fmt.Sprintf("%s.pem", cnSquashed))
-		keyPath := path.Join(deviceDatabasePath, fmt.Sprintf("%s-key.pem", cnSquashed))
+		devicePath := path.Join(deviceDatabasePath, cnSquashed)
+		err = os.Mkdir(devicePath, 0755)
+		if err != nil {
+			log.Fatalf("error creating device directory %s: %v", devicePath, err)
+		}
+		certPath := path.Join(devicePath, fmt.Sprintf("%s.pem", cnSquashed))
+		keyPath := path.Join(devicePath, fmt.Sprintf("%s-key.pem", cnSquashed))
 		err = x509.Generate(cn, "", certPath, keyPath, force)
 		if err != nil {
 			log.Fatalf("error generating key/cert: %v", err)
@@ -96,16 +101,14 @@ func generateInit() {
 
 	// generate onboarding certs
 	generateCmd.AddCommand(generateOnboardCmd)
-	generateOnboardCmd.Flags().StringVar(&onboardingDatabasePath, "onboard-db", "", "path to directory where we will store the generated onboarding certificates")
-	generateOnboardCmd.MarkFlagRequired("onboard-db")
+	generateOnboardCmd.Flags().StringVar(&onboardingDatabasePath, "onboard-db", defaultOnboardingDatabasePath, "path to directory where we will store the generated onboarding certificates")
 	generateOnboardCmd.Flags().StringVar(&cn, "cn", "", "CN to use in the certificate; will not replace if one with the same CN exists")
 	generateOnboardCmd.MarkFlagRequired("cn")
 	generateOnboardCmd.Flags().BoolVar(&force, "force", false, "replace existing files")
 
 	// generate device certs
 	generateCmd.AddCommand(generateDeviceCmd)
-	generateDeviceCmd.Flags().StringVar(&deviceDatabasePath, "device-db", "", "path to directory where we will store the generated device certificates")
-	generateDeviceCmd.MarkFlagRequired("device-db")
+	generateDeviceCmd.Flags().StringVar(&deviceDatabasePath, "device-db", defaultDeviceDatabasePath, "path to directory where we will store the generated device certificates")
 	generateDeviceCmd.Flags().StringVar(&cn, "cn", "", "CN to use in the certificate; will not replace if one with the same CN exists")
 	generateDeviceCmd.MarkFlagRequired("cn")
 	generateDeviceCmd.Flags().BoolVar(&force, "force", false, "replace existing files")

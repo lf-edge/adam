@@ -25,6 +25,7 @@ type Server struct {
 	ClientCertPath         string
 	DeviceDatabasePath     string
 	OnboardingDatabasePath string
+	CertRefresh            int
 }
 
 func (s *Server) Start() {
