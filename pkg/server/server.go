@@ -135,13 +135,6 @@ func getClientCert(r *http.Request) *x509.Certificate {
 	return r.TLS.PeerCertificates[0]
 }
 
-type deviceManager interface {
-}
-type deviceManagerFile struct {
-	path string
-}
-type deviceManagerMemory struct {
-}
 type requestHandler struct {
 	manager deviceManager
 }
