@@ -6,6 +6,7 @@ import (
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
+	"github.com/satori/go.uuid"
 )
 
 type deviceStorage struct {
@@ -16,4 +17,13 @@ type deviceStorage struct {
 	config  *config.EdgeDevConfig
 	serial  string
 	onboard *x509.Certificate
+}
+
+func createBaseConfig(u uuid.UUID) *config.EdgeDevConfig {
+	return &config.EdgeDevConfig{
+		Id: &config.UUIDandVersion{
+			Uuid:    u.String(),
+			Version: "4",
+		},
+	}
 }

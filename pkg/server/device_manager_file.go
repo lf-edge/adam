@@ -11,7 +11,6 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
@@ -22,13 +21,13 @@ import (
 const (
 	DeviceCertFilename    = "device-certificate.pem"
 	DeviceOnboardFilename = "onboard-certificate.pem"
+	deviceConfigFilename  = "config.json"
 	deviceSerialFilename  = "serial.txt"
 	onboardCertFilename   = "cert.pem"
 	onboardCertSerials    = "onboard-serials.txt"
 	logDir                = "logs"
 	metricsDir            = "metrics"
 	infoDir               = "info"
-	configPath            = "config.json"
 )
 
 type DeviceManagerFile struct {
@@ -131,8 +130,13 @@ func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, 
 	if err != nil {
 		return nil, fmt.Errorf("error saving device serial to %s: %v", serialPath, err)
 	}
+	// save the base configuration
+	err = d.writeProtobufToJsonFile(unew, "", deviceConfigFilename, createBaseConfig(unew))
+	if err != nil {
+		return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
+	}
 
-	// create the necessary directories
+	// create the necessary directories for data uploads
 	for _, p := range []string{logDir, metricsDir, infoDir} {
 		cur := path.Join(DevicePath, p)
 		err = os.MkdirAll(cur, 0755)
@@ -141,7 +145,7 @@ func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, 
 		}
 	}
 
-	// save new one to cache
+	// save new one to cache - just the serial and onboard; the rest is on disk
 	d.deviceCerts[string(cert.Raw)] = unew
 	d.devices[unew] = deviceStorage{
 		onboard: onboard,
@@ -166,7 +170,7 @@ func (d *DeviceManagerFile) WriteInfo(m *info.ZInfoMsg) error {
 	if _, ok := d.devices[u]; !ok {
 		return fmt.Errorf("unregistered device uuid: %s", m.DevId)
 	}
-	err = d.writeProtobufToJsonFile(u, infoDir, m.AtTimeStamp, m)
+	err = d.writeProtobufToJsonFile(u, infoDir, m.AtTimeStamp.String(), m)
 	if err != nil {
 		return fmt.Errorf("failed to write info to file: %v", err)
 	}
@@ -188,7 +192,7 @@ func (d *DeviceManagerFile) WriteLogs(m *logs.LogBundle) error {
 	if _, ok := d.devices[u]; !ok {
 		return fmt.Errorf("unregistered device uuid: %s", m.DevID)
 	}
-	err = d.writeProtobufToJsonFile(u, logDir, m.Timestamp, m)
+	err = d.writeProtobufToJsonFile(u, logDir, m.Timestamp.String(), m)
 	if err != nil {
 		return fmt.Errorf("failed to write logs to file: %v", err)
 	}
@@ -210,7 +214,7 @@ func (d *DeviceManagerFile) WriteMetrics(m *metrics.ZMetricMsg) error {
 	if _, ok := d.devices[u]; !ok {
 		return fmt.Errorf("unregistered device uuid: %s", m.DevID)
 	}
-	err = d.writeProtobufToJsonFile(u, metricsDir, m.AtTimeStamp, m)
+	err = d.writeProtobufToJsonFile(u, metricsDir, m.AtTimeStamp.String(), m)
 	if err != nil {
 		return fmt.Errorf("failed to write metrics to file: %v", err)
 	}
@@ -219,18 +223,29 @@ func (d *DeviceManagerFile) WriteMetrics(m *metrics.ZMetricMsg) error {
 
 // GetConfig retrieve the config for a particular device
 func (d *DeviceManagerFile) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
-	// read the config from disk
-	fullConfigPath := path.Join(d.getDevicePath(u), configPath)
-	b, err := ioutil.ReadFile(fullConfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("could not read config from %s: %v", fullConfigPath, err)
-	}
-	// convert it to the message format
+	// hold our config
 	msg := &config.EdgeDevConfig{}
-	err = jsonpb.UnmarshalString(string(b), msg)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing the config to protobuf: %v", err)
+	// read the config from disk
+	fullConfigPath := path.Join(d.getDevicePath(u), deviceConfigFilename)
+	b, err := ioutil.ReadFile(fullConfigPath)
+	switch {
+	case err != nil && os.IsNotExist(err):
+		// create the base file if it does not exist
+		msg = createBaseConfig(u)
+		err = d.writeProtobufToJsonFile(u, "", deviceConfigFilename, msg)
+		if err != nil {
+			return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
+		}
+	case err != nil:
+		return nil, fmt.Errorf("could not read config from %s: %v", fullConfigPath, err)
+	default:
+		// convert it to the message format
+		err = jsonpb.UnmarshalString(string(b), msg)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing the config to protobuf: %v", err)
+		}
 	}
+
 	return msg, nil
 }
 
@@ -390,9 +405,9 @@ func (d *DeviceManagerFile) getDevicePath(u uuid.UUID) string {
 	return GetDevicePath(d.DevicePath, u)
 }
 
-// writeProtobufToJsonFile write a protobuf to a timestamped file in the given directory
-func (d *DeviceManagerFile) writeProtobufToJsonFile(u uuid.UUID, dir string, ts *timestamp.Timestamp, msg proto.Message) error {
-	filename := ts.String()
+// writeProtobufToJsonFile write a protobuf to a named file in the given directory
+func (d *DeviceManagerFile) writeProtobufToJsonFile(u uuid.UUID, dir, filename string, msg proto.Message) error {
+	// if dir == "", then path.Join() automatically ignores it
 	fullPath := path.Join(d.getDevicePath(u), dir, filename)
 	f, err := os.Create(fullPath)
 	if err != nil {

@@ -27,11 +27,13 @@ func (s *Server) Start() {
 		log.Fatalf("onboarding path must be set")
 	}
 	fi, err := os.Stat(s.OnboardingDatabasePath)
-	if err != nil {
-		log.Fatalf("onboarding database path %s does not exist", s.OnboardingDatabasePath)
+	if err == nil && !fi.IsDir() {
+		log.Fatalf("onboarding database path %s exist but is not a directory", s.OnboardingDatabasePath)
 	}
-	if !fi.IsDir() {
-		log.Fatalf("onboarding database path %s is not a directory", s.OnboardingDatabasePath)
+	// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it
+	err = os.MkdirAll(s.OnboardingDatabasePath, 0755)
+	if err != nil {
+		log.Fatalf("could not create onboarding certificate path %s: %v", s.OnboardingDatabasePath, err)
 	}
 
 	// ensure the server cert and key exist
@@ -49,11 +51,13 @@ func (s *Server) Start() {
 	var mgr DeviceManager
 	if s.DeviceDatabasePath != "" {
 		fi, err := os.Stat(s.DeviceDatabasePath)
-		if os.IsNotExist(err) {
-			log.Fatalf("device database path %s does not exist", s.DeviceDatabasePath)
+		if err == nil && !fi.IsDir() {
+			log.Fatalf("device database path %s exists and is not a directory", s.DeviceDatabasePath)
 		}
-		if !fi.IsDir() {
-			log.Fatalf("device database path %s is not a directory", s.DeviceDatabasePath)
+		// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it
+		err = os.MkdirAll(s.DeviceDatabasePath, 0755)
+		if err != nil {
+			log.Fatalf("could not create device database path %s: %v", s.DeviceDatabasePath, err)
 		}
 		mgr = &DeviceManagerFile{
 			DevicePath:  s.DeviceDatabasePath,

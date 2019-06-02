@@ -68,6 +68,7 @@ func (d *DeviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate
 	d.devices[unew] = deviceStorage{
 		onboard: onboard,
 		serial:  serial,
+		config:  createBaseConfig(unew),
 	}
 	return &unew, nil
 }
