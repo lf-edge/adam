@@ -72,10 +72,12 @@ func Generate(cn, hosts string) ([]byte, []byte, error) {
 	}
 	out := &bytes.Buffer{}
 	pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	certB := out.Bytes()
+	certB := make([]byte, out.Len())
+	copy(certB, out.Bytes())
 	out.Reset()
 	pem.Encode(out, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)})
-	keyB := out.Bytes()
+	keyB := make([]byte, out.Len())
+	copy(keyB, out.Bytes())
 	return certB, keyB, nil
 }
 

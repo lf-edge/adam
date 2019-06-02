@@ -35,6 +35,8 @@ var generateServerCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error generating key/cert: %v", err)
 		}
+		log.Printf("saved new server certificate to %s", certPath)
+		log.Printf("saved new server key to %s", keyPath)
 	},
 }
 
