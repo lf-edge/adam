@@ -16,7 +16,6 @@ type Server struct {
 	Port                   string
 	CertPath               string
 	KeyPath                string
-	ClientCertPath         string
 	DeviceDatabasePath     string
 	OnboardingDatabasePath string
 	CertRefresh            int
@@ -95,7 +94,6 @@ func (s *Server) Start() {
 	}
 	log.Println("Starting adam:")
 	log.Printf("\tPort: %s\n", s.Port)
-	log.Printf("\tclient certs: %s\n", s.ClientCertPath)
 	log.Printf("\tonboarding certs: %s\n", s.OnboardingDatabasePath)
 	log.Printf("\tdevice database: %s\n", s.DeviceDatabasePath)
 	log.Printf("\tserver cert: %s\n", s.CertPath)
