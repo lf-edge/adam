@@ -51,7 +51,9 @@ var generateOnboardCmd = &cobra.Command{
 		re := regexp.MustCompile(`[^a-zA-Z0-9\\.\\-]`)
 		cnSquashed := re.ReplaceAllString(cn, "_")
 		onboardPath := path.Join(onboardingDatabasePath, cnSquashed)
-		err = os.Mkdir(onboardPath, 0755)
+		// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it,
+		//   or if the _files_ already exist
+		err = os.MkdirAll(onboardPath, 0755)
 		if err != nil {
 			log.Fatalf("could not create onboarding certificate path %s: %v", onboardPath, err)
 		}
