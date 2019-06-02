@@ -46,6 +46,7 @@ func (s *Server) Start() {
 	}
 
 	// create a handler based on where our device database is
+	// in the future, we may support other device manager types
 	var mgr deviceManager
 	if s.DeviceDatabasePath != "" {
 		fi, err := os.Stat(s.DeviceDatabasePath)
@@ -56,11 +57,16 @@ func (s *Server) Start() {
 			log.Fatalf("device database path %s is not a directory", s.DeviceDatabasePath)
 		}
 		mgr = &deviceManagerFile{
-			path: s.DeviceDatabasePath,
+			devicePath:  s.DeviceDatabasePath,
+			onboardPath: s.OnboardingDatabasePath,
 		}
 	} else {
 		mgr = &deviceManagerMemory{}
 	}
+
+	// save the device manager settings
+	mgr.SetCacheTimeout(s.CertRefresh)
+
 	h := &requestHandler{
 		manager: mgr,
 	}
