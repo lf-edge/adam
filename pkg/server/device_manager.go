@@ -9,7 +9,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type deviceManager interface {
+type DeviceManager interface {
 	// SetCacheTimeout set how long to keep onboard and device certificates in cache before rereading from a backing store. Value of 0 means
 	//   not to cache
 	SetCacheTimeout(int)

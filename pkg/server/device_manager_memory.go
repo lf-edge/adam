@@ -10,18 +10,18 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type deviceManagerMemory struct {
+type DeviceManagerMemory struct {
 	onboardCerts map[string]map[string]bool
 	deviceCerts  map[string]uuid.UUID
 	devices      map[uuid.UUID]deviceStorage
 }
 
 // SetCacheTimeout set the timeout for refreshing the cache, unused in memory
-func (d *deviceManagerMemory) SetCacheTimeout(timeout int) {
+func (d *DeviceManagerMemory) SetCacheTimeout(timeout int) {
 }
 
 // CheckOnboardCert see if a particular certificate plus serial combinaton is valid
-func (d *deviceManagerMemory) CheckOnboardCert(cert *x509.Certificate, serial string) (bool, error) {
+func (d *DeviceManagerMemory) CheckOnboardCert(cert *x509.Certificate, serial string) (bool, error) {
 	if cert == nil {
 		return false, fmt.Errorf("invalid nil certificate")
 	}
@@ -35,7 +35,7 @@ func (d *deviceManagerMemory) CheckOnboardCert(cert *x509.Certificate, serial st
 }
 
 // CheckDeviceCert see if a particular certificate is a valid registered device certificate
-func (d *deviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
+func (d *DeviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("invalid nil certificate")
 	}
@@ -47,7 +47,7 @@ func (d *deviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUI
 }
 
 // RegisterDeviceCert register a new device cert
-func (d *deviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
+func (d *DeviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
 	// first check if it already exists - this also checks for nil cert
 	u, err := d.CheckDeviceCert(cert)
 	if err != nil {
@@ -73,7 +73,7 @@ func (d *deviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate
 }
 
 // WriteInfo write an info message
-func (d *deviceManagerMemory) WriteInfo(m *info.ZInfoMsg) error {
+func (d *DeviceManagerMemory) WriteInfo(m *info.ZInfoMsg) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -94,7 +94,7 @@ func (d *deviceManagerMemory) WriteInfo(m *info.ZInfoMsg) error {
 }
 
 // WriteLogs write a message of logs
-func (d *deviceManagerMemory) WriteLogs(m *logs.LogBundle) error {
+func (d *DeviceManagerMemory) WriteLogs(m *logs.LogBundle) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -115,7 +115,7 @@ func (d *deviceManagerMemory) WriteLogs(m *logs.LogBundle) error {
 }
 
 // WriteMetrics write a metrics message
-func (d *deviceManagerMemory) WriteMetrics(m *metrics.ZMetricMsg) error {
+func (d *DeviceManagerMemory) WriteMetrics(m *metrics.ZMetricMsg) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -136,7 +136,7 @@ func (d *deviceManagerMemory) WriteMetrics(m *metrics.ZMetricMsg) error {
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *deviceManagerMemory) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
+func (d *DeviceManagerMemory) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
@@ -147,7 +147,7 @@ func (d *deviceManagerMemory) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, err
 
 // checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
 // does **not** check if it has been used
-func (d *deviceManagerMemory) checkValidOnboardSerial(cert *x509.Certificate, serial string) bool {
+func (d *DeviceManagerMemory) checkValidOnboardSerial(cert *x509.Certificate, serial string) bool {
 	certStr := string(cert.Raw)
 	if c, ok := d.onboardCerts[certStr]; ok {
 		// accept the specific serial or the wildcard
@@ -162,7 +162,7 @@ func (d *deviceManagerMemory) checkValidOnboardSerial(cert *x509.Certificate, se
 }
 
 // getOnboardSerialDevice see if a particular certificate+serial combinaton has been used and get its device uuid
-func (d *deviceManagerMemory) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
+func (d *DeviceManagerMemory) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
 	certStr := string(cert.Raw)
 	for uid, dev := range d.devices {
 		dCertStr := string(dev.onboard.Raw)

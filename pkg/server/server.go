@@ -46,7 +46,7 @@ func (s *Server) Start() {
 
 	// create a handler based on where our device database is
 	// in the future, we may support other device manager types
-	var mgr deviceManager
+	var mgr DeviceManager
 	if s.DeviceDatabasePath != "" {
 		fi, err := os.Stat(s.DeviceDatabasePath)
 		if os.IsNotExist(err) {
@@ -55,12 +55,12 @@ func (s *Server) Start() {
 		if !fi.IsDir() {
 			log.Fatalf("device database path %s is not a directory", s.DeviceDatabasePath)
 		}
-		mgr = &deviceManagerFile{
-			devicePath:  s.DeviceDatabasePath,
+		mgr = &DeviceManagerFile{
+			DevicePath:  s.DeviceDatabasePath,
 			onboardPath: s.OnboardingDatabasePath,
 		}
 	} else {
-		mgr = &deviceManagerMemory{}
+		mgr = &DeviceManagerMemory{}
 	}
 
 	// save the device manager settings
@@ -134,7 +134,7 @@ func getClientCert(r *http.Request) *x509.Certificate {
 }
 
 type requestHandler struct {
-	manager deviceManager
+	manager DeviceManager
 }
 
 func (h *requestHandler) register(w http.ResponseWriter, r *http.Request) {

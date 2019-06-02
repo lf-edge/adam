@@ -11,6 +11,8 @@ func init() {
 	serverInit()
 	rootCmd.AddCommand(generateCmd)
 	generateInit()
+	rootCmd.AddCommand(serialsCmd)
+	serialsInit()
 }
 
 func Execute() {

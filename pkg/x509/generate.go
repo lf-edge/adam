@@ -22,26 +22,14 @@ const (
 )
 
 // generate a key and cert
-func Generate(cn, hosts, certPath, keyPath string, force bool) error {
-	if keyPath == "" {
-		return fmt.Errorf("keyPath must not be empty")
-	}
-	if certPath == "" {
-		return fmt.Errorf("certPath must not be empty")
-	}
-	if _, err := os.Stat(keyPath); !os.IsNotExist(err) && !force {
-		return fmt.Errorf("file already exists at keyPath %s", keyPath)
-	}
-	if _, err := os.Stat(certPath); !os.IsNotExist(err) && !force {
-		return fmt.Errorf("file already exists at certPath %s", certPath)
-	}
+func Generate(cn, hosts string) ([]byte, []byte, error) {
 	if hosts == "" && cn == "" {
-		return fmt.Errorf("must specify at least one hostname/IP or CN")
+		return nil, nil, fmt.Errorf("must specify at least one hostname/IP or CN")
 	}
 	// simple RSA key
 	privKey, err := rsa.GenerateKey(rand.Reader, rsaBits)
 	if err != nil {
-		return fmt.Errorf("failed to generate RSA private key: %v", err)
+		return nil, nil, fmt.Errorf("failed to generate RSA private key: %v", err)
 	}
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
@@ -80,17 +68,40 @@ func Generate(cn, hosts, certPath, keyPath string, force bool) error {
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privKey.PublicKey, privKey)
 	if err != nil {
-		return fmt.Errorf("failed to create certificate: %v", err)
+		return nil, nil, fmt.Errorf("failed to create certificate: %v", err)
 	}
 	out := &bytes.Buffer{}
 	pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	err = ioutil.WriteFile(certPath, out.Bytes(), 0644)
+	certB := out.Bytes()
+	out.Reset()
+	pem.Encode(out, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)})
+	keyB := out.Bytes()
+	return certB, keyB, nil
+}
+
+func GenerateAndWrite(cn, hosts, certPath, keyPath string, force bool) error {
+	// make sure we have the paths we need, and that they are not already taken, unless we were told to force
+	if keyPath == "" {
+		return fmt.Errorf("keyPath must not be empty")
+	}
+	if certPath == "" {
+		return fmt.Errorf("certPath must not be empty")
+	}
+	if _, err := os.Stat(keyPath); !os.IsNotExist(err) && !force {
+		return fmt.Errorf("file already exists at keyPath %s", keyPath)
+	}
+	if _, err := os.Stat(certPath); !os.IsNotExist(err) && !force {
+		return fmt.Errorf("file already exists at certPath %s", certPath)
+	}
+	cert, key, err := Generate(cn, hosts)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(certPath, cert, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write certificate to %s: %v", certPath, err)
 	}
-	out.Reset()
-	pem.Encode(out, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)})
-	err = ioutil.WriteFile(keyPath, out.Bytes(), 0600)
+	err = ioutil.WriteFile(keyPath, key, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write key to %s: %v", keyPath, err)
 	}

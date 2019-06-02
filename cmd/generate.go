@@ -5,14 +5,19 @@ import (
 	"log"
 	"os"
 	"path"
-	"regexp"
 
+	"github.com/satori/go.uuid"
 	"github.com/spf13/cobra"
+	"github.com/zededa/adam/pkg/server"
 	"github.com/zededa/adam/pkg/x509"
 )
 
+const (
+	defaultPrivateKeyPath = "./run/private"
+)
+
 var (
-	cn string
+	privatePath string
 )
 
 var generateCmd = &cobra.Command{
@@ -26,7 +31,7 @@ var generateServerCmd = &cobra.Command{
 	Short: "Generate server certs",
 	Long:  `Generate the necessary server certs`,
 	Run: func(cmd *cobra.Command, args []string) {
-		err := x509.Generate("", hosts, certPath, keyPath, force)
+		err := x509.GenerateAndWrite("", hosts, certPath, keyPath, force)
 		if err != nil {
 			log.Fatalf("error generating key/cert: %v", err)
 		}
@@ -42,58 +47,67 @@ var generateOnboardCmd = &cobra.Command{
 			log.Fatalf("onboarding path must be set")
 		}
 		fi, err := os.Stat(onboardingDatabasePath)
-		if err != nil {
-			log.Fatalf("onboarding database path %s does not exist", onboardingDatabasePath)
+		if err == nil && !fi.IsDir() {
+			log.Fatalf("onboarding database path %s exists but is not a directory", onboardingDatabasePath)
 		}
-		if !fi.IsDir() {
-			log.Fatalf("onboarding database path %s is not a directory", onboardingDatabasePath)
-		}
-		re := regexp.MustCompile(`[^a-zA-Z0-9\\.\\-]`)
-		cnSquashed := re.ReplaceAllString(cn, "_")
-		onboardPath := path.Join(onboardingDatabasePath, cnSquashed)
+		onboardPath := getOnboardCertPath(cn)
 		// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it,
 		//   or if the _files_ already exist
 		err = os.MkdirAll(onboardPath, 0755)
 		if err != nil {
 			log.Fatalf("could not create onboarding certificate path %s: %v", onboardPath, err)
 		}
-		certPath := path.Join(onboardPath, "cert.pem")
-		keyPath := path.Join(onboardPath, "key.pem")
-		err = x509.Generate(cn, "", certPath, keyPath, force)
+		err = os.MkdirAll(privatePath, 0700)
+		if err != nil {
+			log.Fatalf("could not create private path %s: %v", privatePath, err)
+		}
+		certFile := path.Join(onboardPath, server.DeviceOnboardFilename)
+		keyFile := path.Join(privatePath, fmt.Sprintf("onboard-%s-key.pem", getOnboardCertName(cn)))
+		err = x509.GenerateAndWrite(cn, "", certFile, keyFile, force)
 		if err != nil {
 			log.Fatalf("error generating key/cert: %v", err)
 		}
+		log.Printf("saved new onboard certificate to %s", certFile)
+		log.Printf("saved new onboard key to %s", keyFile)
 	},
 }
 
 var generateDeviceCmd = &cobra.Command{
 	Use:   "device",
 	Short: "Generate individual device certs",
-	Long:  `Generate a device cert. The cert will be saved in the provided path, named by the CN, e.g. onboard/device-1234.pem and onboard/device-1234-key.pem.`,
+	Long:  `Generate a device cert. The cert will be saved in the provided path with a newly generated UUID`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if deviceDatabasePath == "" {
 			log.Fatalf("device path must be set")
 		}
 		fi, err := os.Stat(deviceDatabasePath)
+		if err == nil && !fi.IsDir() {
+			log.Fatalf("device database path %s exists but is not a directory", deviceDatabasePath)
+		}
+		// generate a new uuid
+		unew, err := uuid.NewV4()
 		if err != nil {
-			log.Fatalf("device database path %s does not exist", deviceDatabasePath)
+			log.Fatalf("error generating uuid for device: %v", err)
 		}
-		if !fi.IsDir() {
-			log.Fatalf("device database path %s is not a directory", deviceDatabasePath)
-		}
-		re := regexp.MustCompile(`[^a-zA-Z0-9\\.\\-]`)
-		cnSquashed := re.ReplaceAllString(cn, "_")
-		devicePath := path.Join(deviceDatabasePath, cnSquashed)
-		err = os.Mkdir(devicePath, 0755)
+
+		devicePath := server.GetDevicePath(deviceDatabasePath, unew)
+		err = os.MkdirAll(devicePath, 0755)
 		if err != nil {
-			log.Fatalf("error creating device directory %s: %v", devicePath, err)
+			log.Fatalf("error creating new device tree %s: %v", devicePath, err)
 		}
-		certPath := path.Join(devicePath, fmt.Sprintf("%s.pem", cnSquashed))
-		keyPath := path.Join(devicePath, fmt.Sprintf("%s-key.pem", cnSquashed))
-		err = x509.Generate(cn, "", certPath, keyPath, force)
+		err = os.MkdirAll(privatePath, 0700)
+		if err != nil {
+			log.Fatalf("could not create private path %s: %v", privatePath, err)
+		}
+		// generate the certificate
+		certFile := path.Join(devicePath, server.DeviceCertFilename)
+		keyFile := path.Join(privatePath, fmt.Sprintf("device-%s-key.pem", unew.String()))
+		err = x509.GenerateAndWrite(cn, "", certFile, keyFile, false)
 		if err != nil {
 			log.Fatalf("error generating key/cert: %v", err)
 		}
+		log.Printf("saved new device certificate to %s", certFile)
+		log.Printf("saved new device key to %s", keyFile)
 	},
 }
 
@@ -111,6 +125,7 @@ func generateInit() {
 	generateOnboardCmd.Flags().StringVar(&onboardingDatabasePath, "onboard-db", defaultOnboardingDatabasePath, "path to directory where we will store the generated onboarding certificates")
 	generateOnboardCmd.Flags().StringVar(&cn, "cn", "", "CN to use in the certificate; will not replace if one with the same CN exists")
 	generateOnboardCmd.MarkFlagRequired("cn")
+	generateOnboardCmd.Flags().StringVar(&privatePath, "keypath", defaultPrivateKeyPath, "path to directory where we will store the generated onboarding key")
 	generateOnboardCmd.Flags().BoolVar(&force, "force", false, "replace existing files")
 
 	// generate device certs
@@ -118,5 +133,6 @@ func generateInit() {
 	generateDeviceCmd.Flags().StringVar(&deviceDatabasePath, "device-db", defaultDeviceDatabasePath, "path to directory where we will store the generated device certificates")
 	generateDeviceCmd.Flags().StringVar(&cn, "cn", "", "CN to use in the certificate; will not replace if one with the same CN exists")
 	generateDeviceCmd.MarkFlagRequired("cn")
+	generateDeviceCmd.Flags().StringVar(&privatePath, "keypath", defaultPrivateKeyPath, "path to directory where we will store the generated device key")
 	generateDeviceCmd.Flags().BoolVar(&force, "force", false, "replace existing files")
 }
