@@ -15,13 +15,6 @@ type deviceManagerMemory struct {
 	deviceCerts  map[string]uuid.UUID
 	devices      map[uuid.UUID]deviceStorage
 }
-type deviceStorage struct {
-	cert    *x509.Certificate
-	info    []*info.ZInfoMsg
-	metrics []*metrics.ZMetricMsg
-	logs    []*logs.LogBundle
-	config  *config.EdgeDevConfig
-}
 
 // SetCacheTimeout set the timeout for refreshing the cache, unused in memory
 func (d *deviceManagerMemory) SetCacheTimeout(timeout int) {
@@ -32,17 +25,13 @@ func (d *deviceManagerMemory) CheckOnboardCert(cert *x509.Certificate, serial st
 	if cert == nil {
 		return false, fmt.Errorf("invalid nil certificate")
 	}
-	certStr := string(cert.Raw)
-	if c, ok := d.onboardCerts[certStr]; ok {
-		// accept the specific serial or the wildcard
-		if _, ok := c[serial]; ok {
-			return true, nil
-		}
-		if _, ok := c["*"]; ok {
-			return true, nil
-		}
+	if !d.checkValidOnboardSerial(cert, serial) {
+		return false, nil
 	}
-	return false, nil
+	if d.getOnboardSerialDevice(cert, serial) != nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 // CheckDeviceCert see if a particular certificate is a valid registered device certificate
@@ -58,7 +47,7 @@ func (d *deviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUI
 }
 
 // RegisterDeviceCert register a new device cert
-func (d *deviceManagerMemory) RegisterDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
+func (d *deviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
 	// first check if it already exists - this also checks for nil cert
 	u, err := d.CheckDeviceCert(cert)
 	if err != nil {
@@ -73,7 +62,13 @@ func (d *deviceManagerMemory) RegisterDeviceCert(cert *x509.Certificate) (*uuid.
 	if err != nil {
 		return nil, fmt.Errorf("error generating uuid for device: %v", err)
 	}
+	// register the cert for this uuid
 	d.deviceCerts[string(cert.Raw)] = unew
+	// create a structure for this device
+	d.devices[unew] = deviceStorage{
+		onboard: onboard,
+		serial:  serial,
+	}
 	return &unew, nil
 }
 
@@ -148,4 +143,32 @@ func (d *deviceManagerMemory) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, err
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
 	return dev.config, nil
+}
+
+// checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
+// does **not** check if it has been used
+func (d *deviceManagerMemory) checkValidOnboardSerial(cert *x509.Certificate, serial string) bool {
+	certStr := string(cert.Raw)
+	if c, ok := d.onboardCerts[certStr]; ok {
+		// accept the specific serial or the wildcard
+		if _, ok := c[serial]; ok {
+			return true
+		}
+		if _, ok := c["*"]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// getOnboardSerialDevice see if a particular certificate+serial combinaton has been used and get its device uuid
+func (d *deviceManagerMemory) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
+	certStr := string(cert.Raw)
+	for uid, dev := range d.devices {
+		dCertStr := string(dev.onboard.Raw)
+		if dCertStr == certStr && serial == dev.serial {
+			return &uid
+		}
+	}
+	return nil
 }
