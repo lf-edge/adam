@@ -11,7 +11,7 @@ import (
 
 type deviceManager interface {
 	SetCacheTimeout(int)
-	CheckOnboardCert(*x509.Certificate) (bool, error)
+	CheckOnboardCert(*x509.Certificate, string) (bool, error)
 	CheckDeviceCert(*x509.Certificate) (*uuid.UUID, error)
 	RegisterDeviceCert(*x509.Certificate) (*uuid.UUID, error)
 	WriteInfo(*info.ZInfoMsg) error

@@ -36,7 +36,7 @@ var generateServerCmd = &cobra.Command{
 var generateOnboardCmd = &cobra.Command{
 	Use:   "onboard",
 	Short: "Generate onboarding certs",
-	Long:  `Generate an onboarding cert. The cert will be saved in the provided path, named by the CN, e.g. onboard/company-a.pem and onboard/company-a-key.pem.`,
+	Long:  `Generate an onboarding cert. The cert will be saved in the provided path, named by the CN, e.g. onboard/company-a/certificate.pem and onboard/company-a/key.pem.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if onboardingDatabasePath == "" {
 			log.Fatalf("onboarding path must be set")
@@ -50,8 +50,13 @@ var generateOnboardCmd = &cobra.Command{
 		}
 		re := regexp.MustCompile(`[^a-zA-Z0-9\\.\\-]`)
 		cnSquashed := re.ReplaceAllString(cn, "_")
-		certPath := path.Join(onboardingDatabasePath, fmt.Sprintf("%s.pem", cnSquashed))
-		keyPath := path.Join(onboardingDatabasePath, fmt.Sprintf("%s-key.pem", cnSquashed))
+		onboardPath := path.Join(onboardingDatabasePath, cnSquashed)
+		err = os.Mkdir(onboardPath, 0755)
+		if err != nil {
+			log.Fatalf("could not create onboarding certificate path %s: %v", onboardPath, err)
+		}
+		certPath := path.Join(onboardPath, "cert.pem")
+		keyPath := path.Join(onboardPath, "key.pem")
 		err = x509.Generate(cn, "", certPath, keyPath, force)
 		if err != nil {
 			log.Fatalf("error generating key/cert: %v", err)

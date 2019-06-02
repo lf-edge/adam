@@ -11,7 +11,7 @@ import (
 )
 
 type deviceManagerMemory struct {
-	onboardCerts map[string]*x509.Certificate
+	onboardCerts map[string]map[string]bool
 	deviceCerts  map[string]uuid.UUID
 	devices      map[uuid.UUID]deviceStorage
 }
@@ -27,14 +27,20 @@ type deviceStorage struct {
 func (d *deviceManagerMemory) SetCacheTimeout(timeout int) {
 }
 
-// CheckOnboardCert see if a particular certificate is a valid onboard certificate
-func (d *deviceManagerMemory) CheckOnboardCert(cert *x509.Certificate) (bool, error) {
+// CheckOnboardCert see if a particular certificate plus serial combinaton is valid
+func (d *deviceManagerMemory) CheckOnboardCert(cert *x509.Certificate, serial string) (bool, error) {
 	if cert == nil {
 		return false, fmt.Errorf("invalid nil certificate")
 	}
 	certStr := string(cert.Raw)
-	if _, ok := d.onboardCerts[certStr]; ok {
-		return true, nil
+	if c, ok := d.onboardCerts[certStr]; ok {
+		// accept the specific serial or the wildcard
+		if _, ok := c[serial]; ok {
+			return true, nil
+		}
+		if _, ok := c["*"]; ok {
+			return true, nil
+		}
 	}
 	return false, nil
 }

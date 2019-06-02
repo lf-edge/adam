@@ -20,11 +20,13 @@ import (
 )
 
 const (
-	deviceCertFilename = "device-certificate.pem"
-	logDir             = "logs"
-	metricsDir         = "metrics"
-	infoDir            = "info"
-	configPath         = "config.json"
+	deviceCertFilename  = "device-certificate.pem"
+	onboardCertFilename = "cert.pem"
+	onboardCertSerials  = "onboard-serials.txt"
+	logDir              = "logs"
+	metricsDir          = "metrics"
+	infoDir             = "info"
+	configPath          = "config.json"
 )
 
 type deviceManagerFile struct {
@@ -33,7 +35,7 @@ type deviceManagerFile struct {
 	cacheTimeout int
 	lastUpdate   time.Time
 	// thse are for caching only
-	onboardCerts map[string]bool
+	onboardCerts map[string]map[string]bool
 	deviceCerts  map[string]uuid.UUID
 	devices      map[uuid.UUID]bool
 }
@@ -43,8 +45,8 @@ func (d *deviceManagerFile) SetCacheTimeout(timeout int) {
 	d.cacheTimeout = timeout
 }
 
-// CheckOnboardCert see if a particular certificate is a valid onboard certificate
-func (d *deviceManagerFile) CheckOnboardCert(cert *x509.Certificate) (bool, error) {
+// CheckOnboardCert see if a particular certificate and serial combination is valid
+func (d *deviceManagerFile) CheckOnboardCert(cert *x509.Certificate, serial string) (bool, error) {
 	// do not accept a nil certificate
 	if cert == nil {
 		return false, fmt.Errorf("invalid nil certificate")
@@ -55,8 +57,14 @@ func (d *deviceManagerFile) CheckOnboardCert(cert *x509.Certificate) (bool, erro
 		return false, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
 	certStr := string(cert.Raw)
-	if _, ok := d.onboardCerts[certStr]; ok {
-		return true, nil
+	if c, ok := d.onboardCerts[certStr]; ok {
+		// accept the specific serial or the wildcard
+		if _, ok := c[serial]; ok {
+			return true, nil
+		}
+		if _, ok := c["*"]; ok {
+			return true, nil
+		}
 	}
 	return false, nil
 }
@@ -219,10 +227,9 @@ func (d *deviceManagerFile) refreshCerts() error {
 	if now.Sub(d.lastUpdate).Seconds() < float64(d.cacheTimeout) {
 		return nil
 	}
-	// update the cache - *** HERE ***
 
 	// create new vars to hold while we load
-	onboardCerts := make(map[string]bool)
+	onboardCerts := make(map[string]map[string]bool)
 	deviceCerts := make(map[string]uuid.UUID)
 
 	// scan the onboard path for all files which end in ".pem" and load them
@@ -232,16 +239,22 @@ func (d *deviceManagerFile) refreshCerts() error {
 	}
 	// check each file to make sure it is an onboarding cert
 	for _, fi := range candidates {
-		name := fi.Name()
-		if !strings.HasSuffix(name, ".pem") {
+		// we only are interested in directories
+		if !fi.IsDir() {
 			continue
 		}
-		f := path.Join(d.onboardPath, name)
+		name := fi.Name()
+		f := path.Join(d.onboardPath, name, onboardCertFilename)
+		_, err = os.Stat(f)
+		// if we cannot list the file, we do not care why, just continue
+		if err != nil {
+			continue
+		}
 
 		// read the file
 		b, err := ioutil.ReadFile(f)
 		if err != nil {
-			return fmt.Errorf("unable to read onboard file %s: %v", f, err)
+			return fmt.Errorf("unable to read onboard certificate file %s: %v", f, err)
 		}
 		// convert into a certificate
 		cert, err := x509.ParseCertificate(b)
@@ -249,7 +262,23 @@ func (d *deviceManagerFile) refreshCerts() error {
 			return fmt.Errorf("unable to convert data from file %s to onboard certificate: %v", f, err)
 		}
 		certStr := string(cert.Raw)
-		onboardCerts[certStr] = true
+		onboardCerts[certStr] = make(map[string]bool)
+
+		// get the serial list
+		f = path.Join(d.onboardPath, name, onboardCertSerials)
+		_, err = os.Stat(f)
+		// if we cannot list the file, we do not care why, just continue
+		if err != nil {
+			continue
+		}
+		b, err = ioutil.ReadFile(f)
+		if err != nil {
+			return fmt.Errorf("unable to read onboard serial file %s: %v", f, err)
+		}
+		// convert the []byte to string, split and save
+		for _, serial := range strings.Fields(string(b)) {
+			onboardCerts[certStr][serial] = true
+		}
 	}
 	// replace the existing onboard certificates
 	d.onboardCerts = onboardCerts
