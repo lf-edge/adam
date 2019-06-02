@@ -10,3 +10,7 @@ build: bin
 
 fmt:
 	gofmt -w $(shell find . -name '*go')
+
+clean:
+	rm -rf run/private run/onboard run/device run/*.pem
+
