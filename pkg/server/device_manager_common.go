@@ -17,4 +17,3 @@ type deviceStorage struct {
 	serial  string
 	onboard *x509.Certificate
 }
-
