@@ -22,7 +22,7 @@ const (
 )
 
 // generate a key and cert
-func Generate(cn, hosts string) ([]byte, []byte, error) {
+func Generate(cn, hosts string) ([]byte, *rsa.PrivateKey, error) {
 	if hosts == "" && cn == "" {
 		return nil, nil, fmt.Errorf("must specify at least one hostname/IP or CN")
 	}
@@ -70,15 +70,23 @@ func Generate(cn, hosts string) ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create certificate: %v", err)
 	}
+	return derBytes, privKey, nil
+}
+
+func PemEncodeCert(cert []byte) []byte {
 	out := &bytes.Buffer{}
-	pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	certB := make([]byte, out.Len())
-	copy(certB, out.Bytes())
-	out.Reset()
-	pem.Encode(out, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)})
-	keyB := make([]byte, out.Len())
-	copy(keyB, out.Bytes())
-	return certB, keyB, nil
+	pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: cert})
+	b := make([]byte, out.Len())
+	copy(b, out.Bytes())
+	return b
+}
+
+func PemEncodeKey(key *rsa.PrivateKey) []byte {
+	out := &bytes.Buffer{}
+	pem.Encode(out, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	b := make([]byte, out.Len())
+	copy(b, out.Bytes())
+	return b
 }
 
 func GenerateAndWrite(cn, hosts, certPath, keyPath string, force bool) error {
@@ -95,7 +103,9 @@ func GenerateAndWrite(cn, hosts, certPath, keyPath string, force bool) error {
 	if _, err := os.Stat(certPath); !os.IsNotExist(err) && !force {
 		return fmt.Errorf("file already exists at certPath %s", certPath)
 	}
-	cert, key, err := Generate(cn, hosts)
+	certB, keyB, err := Generate(cn, hosts)
+	cert := PemEncodeCert(certB)
+	key := PemEncodeKey(keyB)
 	if err != nil {
 		return err
 	}
