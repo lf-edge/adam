@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	defaultCertPath               = "./run/server.pem"
-	defaultKeyPath                = "./run/server-key.pem"
-	defaultDeviceDatabasePath     = "./run/device"
-	defaultOnboardingDatabasePath = "./run/onboard"
+	defaultCertPath               = "./run/adam/server.pem"
+	defaultKeyPath                = "./run/adam/server-key.pem"
+	defaultDeviceDatabasePath     = "./run/adam/device"
+	defaultOnboardingDatabasePath = "./run/adam/onboard"
 )
 
 var (
