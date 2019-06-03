@@ -31,8 +31,8 @@ Note that when running in a docker container, directories are ephemeral. If you 
 Building Adam is straightforward:
 
 1. Clone this repo
-2. Ensure you have installed go, at least version 1.11 or higher
-3. Run `make`
+2. Ensure you have installed either go >= 1.11, or docker
+3. Run `make` to build in docker, or `make build-local` to build using a local installation of go
 
 This will build `adam` for your local operating system and architecture.
 
