@@ -17,7 +17,7 @@ var (
 
 var serialsCmd = &cobra.Command{
 	Use:   "serials",
-	Short: "manage serials for onboarding certificates",
+	Short: "Manage serials for onboarding certificates",
 	Long:  `Add, list, remove, clear serials for use with an onboarding certificate`,
 }
 

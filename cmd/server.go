@@ -18,7 +18,7 @@ var (
 
 var serverCmd = &cobra.Command{
 	Use:   "server",
-	Short: "Run an adam server",
+	Short: "Run the Adam server",
 	Long:  `Adam is an LF-Edge API compliant Controller. Complete API documentation is available at https://github.com/lf-edge/eve/api/API.md`,
 	Run: func(cmd *cobra.Command, args []string) {
 		s := &server.Server{
