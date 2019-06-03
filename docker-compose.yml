@@ -1,0 +1,11 @@
+version: '3'
+services:
+  adam:
+    build: .
+    image: zededa/adam
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./run:/adam/run
+
+
