@@ -23,31 +23,16 @@ const (
 )
 
 type Server struct {
-	Port                   string
-	CertPath               string
-	KeyPath                string
-	DeviceDatabasePath     string
-	OnboardingDatabasePath string
-	CertRefresh            int
+	Port        string
+	CertPath    string
+	KeyPath     string
+	DatabaseURL string
+	CertRefresh int
 }
 
 func (s *Server) Start() {
-	// ensure we have an onboarding database
-	if s.OnboardingDatabasePath == "" {
-		log.Fatalf("onboarding path must be set")
-	}
-	fi, err := os.Stat(s.OnboardingDatabasePath)
-	if err == nil && !fi.IsDir() {
-		log.Fatalf("onboarding database path %s exist but is not a directory", s.OnboardingDatabasePath)
-	}
-	// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it
-	err = os.MkdirAll(s.OnboardingDatabasePath, 0755)
-	if err != nil {
-		log.Fatalf("could not create onboarding certificate path %s: %v", s.OnboardingDatabasePath, err)
-	}
-
 	// ensure the server cert and key exist
-	_, err = os.Stat(s.CertPath)
+	_, err := os.Stat(s.CertPath)
 	if err != nil {
 		log.Fatalf("server cert %s does not exist", s.CertPath)
 	}
@@ -59,22 +44,19 @@ func (s *Server) Start() {
 	// create a handler based on where our device database is
 	// in the future, we may support other device manager types
 	var mgr DeviceManager
-	if s.DeviceDatabasePath != "" {
-		fi, err := os.Stat(s.DeviceDatabasePath)
-		if err == nil && !fi.IsDir() {
-			log.Fatalf("device database path %s exists and is not a directory", s.DeviceDatabasePath)
-		}
-		// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it
-		err = os.MkdirAll(s.DeviceDatabasePath, 0755)
+	for _, m := range deviceManagers {
+		name := m.Name()
+		valid, err := m.Init(s.DatabaseURL)
 		if err != nil {
-			log.Fatalf("could not create device database path %s: %v", s.DeviceDatabasePath, err)
+			log.Fatalf("error initializing the %s device manager: %v", name, err)
 		}
-		mgr = &DeviceManagerFile{
-			DevicePath:  s.DeviceDatabasePath,
-			onboardPath: s.OnboardingDatabasePath,
+		if valid {
+			mgr = m
+			break
 		}
-	} else {
-		mgr = &DeviceManagerMemory{}
+	}
+	if mgr == nil {
+		log.Fatalf("could not find valid device manager")
 	}
 
 	// save the device manager settings
@@ -108,8 +90,8 @@ func (s *Server) Start() {
 	}
 	log.Println("Starting adam:")
 	log.Printf("\tPort: %s\n", s.Port)
-	log.Printf("\tonboarding certs: %s\n", s.OnboardingDatabasePath)
-	log.Printf("\tdevice database: %s\n", s.DeviceDatabasePath)
+	log.Printf("\tstorage: %s\n", mgr.Name())
+	log.Printf("\tdatabase: %s\n", s.DatabaseURL)
 	log.Printf("\tserver cert: %s\n", s.CertPath)
 	log.Printf("\tserver key: %s\n", s.KeyPath)
 	log.Fatal(server.ListenAndServeTLS(s.CertPath, s.KeyPath))

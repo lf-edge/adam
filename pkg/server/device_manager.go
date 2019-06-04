@@ -10,6 +10,10 @@ import (
 )
 
 type DeviceManager interface {
+	// Name return unique representative name for this type of device manager, e.g. "file", "memory", "mongo", etc.
+	Name() string
+	// Init initialize the datastore. If the given database URL is invalid for this type of manager, return false. Return error for actual failures
+	Init(string) (bool, error)
 	// SetCacheTimeout set how long to keep onboard and device certificates in cache before rereading from a backing store. Value of 0 means
 	//   not to cache
 	SetCacheTimeout(int)

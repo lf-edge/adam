@@ -33,8 +33,7 @@ func TestDeviceManagerFile(t *testing.T) {
 		}
 		defer os.RemoveAll(dir)
 		d := DeviceManagerFile{
-			DevicePath:  path.Join(dir, "device"),
-			onboardPath: path.Join(dir, "onboard"),
+			databasePath: dir,
 		}
 		d.SetCacheTimeout(timeout)
 
@@ -155,10 +154,9 @@ func TestDeviceManagerFile(t *testing.T) {
 			}
 			defer os.RemoveAll(dir)
 			d := DeviceManagerFile{
-				DevicePath:  path.Join(dir, "device"),
-				onboardPath: path.Join(dir, "onboard"),
+				databasePath: dir,
 			}
-			sectionPath := path.Join(d.DevicePath, u.String(), sectionName)
+			sectionPath := path.Join(d.getDevicePath(u), sectionName)
 			if tt.deviceExists {
 				err = os.MkdirAll(sectionPath, 0755)
 				if err != nil {
@@ -267,10 +265,8 @@ func TestDeviceManagerFile(t *testing.T) {
 			}
 			defer os.RemoveAll(dir)
 			devicePath := path.Join(dir, "device")
-			onboardPath := path.Join(dir, "onboard")
 			d := DeviceManagerFile{
-				DevicePath:  devicePath,
-				onboardPath: onboardPath,
+				databasePath: dir,
 			}
 
 			if tt.validDeviceCert {

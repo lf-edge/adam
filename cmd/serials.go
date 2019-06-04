@@ -26,9 +26,7 @@ var serialsListCmd = &cobra.Command{
 	Short: "list current serials",
 	Long:  `List the current serials for a given cn cert`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if onboardingDatabasePath == "" {
-			log.Fatalf("onboarding path must be set")
-		}
+		onboardingDatabasePath := getOnboardCertBase()
 		fi, err := os.Stat(onboardingDatabasePath)
 		if err != nil {
 			log.Fatalf("onboarding database path %s does not exist", onboardingDatabasePath)
@@ -49,9 +47,7 @@ var serialsAddCmd = &cobra.Command{
 	Short: "add new serial",
 	Long:  `Add new serial, to the current serials for a given cn cert`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if onboardingDatabasePath == "" {
-			log.Fatalf("onboarding path must be set")
-		}
+		onboardingDatabasePath := getOnboardCertBase()
 		fi, err := os.Stat(onboardingDatabasePath)
 		if err != nil {
 			log.Fatalf("onboarding database path %s does not exist", onboardingDatabasePath)
@@ -83,9 +79,7 @@ var serialsRemoveCmd = &cobra.Command{
 	Short: "remove existing serial",
 	Long:  `Remove an existing serial from the list`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if onboardingDatabasePath == "" {
-			log.Fatalf("onboarding path must be set")
-		}
+		onboardingDatabasePath := getOnboardCertBase()
 		fi, err := os.Stat(onboardingDatabasePath)
 		if err != nil {
 			log.Fatalf("onboarding database path %s does not exist", onboardingDatabasePath)
@@ -117,9 +111,7 @@ var serialsClearCmd = &cobra.Command{
 	Short: "clear current serials",
 	Long:  `Clear all of the serials for a given cn cert`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if onboardingDatabasePath == "" {
-			log.Fatalf("onboarding path must be set")
-		}
+		onboardingDatabasePath := getOnboardCertBase()
 		fi, err := os.Stat(onboardingDatabasePath)
 		if err != nil {
 			log.Fatalf("onboarding database path %s does not exist", onboardingDatabasePath)
@@ -140,7 +132,7 @@ var serialsClearCmd = &cobra.Command{
 }
 
 func serialsInit() {
-	serialsCmd.PersistentFlags().StringVar(&onboardingDatabasePath, "onboard-db", defaultOnboardingDatabasePath, "path to directory where we will store the serials")
+	serialsCmd.PersistentFlags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where the device database is stored; we will store the serials in the appropriate subdirectory")
 	serialsCmd.PersistentFlags().StringVar(&cn, "cn", "", "CN whose certificate will match the serials")
 	serialsCmd.MarkFlagRequired("cn")
 	// serialsList

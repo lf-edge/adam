@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/satori/go.uuid"
 	"github.com/spf13/cobra"
@@ -31,7 +32,17 @@ var generateServerCmd = &cobra.Command{
 	Short: "Generate server certs",
 	Long:  `Generate the necessary server certs`,
 	Run: func(cmd *cobra.Command, args []string) {
-		err := x509.GenerateAndWrite("", hosts, certPath, keyPath, force)
+		// create dir if it does not exist
+		var err error
+		err = os.MkdirAll(filepath.Dir(certPath), 0755)
+		if err != nil {
+			log.Fatalf("error creating cert directory: %v", err)
+		}
+		err = os.MkdirAll(filepath.Dir(keyPath), 0755)
+		if err != nil {
+			log.Fatalf("error creating key directory: %v", err)
+		}
+		err = x509.GenerateAndWrite("", hosts, certPath, keyPath, force)
 		if err != nil {
 			log.Fatalf("error generating key/cert: %v", err)
 		}
@@ -45,9 +56,7 @@ var generateOnboardCmd = &cobra.Command{
 	Short: "Generate onboarding certs",
 	Long:  `Generate an onboarding cert. The cert will be saved in the provided path, named by the CN, e.g. onboard/company-a/certificate.pem and onboard/company-a/key.pem.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if onboardingDatabasePath == "" {
-			log.Fatalf("onboarding path must be set")
-		}
+		onboardingDatabasePath := getOnboardCertBase()
 		fi, err := os.Stat(onboardingDatabasePath)
 		if err == nil && !fi.IsDir() {
 			log.Fatalf("onboarding database path %s exists but is not a directory", onboardingDatabasePath)
@@ -79,9 +88,7 @@ var generateDeviceCmd = &cobra.Command{
 	Short: "Generate individual device certs",
 	Long:  `Generate a device cert. The cert will be saved in the provided path with a newly generated UUID`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if deviceDatabasePath == "" {
-			log.Fatalf("device path must be set")
-		}
+		deviceDatabasePath := getDeviceBase()
 		fi, err := os.Stat(deviceDatabasePath)
 		if err == nil && !fi.IsDir() {
 			log.Fatalf("device database path %s exists but is not a directory", deviceDatabasePath)
@@ -114,6 +121,7 @@ var generateDeviceCmd = &cobra.Command{
 }
 
 func generateInit() {
+	generateCmd.PersistentFlags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where the device database is stored; we will store the generated onboarding certificates in the appropriate subdirectory")
 	// generate server
 	generateCmd.AddCommand(generateServerCmd)
 	generateServerCmd.Flags().StringVar(&certPath, "certfile", defaultCertPath, "path to server certificate")
@@ -124,7 +132,6 @@ func generateInit() {
 
 	// generate onboarding certs
 	generateCmd.AddCommand(generateOnboardCmd)
-	generateOnboardCmd.Flags().StringVar(&onboardingDatabasePath, "onboard-db", defaultOnboardingDatabasePath, "path to directory where we will store the generated onboarding certificates")
 	generateOnboardCmd.Flags().StringVar(&cn, "cn", "", "CN to use in the certificate; will not replace if one with the same CN exists")
 	generateOnboardCmd.MarkFlagRequired("cn")
 	generateOnboardCmd.Flags().StringVar(&privatePath, "keypath", defaultPrivateKeyPath, "path to directory where we will store the generated onboarding key")
@@ -132,7 +139,6 @@ func generateInit() {
 
 	// generate device certs
 	generateCmd.AddCommand(generateDeviceCmd)
-	generateDeviceCmd.Flags().StringVar(&deviceDatabasePath, "device-db", defaultDeviceDatabasePath, "path to directory where we will store the generated device certificates")
 	generateDeviceCmd.Flags().StringVar(&cn, "cn", "", "CN to use in the certificate; will not replace if one with the same CN exists")
 	generateDeviceCmd.MarkFlagRequired("cn")
 	generateDeviceCmd.Flags().StringVar(&privatePath, "keypath", defaultPrivateKeyPath, "path to directory where we will store the generated device key")

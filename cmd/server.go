@@ -22,12 +22,11 @@ var serverCmd = &cobra.Command{
 	Long:  `Adam is an LF-Edge API compliant Controller. Complete API documentation is available at https://github.com/lf-edge/eve/api/API.md`,
 	Run: func(cmd *cobra.Command, args []string) {
 		s := &server.Server{
-			Port:                   port,
-			CertPath:               certPath,
-			KeyPath:                keyPath,
-			DeviceDatabasePath:     deviceDatabasePath,
-			OnboardingDatabasePath: onboardingDatabasePath,
-			CertRefresh:            certRefresh,
+			Port:        port,
+			CertPath:    certPath,
+			KeyPath:     keyPath,
+			DatabaseURL: databaseURL,
+			CertRefresh: certRefresh,
 		}
 		s.Start()
 	},
@@ -37,7 +36,6 @@ func serverInit() {
 	serverCmd.Flags().StringVar(&port, "port", defaultPort, "port on which to listen")
 	serverCmd.Flags().StringVar(&certPath, "server-cert", defaultCertPath, "path to server certificate")
 	serverCmd.Flags().StringVar(&keyPath, "server-key", defaultKeyPath, "path to server key")
-	serverCmd.Flags().StringVar(&deviceDatabasePath, "device-db", defaultDeviceDatabasePath, "path to directory where we will store and find device information, including device certificates, config, logs and metrics. See the readme for more details.")
-	serverCmd.Flags().StringVar(&onboardingDatabasePath, "onboard-db", defaultOnboardingDatabasePath, "path to directory where we will find onboarding certificates")
+	serverCmd.Flags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where we will store and find device information, including onboarding certificates, device certificates, config, logs and metrics. See the readme for more details.")
 	serverCmd.Flags().IntVar(&certRefresh, "cert-refresh", defaultCertRefresh, "how often, in seconds, to refresh the onboarding and device certs from the filesystem; 0 means not to cache at all.")
 }

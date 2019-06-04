@@ -16,6 +16,19 @@ type DeviceManagerMemory struct {
 	devices      map[uuid.UUID]deviceStorage
 }
 
+// Name return name
+func (d *DeviceManagerMemory) Name() string {
+	return "memory"
+}
+
+// Init initialize, valid only with a blank URL
+func (d *DeviceManagerMemory) Init(s string) (bool, error) {
+	if s != "" {
+		return false, nil
+	}
+	return true, nil
+}
+
 // SetCacheTimeout set the timeout for refreshing the cache, unused in memory
 func (d *DeviceManagerMemory) SetCacheTimeout(timeout int) {
 }

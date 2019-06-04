@@ -6,20 +6,18 @@ import (
 )
 
 const (
-	defaultCertPath               = "./run/adam/server.pem"
-	defaultKeyPath                = "./run/adam/server-key.pem"
-	defaultDeviceDatabasePath     = "./run/adam/device"
-	defaultOnboardingDatabasePath = "./run/adam/onboard"
+	defaultCertPath    = "./run/adam/server.pem"
+	defaultKeyPath     = "./run/adam/server-key.pem"
+	defaultDatabaseURL = "./run/adam"
 )
 
 var (
-	cn                     string
-	certPath               string
-	keyPath                string
-	hosts                  string
-	force                  bool
-	onboardingDatabasePath string
-	deviceDatabasePath     string
+	cn          string
+	certPath    string
+	keyPath     string
+	hosts       string
+	force       bool
+	databaseURL string
 )
 
 func getOnboardCertName(cn string) string {
@@ -28,5 +26,11 @@ func getOnboardCertName(cn string) string {
 }
 
 func getOnboardCertPath(cn string) string {
-	return path.Join(onboardingDatabasePath, getOnboardCertName(cn))
+	return path.Join(getOnboardCertBase(), getOnboardCertName(cn))
+}
+func getOnboardCertBase() string {
+	return path.Join(databaseURL, "onboard")
+}
+func getDeviceBase() string {
+	return path.Join(databaseURL, "device")
 }

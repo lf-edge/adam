@@ -29,17 +29,45 @@ const (
 	logDir                = "logs"
 	metricsDir            = "metrics"
 	infoDir               = "info"
+	deviceDir             = "device"
+	onboardDir            = "onboard"
 )
 
 type DeviceManagerFile struct {
-	DevicePath   string
-	onboardPath  string
+	databasePath string
 	cacheTimeout int
 	lastUpdate   time.Time
 	// thse are for caching only
 	onboardCerts map[string]map[string]bool
 	deviceCerts  map[string]uuid.UUID
 	devices      map[uuid.UUID]deviceStorage
+}
+
+// Name return name
+func (d *DeviceManagerFile) Name() string {
+	return "file"
+}
+
+// Init check if a URL is valid and initialize
+func (d *DeviceManagerFile) Init(s string) (bool, error) {
+	fi, err := os.Stat(s)
+	if err == nil && !fi.IsDir() {
+		return false, fmt.Errorf("database path %s exists and is not a directory", s)
+	}
+	// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it
+	err = os.MkdirAll(s, 0755)
+	if err != nil {
+		return false, fmt.Errorf("could not create database path %s: %v", s, err)
+	}
+	d.databasePath = s
+
+	// ensure everything exists
+	err = d.initializeDB()
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 // SetCacheTimeout set the timeout for refreshing the cache, unused in memory
@@ -107,26 +135,26 @@ func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, 
 	}
 
 	// create filesystem tree and subdirs for the new device
-	DevicePath := d.getDevicePath(unew)
-	err = os.MkdirAll(DevicePath, 0755)
+	devicePath := d.getDevicePath(unew)
+	err = os.MkdirAll(devicePath, 0755)
 	if err != nil {
-		return nil, fmt.Errorf("error creating new device tree %s: %v", DevicePath, err)
+		return nil, fmt.Errorf("error creating new device tree %s: %v", devicePath, err)
 	}
 
 	// save the device certificate
-	certPath := path.Join(DevicePath, DeviceCertFilename)
+	certPath := path.Join(devicePath, DeviceCertFilename)
 	err = ioutil.WriteFile(certPath, cert.Raw, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("error saving device certificate to %s: %v", certPath, err)
 	}
 
 	// save the onboard certificate and serial
-	certPath = path.Join(DevicePath, DeviceOnboardFilename)
+	certPath = path.Join(devicePath, DeviceOnboardFilename)
 	err = ioutil.WriteFile(certPath, onboard.Raw, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("error saving device onboard certificate to %s: %v", certPath, err)
 	}
-	serialPath := path.Join(DevicePath, deviceSerialFilename)
+	serialPath := path.Join(devicePath, deviceSerialFilename)
 	err = ioutil.WriteFile(serialPath, []byte(serial), 0644)
 	if err != nil {
 		return nil, fmt.Errorf("error saving device serial to %s: %v", serialPath, err)
@@ -139,7 +167,7 @@ func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, 
 
 	// create the necessary directories for data uploads
 	for _, p := range []string{logDir, metricsDir, infoDir} {
-		cur := path.Join(DevicePath, p)
+		cur := path.Join(devicePath, p)
 		err = os.MkdirAll(cur, 0755)
 		if err != nil {
 			return nil, fmt.Errorf("error creating new device sub-path %s: %v", cur, err)
@@ -270,9 +298,10 @@ func (d *DeviceManagerFile) refreshCache() error {
 	devices := make(map[uuid.UUID]deviceStorage)
 
 	// scan the onboard path for all files which end in ".pem" and load them
-	candidates, err := ioutil.ReadDir(d.onboardPath)
+	onboardPath := path.Join(d.databasePath, onboardDir)
+	candidates, err := ioutil.ReadDir(onboardPath)
 	if err != nil {
-		return fmt.Errorf("unable to read onboarding certificates at %s: %v", d.onboardPath, err)
+		return fmt.Errorf("unable to read onboarding certificates at %s: %v", onboardPath, err)
 	}
 	// check each file to make sure it is an onboarding cert
 	for _, fi := range candidates {
@@ -281,7 +310,7 @@ func (d *DeviceManagerFile) refreshCache() error {
 			continue
 		}
 		name := fi.Name()
-		f := path.Join(d.onboardPath, name, onboardCertFilename)
+		f := path.Join(onboardPath, name, onboardCertFilename)
 		_, err = os.Stat(f)
 		// if we cannot list the file, we do not care why, just continue
 		if err != nil {
@@ -303,7 +332,7 @@ func (d *DeviceManagerFile) refreshCache() error {
 		onboardCerts[certStr] = make(map[string]bool)
 
 		// get the serial list
-		f = path.Join(d.onboardPath, name, onboardCertSerials)
+		f = path.Join(onboardPath, name, onboardCertSerials)
 		_, err = os.Stat(f)
 		// if we cannot list the file, we do not care why, just continue
 		//   we already have the onboard cert saved, so no serials to add
@@ -324,9 +353,10 @@ func (d *DeviceManagerFile) refreshCache() error {
 
 	// scan the device path for each dir which is the UUID
 	//   and in each one, if a cert exists with the appropriate name, load it
-	candidates, err = ioutil.ReadDir(d.DevicePath)
+	devicePath := path.Join(d.databasePath, deviceDir)
+	candidates, err = ioutil.ReadDir(devicePath)
 	if err != nil {
-		return fmt.Errorf("unable to read devices at %s: %v", d.DevicePath, err)
+		return fmt.Errorf("unable to read devices at %s: %v", devicePath, err)
 	}
 	// check each directory to see if it is a valid device directory
 	for _, fi := range candidates {
@@ -340,9 +370,10 @@ func (d *DeviceManagerFile) refreshCache() error {
 		if err != nil {
 			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", name, err)
 		}
+		devicePath := d.getDevicePath(u)
 
 		// load the device certificate
-		f := path.Join(d.DevicePath, name, DeviceCertFilename)
+		f := path.Join(devicePath, DeviceCertFilename)
 		_, err = os.Stat(f)
 		// if we cannot list the file, we do not care why, just continue
 		if err != nil {
@@ -364,7 +395,7 @@ func (d *DeviceManagerFile) refreshCache() error {
 		devices[u] = deviceStorage{}
 
 		// load the device onboarding certificate and serial
-		f = path.Join(d.DevicePath, name, DeviceOnboardFilename)
+		f = path.Join(devicePath, DeviceOnboardFilename)
 		_, err = os.Stat(f)
 		// if we cannot list the file, we do not care why, just continue
 		if err != nil {
@@ -389,7 +420,7 @@ func (d *DeviceManagerFile) refreshCache() error {
 		devItem.onboard = cert
 		devices[u] = devItem
 		// and the serial
-		f = path.Join(d.DevicePath, name, deviceSerialFilename)
+		f = path.Join(devicePath, deviceSerialFilename)
 		_, err = os.Stat(f)
 		// if we cannot list the file, we do not care why, just continue
 		if err != nil {
@@ -416,10 +447,11 @@ func (d *DeviceManagerFile) refreshCache() error {
 
 // initialize dirs, in case they do not exist
 func (d *DeviceManagerFile) initializeDB() error {
-	for _, p := range []string{d.DevicePath, d.onboardPath} {
-		err := os.MkdirAll(p, 0755)
+	for _, p := range []string{deviceDir, onboardDir} {
+		pdir := path.Join(d.databasePath, p)
+		err := os.MkdirAll(pdir, 0755)
 		if err != nil {
-			return fmt.Errorf("unable to initialize database path %s: %v", p, err)
+			return fmt.Errorf("unable to initialize database path %s: %v", pdir, err)
 		}
 	}
 	return nil
@@ -427,7 +459,7 @@ func (d *DeviceManagerFile) initializeDB() error {
 
 // getDevicePath get the path for a given device
 func (d *DeviceManagerFile) getDevicePath(u uuid.UUID) string {
-	return GetDevicePath(d.DevicePath, u)
+	return GetDevicePath(d.databasePath, u)
 }
 
 // writeProtobufToJsonFile write a protobuf to a named file in the given directory
@@ -486,6 +518,6 @@ func (d *DeviceManagerFile) getOnboardSerialDevice(cert *x509.Certificate, seria
 }
 
 // GetDevicePath get the path for a given device
-func GetDevicePath(devicePath string, u uuid.UUID) string {
-	return path.Join(devicePath, u.String())
+func GetDevicePath(databasePath string, u uuid.UUID) string {
+	return path.Join(databasePath, deviceDir, u.String())
 }
