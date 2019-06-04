@@ -90,6 +90,23 @@ func (d *DeviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate
 	return &unew, nil
 }
 
+func (d *DeviceManagerMemory) RegisterOnboardCert(cert *x509.Certificate, serial []string) error {
+	if cert == nil {
+		return fmt.Errorf("empty nil certificate")
+	}
+	if d.onboardCerts == nil {
+		d.onboardCerts = map[string]map[string]bool{}
+	}
+	certStr := string(cert.Raw)
+	serialList := map[string]bool{}
+	for _, s := range serial {
+		serialList[s] = true
+	}
+	d.onboardCerts[certStr] = serialList
+
+	return nil
+}
+
 // WriteInfo write an info message
 func (d *DeviceManagerMemory) WriteInfo(m *info.ZInfoMsg) error {
 	// make sure it is not nil

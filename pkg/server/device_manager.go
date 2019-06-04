@@ -24,6 +24,8 @@ type DeviceManager interface {
 	CheckDeviceCert(*x509.Certificate) (*uuid.UUID, error)
 	// RegisterDeviceCert register a new device certificate, including the onboarding certificate used to register it and its serial
 	RegisterDeviceCert(*x509.Certificate, *x509.Certificate, string) (*uuid.UUID, error)
+	// RegisterOnboardCert apply an onboard cert and serials that apply to it. If the onboard cert already exists, will replace the serials and return without error. It is  idempotent.
+	RegisterOnboardCert(*x509.Certificate, []string) error
 	// WriteInfo write an information message
 	WriteInfo(*info.ZInfoMsg) error
 	// WriteLogs write a LogBundle message

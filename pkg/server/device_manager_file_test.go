@@ -250,8 +250,8 @@ func TestDeviceManagerFile(t *testing.T) {
 			err             error
 		}{
 			//{false, false, false, fmt.Errorf("invalid nil certificate")},
-			{true, true, false, fmt.Errorf("device already registered")},
-			//{true, false, true, nil},
+			//{true, true, false, fmt.Errorf("device already registered")},
+			{true, false, true, nil},
 		}
 		for i, tt := range tests {
 			var (
@@ -286,7 +286,7 @@ func TestDeviceManagerFile(t *testing.T) {
 				if err != nil {
 					t.Fatalf("%d: error making existing device path %s: %v", i, deviceUPath, err)
 				}
-				err = ioutil.WriteFile(deviceUCertPath, ax.PemEncodeCert(certB), 0644)
+				err = ax.WriteCert(certB, deviceUCertPath, true)
 				if err != nil {
 					t.Fatalf("%d: error writing existing device certificate file %s: %v", i, deviceUCertPath, err)
 				}

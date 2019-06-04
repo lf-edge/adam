@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
+	ax "github.com/zededa/adam/pkg/x509"
 )
 
 const (
@@ -146,14 +148,14 @@ func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, 
 
 	// save the device certificate
 	certPath := path.Join(devicePath, DeviceCertFilename)
-	err = ioutil.WriteFile(certPath, cert.Raw, 0644)
+	err = ax.WriteCert(cert.Raw, certPath, true)
 	if err != nil {
 		return nil, fmt.Errorf("error saving device certificate to %s: %v", certPath, err)
 	}
 
 	// save the onboard certificate and serial
 	certPath = path.Join(devicePath, DeviceOnboardFilename)
-	err = ioutil.WriteFile(certPath, onboard.Raw, 0644)
+	err = ax.WriteCert(onboard.Raw, certPath, true)
 	if err != nil {
 		return nil, fmt.Errorf("error saving device onboard certificate to %s: %v", certPath, err)
 	}
@@ -185,6 +187,48 @@ func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, 
 	}
 
 	return &unew, nil
+}
+
+// RegisterOnboardCert register an onboard cert and update its serials
+func (d *DeviceManagerFile) RegisterOnboardCert(cert *x509.Certificate, serial []string) error {
+	if cert == nil {
+		return fmt.Errorf("empty nil certificate")
+	}
+	certStr := string(cert.Raw)
+	cn := cert.Subject.CommonName
+
+	// ensure everything exists
+	err := d.initializeDB()
+	if err != nil {
+		return err
+	}
+	// update the filesystem
+	// onboard cert file
+	onboardPath := path.Join(d.databasePath, onboardDir, getOnboardCertName(cn))
+	f := path.Join(onboardPath, onboardCertFilename)
+	// fix contents!!
+	err = ax.WriteCert(cert.Raw, f, true)
+	if err != nil {
+		return fmt.Errorf("unable to write onboard cert file %s: %v", f, err)
+	}
+	// serials file
+	f = path.Join(onboardPath, onboardCertSerials)
+	err = ioutil.WriteFile(f, []byte(strings.Join(serial, "\n")), 0644)
+	if err != nil {
+		return fmt.Errorf("unable to write onboard serials file %s: %v", f, err)
+	}
+
+	// update the cache
+	if d.onboardCerts == nil {
+		d.onboardCerts = map[string]map[string]bool{}
+	}
+	serialList := map[string]bool{}
+	for _, s := range serial {
+		serialList[s] = true
+	}
+	d.onboardCerts[certStr] = serialList
+
+	return nil
 }
 
 // WriteInfo write an info message
@@ -523,4 +567,9 @@ func (d *DeviceManagerFile) getOnboardSerialDevice(cert *x509.Certificate, seria
 // GetDevicePath get the path for a given device
 func GetDevicePath(databasePath string, u uuid.UUID) string {
 	return path.Join(databasePath, deviceDir, u.String())
+}
+
+func getOnboardCertName(cn string) string {
+	re := regexp.MustCompile(`[^a-zA-Z0-9\\.\\-]`)
+	return re.ReplaceAllString(cn, "_")
 }
