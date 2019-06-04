@@ -1,6 +1,6 @@
 # Directory Structure
 
-When running Adam using its default `file` driver, all data about devices and onboarding are stored in a directory root, by default `./run/adam/`. Under this directory is the following structure:
+When running Adam using its `file` driver, all data about devices and onboarding are stored in a directory root, by default `./run/adam/`. Under this directory is the following structure:
 
 ```
 -run

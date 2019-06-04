@@ -14,7 +14,7 @@ The `adam` command has multiple options. The primary one is:
 adam server
 ```
 
-which will run Adam, listening on the default port of `8080` (it will tell you which when it starts), using the default server TLS key and certificate, looking for onboarding certificates in the default location of `./run/adam/onboard/` and storing registered devices in `./run/adam/device/`. All of these options are modifiable via the command-line; run `adam server --help` for options.
+which will run Adam, listening on the default port of `8080` (it will tell you which when it starts), using the default server TLS key and certificate, using `./run/adam/` as its file storage location. These options are modifiable via the command-line; run `adam server --help` for options.
 
 If you prefer to run Adam as a docker container:
 
@@ -32,9 +32,15 @@ Building Adam is straightforward:
 
 1. Clone this repo
 2. Ensure you have installed either go >= 1.11, or docker
-3. Run `make` to build in docker, or `make build-local` to build using a local installation of go
+3. Run `make build-docker` to build in docker (or just `make build` or even `make`), or `make build-local` to build using a local installation of go
 
 This will build `adam` for your local operating system and architecture.
+
+All `Makefile` commands have the option to run locally or in docker. By default, they run in docker. If you prefer to run using a locally installed go, pass `BUILD=local` to any command, e.g.
+
+```
+make vet BUILD=local
+```
 
 ## Server TLS
 
