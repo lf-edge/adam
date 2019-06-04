@@ -90,6 +90,7 @@ func (d *DeviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate
 	return &unew, nil
 }
 
+// RegisterOnboardCert register a new onboard certificate and its serials or update an existing one
 func (d *DeviceManagerMemory) RegisterOnboardCert(cert *x509.Certificate, serial []string) error {
 	if cert == nil {
 		return fmt.Errorf("empty nil certificate")

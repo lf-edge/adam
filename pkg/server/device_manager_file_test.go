@@ -62,33 +62,18 @@ func TestDeviceManagerFile(t *testing.T) {
 		deviceCertStr := string(deviceCert.Raw)
 
 		// save an onboard with serials
-		onboardPath := path.Join(dir, "onboard", cn)
-		err = os.MkdirAll(onboardPath, 0755)
+		onboardDir := path.Join(dir, "onboard")
+		onboardCert, _, err := ax.GenerateCertAndKey(cn, "")
 		if err != nil {
-			t.Fatalf("error creating a temporary onboard directory: %v", err)
+			t.Fatalf("error generating onboard cert and key: %v", err)
 		}
-		onboardCertB, onboardKey, err := ax.Generate(cn, "")
+		err = saveOnboardCertAndSerials(onboardDir, onboardCert, []string{serial})
 		if err != nil {
-			t.Fatalf("unexpected error generating onboarding certificate: %v", err)
-		}
-		onboardCert, err := x509.ParseCertificate(onboardCertB)
-		if err != nil {
-			t.Fatalf("error parsing onboard certificate: %v", err)
+			t.Fatalf("error saving onboard directory: %v", err)
 		}
 		onboardCertStr := string(onboardCert.Raw)
-		err = ax.WriteCert(onboardCertB, path.Join(onboardPath, onboardCertFilename), false)
-		if err != nil {
-			t.Fatalf("error writing onboard certificate: %v", err)
-		}
-		err = ax.WriteKey(onboardKey, path.Join(onboardPath, "onboard-key.pem"), false)
-		if err != nil {
-			t.Fatalf("error writing onboard key: %v", err)
-		}
-		err = ioutil.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(serial), 0644)
-		if err != nil {
-			t.Fatalf("error writing onboard serials: %v", err)
-		}
 
+		onboardPath := path.Join(onboardDir, cn)
 		// include the device onboarding cert
 		copyFile(path.Join(onboardPath, onboardCertFilename), path.Join(devicePath, DeviceOnboardFilename))
 		// write the device serial
@@ -307,6 +292,66 @@ func TestDeviceManagerFile(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("TestRegisterOnboardCert", func(t *testing.T) {
+		tests := []struct {
+			validCert bool
+			serial    []string
+			used      bool
+			err       error
+		}{
+			{false, nil, false, fmt.Errorf("empty nil certificate")},
+			{true, nil, false, nil},
+			{true, nil, true, nil},
+			{true, []string{}, false, nil},
+			{true, []string{}, true, nil},
+			{true, []string{"abc", "def"}, false, nil},
+			{true, []string{"abc", "def"}, true, nil},
+		}
+		for i, tt := range tests {
+			var (
+				cert    *x509.Certificate
+				certStr string
+				err     error
+			)
+
+			// reset with each test
+			d := DeviceManagerFile{}
+
+			if tt.validCert {
+				cert, _, err = ax.GenerateCertAndKey("onboard", "")
+				if err != nil {
+					t.Fatalf("%d: error generating onboard cert and key: %v", i, err)
+				}
+				certStr = string(cert.Raw)
+			}
+			if tt.used {
+				// store in cache and on disk
+				if d.onboardCerts == nil {
+					d.onboardCerts = map[string]map[string]bool{}
+				}
+				d.onboardCerts[certStr] = map[string]bool{}
+
+				err := saveOnboardCertAndSerials(onboardDir, cert, tt.serial)
+				if err != nil {
+					t.Fatalf("%d: error saving onboard directory: %v", i, err)
+				}
+			}
+			err = d.RegisterOnboardCert(cert, tt.serial)
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case err == nil && d.onboardCerts[certStr] == nil:
+				t.Errorf("%d: onboardCerts are nil", i)
+			default:
+				err := compareStringSliceMap(tt.serial, d.onboardCerts[certStr])
+				if err != nil {
+					t.Errorf("%d: mismatched serials", i)
+					t.Errorf("%v", err)
+				}
+			}
+		}
+	})
 }
 
 func copyFile(src, dest string) error {
@@ -360,5 +405,25 @@ func checkDeviceDirectory(devicePath string, unew uuid.UUID, deviceCert, onboard
 		return fmt.Errorf("mismatched serial: actual '%s' expected '%s'", string(b), serial)
 	}
 
+	return nil
+}
+
+func saveOnboardCertAndSerials(onboardDir string, cert *x509.Certificate, serials []string) error {
+	var err error
+	// save an onboard with serials
+	onboardPath := path.Join(onboardDir, cert.Subject.CommonName)
+	err = os.MkdirAll(onboardPath, 0755)
+	if err != nil {
+		return fmt.Errorf("error creating a temporary onboard directory: %v", err)
+	}
+	err = ax.WriteCert(cert.Raw, path.Join(onboardPath, onboardCertFilename), true)
+	if err != nil {
+		return fmt.Errorf("error writing onboard certificate: %v", err)
+	}
+
+	err = ioutil.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(serials, "\n")), 0644)
+	if err != nil {
+		return fmt.Errorf("error writing onboard serials: %v", err)
+	}
 	return nil
 }

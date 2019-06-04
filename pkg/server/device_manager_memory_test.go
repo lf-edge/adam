@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/satori/go.uuid"
+	"sort"
 	"strings"
 	"testing"
 
@@ -313,4 +314,84 @@ func TestDeviceManagerMemory(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("TestRegisterOnboardCert", func(t *testing.T) {
+		tests := []struct {
+			validCert bool
+			serial    []string
+			used      bool
+			err       error
+		}{
+			{false, nil, false, fmt.Errorf("empty nil certificate")},
+			{true, nil, false, nil},
+			{true, nil, true, nil},
+			{true, []string{}, false, nil},
+			{true, []string{}, true, nil},
+			{true, []string{"abc", "def"}, false, nil},
+			{true, []string{"abc", "def"}, true, nil},
+		}
+		for i, tt := range tests {
+			var (
+				cert    *x509.Certificate
+				certStr string
+			)
+
+			// reset with each test
+			d := DeviceManagerMemory{
+				onboardCerts: map[string]map[string]bool{},
+			}
+
+			if tt.validCert {
+				certB, _, err := ax.Generate("onboard", "")
+				if err != nil {
+					t.Fatalf("%d; error generating onboard cert for tests: %v", i, err)
+				}
+				cert, err = x509.ParseCertificate(certB)
+				if err != nil {
+					t.Fatalf("%d: unexpected error parsing onboard certificate: %v", i, err)
+				}
+				certStr = string(certB)
+			}
+			if tt.used {
+				d.onboardCerts[certStr] = map[string]bool{}
+			}
+			err := d.RegisterOnboardCert(cert, tt.serial)
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case err == nil && d.onboardCerts[certStr] == nil:
+				t.Errorf("%d: onboardCerts are nil", i)
+			default:
+				err := compareStringSliceMap(tt.serial, d.onboardCerts[certStr])
+				if err != nil {
+					t.Errorf("%d: mismatched serials", i)
+					t.Errorf("%v", err)
+				}
+			}
+		}
+	})
+}
+
+func compareStringSliceMap(s []string, m map[string]bool) error {
+	if s == nil && m == nil {
+		return nil
+	}
+	if len(s) != len(m) {
+		return fmt.Errorf("map '%v', slice '%v'", m, s)
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+
+	// same length, so compare
+	sort.Strings(keys)
+	sort.Strings(s)
+
+	sj := strings.Join(s, "\n")
+	mj := strings.Join(keys, "\n")
+	if sj != mj {
+		return fmt.Errorf("mismatched entries, slice '%s', map '%s'", sj, mj)
+	}
+	return nil
 }
