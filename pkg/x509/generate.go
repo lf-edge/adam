@@ -89,7 +89,27 @@ func PemEncodeKey(key *rsa.PrivateKey) []byte {
 	return b
 }
 
+func GenerateCertAndKey(cn, hosts string) (*x509.Certificate, *rsa.PrivateKey, error) {
+	certB, key, err := Generate(cn, hosts)
+	if err != nil {
+		return nil, nil, err
+	}
+	cert, err := x509.ParseCertificate(certB)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cert, key, nil
+}
+
 func GenerateAndWrite(cn, hosts, certPath, keyPath string, force bool) error {
+	certB, keyB, err := Generate(cn, hosts)
+	if err != nil {
+		return err
+	}
+	return Write(certB, keyB, certPath, keyPath, force)
+}
+
+func Write(cert []byte, key *rsa.PrivateKey, certPath, keyPath string, force bool) error {
 	// make sure we have the paths we need, and that they are not already taken, unless we were told to force
 	if keyPath == "" {
 		return fmt.Errorf("keyPath must not be empty")
@@ -103,20 +123,38 @@ func GenerateAndWrite(cn, hosts, certPath, keyPath string, force bool) error {
 	if _, err := os.Stat(certPath); !os.IsNotExist(err) && !force {
 		return fmt.Errorf("file already exists at certPath %s", certPath)
 	}
-	certB, keyB, err := Generate(cn, hosts)
-	cert := PemEncodeCert(certB)
-	key := PemEncodeKey(keyB)
-	if err != nil {
-		return err
-	}
-	err = ioutil.WriteFile(certPath, cert, 0644)
+	certPem := PemEncodeCert(cert)
+	keyPem := PemEncodeKey(key)
+	err := ioutil.WriteFile(certPath, certPem, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write certificate to %s: %v", certPath, err)
 	}
-	err = ioutil.WriteFile(keyPath, key, 0600)
+	err = ioutil.WriteFile(keyPath, keyPem, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write key to %s: %v", keyPath, err)
 	}
 
 	return nil
+}
+
+// read a cert file
+func ReadCert(p string) (*x509.Certificate, error) {
+	var (
+		b       []byte
+		err     error
+		certPem *pem.Block
+		cert    *x509.Certificate
+	)
+	if _, err = os.Stat(p); err != nil && os.IsNotExist(err) {
+		return nil, fmt.Errorf("certificate file %s does not exist", p)
+	}
+	if b, err = ioutil.ReadFile(p); err != nil {
+		return nil, fmt.Errorf("error reading certificate file %s: %v", p, err)
+	}
+	certPem, _ = pem.Decode(b)
+	cert, err = x509.ParseCertificate(certPem.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("unable to convert data from file %s to certificate: %v", p, err)
+	}
+	return cert, nil
 }

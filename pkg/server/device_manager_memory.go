@@ -65,6 +65,9 @@ func (d *DeviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate
 	// register the cert for this uuid
 	d.deviceCerts[string(cert.Raw)] = unew
 	// create a structure for this device
+	if d.devices == nil {
+		d.devices = make(map[uuid.UUID]deviceStorage)
+	}
 	d.devices[unew] = deviceStorage{
 		onboard: onboard,
 		serial:  serial,
@@ -91,6 +94,7 @@ func (d *DeviceManagerMemory) WriteInfo(m *info.ZInfoMsg) error {
 	}
 	// append the messages
 	dev.info = append(dev.info, m)
+	d.devices[u] = dev
 	return nil
 }
 
@@ -112,6 +116,7 @@ func (d *DeviceManagerMemory) WriteLogs(m *logs.LogBundle) error {
 	}
 	// append the messages
 	dev.logs = append(dev.logs, m)
+	d.devices[u] = dev
 	return nil
 }
 
@@ -133,6 +138,7 @@ func (d *DeviceManagerMemory) WriteMetrics(m *metrics.ZMetricMsg) error {
 	}
 	// append the messages
 	dev.metrics = append(dev.metrics, m)
+	d.devices[u] = dev
 	return nil
 }
 

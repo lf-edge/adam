@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -53,7 +54,7 @@ func (d *DeviceManagerFile) CheckOnboardCert(cert *x509.Certificate, serial stri
 		return false, fmt.Errorf("invalid nil certificate")
 	}
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
-	err := d.refreshCerts()
+	err := d.refreshCache()
 	if err != nil {
 		return false, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
@@ -72,7 +73,7 @@ func (d *DeviceManagerFile) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID,
 		return nil, fmt.Errorf("invalid nil certificate")
 	}
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
-	err := d.refreshCerts()
+	err := d.refreshCache()
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
@@ -86,7 +87,7 @@ func (d *DeviceManagerFile) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID,
 // RegisterDeviceCert register a new device cert
 func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
-	err := d.refreshCerts()
+	err := d.refreshCache()
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
@@ -167,10 +168,10 @@ func (d *DeviceManagerFile) WriteInfo(m *info.ZInfoMsg) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevId, err)
 	}
 	// check that the device actually exists
-	if _, ok := d.devices[u]; !ok {
-		return fmt.Errorf("unregistered device uuid: %s", m.DevId)
+	if !d.deviceExists(u) {
+		return fmt.Errorf("unregistered device UUID: %s", m.DevId)
 	}
-	err = d.writeProtobufToJsonFile(u, infoDir, m.AtTimeStamp.String(), m)
+	err = d.writeProtobufToJsonFile(u, infoDir, fmt.Sprintf("%d", m.AtTimeStamp.Seconds), m)
 	if err != nil {
 		return fmt.Errorf("failed to write info to file: %v", err)
 	}
@@ -189,10 +190,10 @@ func (d *DeviceManagerFile) WriteLogs(m *logs.LogBundle) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
 	}
 	// check that the device actually exists
-	if _, ok := d.devices[u]; !ok {
-		return fmt.Errorf("unregistered device uuid: %s", m.DevID)
+	if !d.deviceExists(u) {
+		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
 	}
-	err = d.writeProtobufToJsonFile(u, logDir, m.Timestamp.String(), m)
+	err = d.writeProtobufToJsonFile(u, logDir, fmt.Sprintf("%d", m.Timestamp.Seconds), m)
 	if err != nil {
 		return fmt.Errorf("failed to write logs to file: %v", err)
 	}
@@ -211,10 +212,10 @@ func (d *DeviceManagerFile) WriteMetrics(m *metrics.ZMetricMsg) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
 	}
 	// check that the device actually exists
-	if _, ok := d.devices[u]; !ok {
-		return fmt.Errorf("unregistered device uuid: %s", m.DevID)
+	if !d.deviceExists(u) {
+		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
 	}
-	err = d.writeProtobufToJsonFile(u, metricsDir, m.AtTimeStamp.String(), m)
+	err = d.writeProtobufToJsonFile(u, metricsDir, fmt.Sprintf("%d", m.AtTimeStamp.Seconds), m)
 	if err != nil {
 		return fmt.Errorf("failed to write metrics to file: %v", err)
 	}
@@ -249,12 +250,18 @@ func (d *DeviceManagerFile) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error
 	return msg, nil
 }
 
-// refreshCerts refresh certs from disk
-func (d *DeviceManagerFile) refreshCerts() error {
+// refreshCache refresh cache from disk
+func (d *DeviceManagerFile) refreshCache() error {
 	// is it time to update the cache again?
 	now := time.Now()
 	if now.Sub(d.lastUpdate).Seconds() < float64(d.cacheTimeout) {
 		return nil
+	}
+
+	// ensure everything exists
+	err := d.initializeDB()
+	if err != nil {
+		return err
 	}
 
 	// create new vars to hold while we load
@@ -287,7 +294,8 @@ func (d *DeviceManagerFile) refreshCerts() error {
 			return fmt.Errorf("unable to read onboard certificate file %s: %v", f, err)
 		}
 		// convert into a certificate
-		cert, err := x509.ParseCertificate(b)
+		certPem, _ := pem.Decode(b)
+		cert, err := x509.ParseCertificate(certPem.Bytes)
 		if err != nil {
 			return fmt.Errorf("unable to convert data from file %s to onboard certificate: %v", f, err)
 		}
@@ -298,6 +306,7 @@ func (d *DeviceManagerFile) refreshCerts() error {
 		f = path.Join(d.onboardPath, name, onboardCertSerials)
 		_, err = os.Stat(f)
 		// if we cannot list the file, we do not care why, just continue
+		//   we already have the onboard cert saved, so no serials to add
 		if err != nil {
 			continue
 		}
@@ -345,12 +354,14 @@ func (d *DeviceManagerFile) refreshCerts() error {
 			return fmt.Errorf("unable to read device certificate file %s: %v", f, err)
 		}
 		// convert into a certificate
-		cert, err := x509.ParseCertificate(b)
+		certPem, _ := pem.Decode(b)
+		cert, err := x509.ParseCertificate(certPem.Bytes)
 		if err != nil {
 			return fmt.Errorf("unable to convert data from file %s to device certificate: %v", f, err)
 		}
 		certStr := string(cert.Raw)
 		deviceCerts[certStr] = u
+		devices[u] = deviceStorage{}
 
 		// load the device onboarding certificate and serial
 		f = path.Join(d.DevicePath, name, DeviceOnboardFilename)
@@ -365,7 +376,8 @@ func (d *DeviceManagerFile) refreshCerts() error {
 			return fmt.Errorf("unable to read device onboard certificate file %s: %v", f, err)
 		}
 		// convert into a certificate
-		cert, err = x509.ParseCertificate(b)
+		certPem, _ = pem.Decode(b)
+		cert, err = x509.ParseCertificate(certPem.Bytes)
 		if err != nil {
 			return fmt.Errorf("unable to convert data from file %s to device onboard certificate: %v", f, err)
 		}
@@ -373,6 +385,9 @@ func (d *DeviceManagerFile) refreshCerts() error {
 		if err != nil {
 			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", name, err)
 		}
+		devItem := devices[u]
+		devItem.onboard = cert
+		devices[u] = devItem
 		// and the serial
 		f = path.Join(d.DevicePath, name, deviceSerialFilename)
 		_, err = os.Stat(f)
@@ -385,10 +400,9 @@ func (d *DeviceManagerFile) refreshCerts() error {
 		if err != nil {
 			return fmt.Errorf("unable to read device serial file %s: %v", f, err)
 		}
-		devices[u] = deviceStorage{
-			onboard: cert,
-			serial:  string(b),
-		}
+		devItem = devices[u]
+		devItem.serial = string(b)
+		devices[u] = devItem
 	}
 	// replace the existing device certificates
 	d.deviceCerts = deviceCerts
@@ -397,6 +411,17 @@ func (d *DeviceManagerFile) refreshCerts() error {
 
 	// mark the time we updated
 	d.lastUpdate = now
+	return nil
+}
+
+// initialize dirs, in case they do not exist
+func (d *DeviceManagerFile) initializeDB() error {
+	for _, p := range []string{d.DevicePath, d.onboardPath} {
+		err := os.MkdirAll(p, 0755)
+		if err != nil {
+			return fmt.Errorf("unable to initialize database path %s: %v", p, err)
+		}
+	}
 	return nil
 }
 
@@ -421,6 +446,15 @@ func (d *DeviceManagerFile) writeProtobufToJsonFile(u uuid.UUID, dir, filename s
 	}
 	// no need to f.Close() as it happens automatically
 	return nil
+}
+
+// deviceExists return if a device has been created
+func (d *DeviceManagerFile) deviceExists(u uuid.UUID) bool {
+	_, err := os.Stat(d.getDevicePath(u))
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 // checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
