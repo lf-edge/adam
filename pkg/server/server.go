@@ -44,7 +44,7 @@ func (s *Server) Start() {
 	// create a handler based on where our device database is
 	// in the future, we may support other device manager types
 	var mgr DeviceManager
-	for _, m := range deviceManagers {
+	for _, m := range getDeviceManagers() {
 		name := m.Name()
 		valid, err := m.Init(s.DatabaseURL)
 		if err != nil {
