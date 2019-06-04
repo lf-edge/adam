@@ -99,7 +99,7 @@ var generateDeviceCmd = &cobra.Command{
 			log.Fatalf("error generating uuid for device: %v", err)
 		}
 
-		devicePath := server.GetDevicePath(deviceDatabasePath, unew)
+		devicePath := server.GetDevicePath(databaseURL, unew)
 		err = os.MkdirAll(devicePath, 0755)
 		if err != nil {
 			log.Fatalf("error creating new device tree %s: %v", devicePath, err)
