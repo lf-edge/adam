@@ -101,7 +101,7 @@ func TestGenerateAndWrite(t *testing.T) {
 		force      bool
 		err        error
 	}{
-		{"", "", false, false, false, fmt.Errorf("keyPath must not be empty")},
+		{"", "", false, false, false, fmt.Errorf("certPath must not be empty")},
 		{"CERT", "", false, false, false, fmt.Errorf("keyPath must not be empty")},
 		{"", "KEY", false, false, false, fmt.Errorf("certPath must not be empty")},
 		{"CERT", "KEY", true, false, false, fmt.Errorf("file already exists")},
