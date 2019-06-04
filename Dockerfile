@@ -11,6 +11,7 @@ COPY go.mod .
 COPY go.sum .
 RUN go mod download
 
+# these have to be last steps so they do not bust the cache with each change
 COPY . /adam/src
 
 ARG GOOS=linux
