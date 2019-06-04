@@ -1,4 +1,4 @@
-.PHONY: all build build-docker build-local
+.PHONY: all build build-docker build-local fmt clean
 
 IMG ?= zededa/adam
 
