@@ -1,17 +1,13 @@
 package x509
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net"
-	"os"
 	"strings"
 	"time"
 )
@@ -73,22 +69,6 @@ func Generate(cn, hosts string) ([]byte, *rsa.PrivateKey, error) {
 	return derBytes, privKey, nil
 }
 
-func PemEncodeCert(cert []byte) []byte {
-	out := &bytes.Buffer{}
-	pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: cert})
-	b := make([]byte, out.Len())
-	copy(b, out.Bytes())
-	return b
-}
-
-func PemEncodeKey(key *rsa.PrivateKey) []byte {
-	out := &bytes.Buffer{}
-	pem.Encode(out, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-	b := make([]byte, out.Len())
-	copy(b, out.Bytes())
-	return b
-}
-
 func GenerateCertAndKey(cn, hosts string) (*x509.Certificate, *rsa.PrivateKey, error) {
 	certB, key, err := Generate(cn, hosts)
 	if err != nil {
@@ -106,55 +86,13 @@ func GenerateAndWrite(cn, hosts, certPath, keyPath string, force bool) error {
 	if err != nil {
 		return err
 	}
-	return Write(certB, keyB, certPath, keyPath, force)
-}
-
-func Write(cert []byte, key *rsa.PrivateKey, certPath, keyPath string, force bool) error {
-	// make sure we have the paths we need, and that they are not already taken, unless we were told to force
-	if keyPath == "" {
-		return fmt.Errorf("keyPath must not be empty")
-	}
-	if certPath == "" {
-		return fmt.Errorf("certPath must not be empty")
-	}
-	if _, err := os.Stat(keyPath); !os.IsNotExist(err) && !force {
-		return fmt.Errorf("file already exists at keyPath %s", keyPath)
-	}
-	if _, err := os.Stat(certPath); !os.IsNotExist(err) && !force {
-		return fmt.Errorf("file already exists at certPath %s", certPath)
-	}
-	certPem := PemEncodeCert(cert)
-	keyPem := PemEncodeKey(key)
-	err := ioutil.WriteFile(certPath, certPem, 0644)
+	err = WriteCert(certB, certPath, force)
 	if err != nil {
-		return fmt.Errorf("failed to write certificate to %s: %v", certPath, err)
+		return err
 	}
-	err = ioutil.WriteFile(keyPath, keyPem, 0600)
+	err = WriteKey(keyB, keyPath, force)
 	if err != nil {
-		return fmt.Errorf("failed to write key to %s: %v", keyPath, err)
+		return err
 	}
-
 	return nil
-}
-
-// read a cert file
-func ReadCert(p string) (*x509.Certificate, error) {
-	var (
-		b       []byte
-		err     error
-		certPem *pem.Block
-		cert    *x509.Certificate
-	)
-	if _, err = os.Stat(p); err != nil && os.IsNotExist(err) {
-		return nil, fmt.Errorf("certificate file %s does not exist", p)
-	}
-	if b, err = ioutil.ReadFile(p); err != nil {
-		return nil, fmt.Errorf("error reading certificate file %s: %v", p, err)
-	}
-	certPem, _ = pem.Decode(b)
-	cert, err = x509.ParseCertificate(certPem.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("unable to convert data from file %s to certificate: %v", p, err)
-	}
-	return cert, nil
 }

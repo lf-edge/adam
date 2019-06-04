@@ -52,9 +52,13 @@ func TestDeviceManagerFile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error parsing device certificate: %v", err)
 		}
-		err = ax.Write(deviceCertB, deviceKey, path.Join(devicePath, DeviceCertFilename), path.Join(devicePath, "device-key.pem"), false)
+		err = ax.WriteCert(deviceCertB, path.Join(devicePath, DeviceCertFilename), false)
 		if err != nil {
-			t.Fatalf("error writing device key/certificate: %v", err)
+			t.Fatalf("error writing device certificate: %v", err)
+		}
+		err = ax.WriteKey(deviceKey, path.Join(devicePath, "device-key.pem"), false)
+		if err != nil {
+			t.Fatalf("error writing device key: %v", err)
 		}
 		deviceCertStr := string(deviceCert.Raw)
 
@@ -73,9 +77,13 @@ func TestDeviceManagerFile(t *testing.T) {
 			t.Fatalf("error parsing onboard certificate: %v", err)
 		}
 		onboardCertStr := string(onboardCert.Raw)
-		err = ax.Write(onboardCertB, onboardKey, path.Join(onboardPath, onboardCertFilename), path.Join(onboardPath, "onboard-key.pem"), false)
+		err = ax.WriteCert(onboardCertB, path.Join(onboardPath, onboardCertFilename), false)
 		if err != nil {
-			t.Fatalf("error writing onboard key/certificate: %v", err)
+			t.Fatalf("error writing onboard certificate: %v", err)
+		}
+		err = ax.WriteKey(onboardKey, path.Join(onboardPath, "onboard-key.pem"), false)
+		if err != nil {
+			t.Fatalf("error writing onboard key: %v", err)
 		}
 		err = ioutil.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(serial), 0644)
 		if err != nil {
