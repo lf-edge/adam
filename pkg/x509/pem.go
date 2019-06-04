@@ -7,6 +7,7 @@ import (
 	"encoding/pem"
 )
 
+// PemEncodeCert take certificate DER bytes and PEM encode them
 func PemEncodeCert(cert []byte) []byte {
 	out := &bytes.Buffer{}
 	pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: cert})
@@ -15,6 +16,7 @@ func PemEncodeCert(cert []byte) []byte {
 	return b
 }
 
+// PemEncodeKey take an RSA private key and PEM encode it
 func PemEncodeKey(key *rsa.PrivateKey) []byte {
 	out := &bytes.Buffer{}
 	pem.Encode(out, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})

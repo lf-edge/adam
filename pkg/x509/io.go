@@ -9,6 +9,7 @@ import (
 	"os"
 )
 
+// WriteCert write cert bytes to a path, after pem encoding them. Do not overwrite unless force is true.
 func WriteCert(cert []byte, certPath string, force bool) error {
 	// make sure we have the paths we need, and that they are not already taken, unless we were told to force
 	if certPath == "" {
@@ -26,6 +27,7 @@ func WriteCert(cert []byte, certPath string, force bool) error {
 	return nil
 }
 
+// WriteKey write RSA private key to a path, after pem encoding it. Do not overwrite unless force is true.
 func WriteKey(key *rsa.PrivateKey, keyPath string, force bool) error {
 	// make sure we have the paths we need, and that they are not already taken, unless we were told to force
 	if keyPath == "" {
@@ -43,7 +45,7 @@ func WriteKey(key *rsa.PrivateKey, keyPath string, force bool) error {
 	return nil
 }
 
-// read a cert file
+// ReadCert read a cert file
 func ReadCert(p string) (*x509.Certificate, error) {
 	var (
 		b       []byte

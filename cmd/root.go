@@ -15,6 +15,7 @@ func init() {
 	serialsInit()
 }
 
+// Execute primary function for cobra
 func Execute() {
 	rootCmd.Execute()
 }

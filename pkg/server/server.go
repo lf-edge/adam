@@ -22,6 +22,7 @@ const (
 	mimeProto   = "application/x-proto-binary"
 )
 
+// Server an adam server
 type Server struct {
 	Port        string
 	CertPath    string
@@ -30,6 +31,7 @@ type Server struct {
 	CertRefresh int
 }
 
+// Start start the server
 func (s *Server) Start() {
 	// ensure the server cert and key exist
 	_, err := os.Stat(s.CertPath)

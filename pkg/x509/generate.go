@@ -17,7 +17,7 @@ const (
 	oneYear = 365 * 24 * time.Hour
 )
 
-// generate a key and cert
+// Generate a key and cert
 func Generate(cn, hosts string) ([]byte, *rsa.PrivateKey, error) {
 	if hosts == "" && cn == "" {
 		return nil, nil, fmt.Errorf("must specify at least one hostname/IP or CN")
@@ -69,6 +69,7 @@ func Generate(cn, hosts string) ([]byte, *rsa.PrivateKey, error) {
 	return derBytes, privKey, nil
 }
 
+// GenerateCertAndKey generate a certificate and a key, and return as x509.Certificate and rsa.PrivateKey
 func GenerateCertAndKey(cn, hosts string) (*x509.Certificate, *rsa.PrivateKey, error) {
 	certB, key, err := Generate(cn, hosts)
 	if err != nil {
@@ -81,6 +82,7 @@ func GenerateCertAndKey(cn, hosts string) (*x509.Certificate, *rsa.PrivateKey, e
 	return cert, key, nil
 }
 
+// GenerateAndWrite generate a certificate and key and save to the given paths. Do not overwrite unless force is true.
 func GenerateAndWrite(cn, hosts, certPath, keyPath string, force bool) error {
 	certB, keyB, err := Generate(cn, hosts)
 	if err != nil {

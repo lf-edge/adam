@@ -20,7 +20,9 @@ import (
 )
 
 const (
-	DeviceCertFilename    = "device-certificate.pem"
+	// DeviceCertFilename the location in the device-specific directory that contains the device certificate
+	DeviceCertFilename = "device-certificate.pem"
+	// DeviceOnboardFilename the location in the device-specific directory that contains the onboarding certificate used
 	DeviceOnboardFilename = "onboard-certificate.pem"
 	deviceConfigFilename  = "config.json"
 	deviceSerialFilename  = "serial.txt"
@@ -33,6 +35,7 @@ const (
 	onboardDir            = "onboard"
 )
 
+// DeviceManagerFile implementation of DeviceManager interface with a directory as the backing store
 type DeviceManagerFile struct {
 	databasePath string
 	cacheTimeout int
@@ -160,7 +163,7 @@ func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, 
 		return nil, fmt.Errorf("error saving device serial to %s: %v", serialPath, err)
 	}
 	// save the base configuration
-	err = d.writeProtobufToJsonFile(unew, "", deviceConfigFilename, createBaseConfig(unew))
+	err = d.writeProtobufToJSONFile(unew, "", deviceConfigFilename, createBaseConfig(unew))
 	if err != nil {
 		return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
 	}
@@ -199,7 +202,7 @@ func (d *DeviceManagerFile) WriteInfo(m *info.ZInfoMsg) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevId)
 	}
-	err = d.writeProtobufToJsonFile(u, infoDir, fmt.Sprintf("%d", m.AtTimeStamp.Seconds), m)
+	err = d.writeProtobufToJSONFile(u, infoDir, fmt.Sprintf("%d", m.AtTimeStamp.Seconds), m)
 	if err != nil {
 		return fmt.Errorf("failed to write info to file: %v", err)
 	}
@@ -221,7 +224,7 @@ func (d *DeviceManagerFile) WriteLogs(m *logs.LogBundle) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
 	}
-	err = d.writeProtobufToJsonFile(u, logDir, fmt.Sprintf("%d", m.Timestamp.Seconds), m)
+	err = d.writeProtobufToJSONFile(u, logDir, fmt.Sprintf("%d", m.Timestamp.Seconds), m)
 	if err != nil {
 		return fmt.Errorf("failed to write logs to file: %v", err)
 	}
@@ -243,7 +246,7 @@ func (d *DeviceManagerFile) WriteMetrics(m *metrics.ZMetricMsg) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
 	}
-	err = d.writeProtobufToJsonFile(u, metricsDir, fmt.Sprintf("%d", m.AtTimeStamp.Seconds), m)
+	err = d.writeProtobufToJSONFile(u, metricsDir, fmt.Sprintf("%d", m.AtTimeStamp.Seconds), m)
 	if err != nil {
 		return fmt.Errorf("failed to write metrics to file: %v", err)
 	}
@@ -261,7 +264,7 @@ func (d *DeviceManagerFile) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error
 	case err != nil && os.IsNotExist(err):
 		// create the base file if it does not exist
 		msg = createBaseConfig(u)
-		err = d.writeProtobufToJsonFile(u, "", deviceConfigFilename, msg)
+		err = d.writeProtobufToJSONFile(u, "", deviceConfigFilename, msg)
 		if err != nil {
 			return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
 		}
@@ -462,8 +465,8 @@ func (d *DeviceManagerFile) getDevicePath(u uuid.UUID) string {
 	return GetDevicePath(d.databasePath, u)
 }
 
-// writeProtobufToJsonFile write a protobuf to a named file in the given directory
-func (d *DeviceManagerFile) writeProtobufToJsonFile(u uuid.UUID, dir, filename string, msg proto.Message) error {
+// writeProtobufToJSONFile write a protobuf to a named file in the given directory
+func (d *DeviceManagerFile) writeProtobufToJSONFile(u uuid.UUID, dir, filename string, msg proto.Message) error {
 	// if dir == "", then path.Join() automatically ignores it
 	fullPath := path.Join(d.getDevicePath(u), dir, filename)
 	f, err := os.Create(fullPath)

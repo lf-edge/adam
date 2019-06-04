@@ -9,6 +9,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+// DeviceManager interface representing any kind of device manager with any kind of backing store
 type DeviceManager interface {
 	// Name return unique representative name for this type of device manager, e.g. "file", "memory", "mongo", etc.
 	Name() string

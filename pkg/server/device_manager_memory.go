@@ -10,6 +10,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+// DeviceManagerMemory implementation of DeviceManager with an ephemeral memory backing store
 type DeviceManagerMemory struct {
 	onboardCerts map[string]map[string]bool
 	deviceCerts  map[string]uuid.UUID
