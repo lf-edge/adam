@@ -100,6 +100,57 @@ func (d *DeviceManagerFile) CheckOnboardCert(cert *x509.Certificate, serial stri
 	return true, nil
 }
 
+// GetOnboard get the onboard cert and its serials based on Common Name
+func (d *DeviceManagerFile) GetOnboard(cn string) (*x509.Certificate, []string, error) {
+	if cn == "" {
+		return nil, nil, fmt.Errorf("empty cn")
+	}
+	// easiest to just check the filesystem
+	onboardDir := d.getOnboardPath(cn)
+	// does it exist?
+	found, err := exists(onboardDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading onboard directory: %v", err)
+	}
+	if !found {
+		return nil, nil, &NotFoundError{}
+	}
+
+	// get the certificate and serials
+	certPath := path.Join(onboardDir, onboardCertFilename)
+	cert, err := ax.ReadCert(certPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading onboard certificate at %s: %v", certPath, err)
+	}
+	serialPath := path.Join(onboardDir, onboardCertSerials)
+	serial, err := ioutil.ReadFile(serialPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading onboard serials at %s: %v", serialPath, err)
+	}
+	// done
+	return cert, strings.Split(string(serial), "\n"), nil
+}
+
+// RemoveOnboard remove an onboard certificate based on Common Name
+func (d *DeviceManagerFile) RemoveOnboard(cn string) error {
+	_, _, err := d.GetOnboard(cn)
+	if err != nil {
+		return err
+	}
+	onboardPath := d.getOnboardPath(cn)
+	// remove the directory
+	err = os.RemoveAll(onboardPath)
+	if err != nil {
+		fmt.Errorf("unable to remove the onboard directory: %v", err)
+	}
+	// refresh the cache
+	err = d.refreshCache()
+	if err != nil {
+		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+	}
+	return nil
+}
+
 // CheckDeviceCert see if a particular certificate is a valid registered device certificate
 func (d *DeviceManagerFile) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
@@ -115,6 +166,62 @@ func (d *DeviceManagerFile) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID,
 		return &u, nil
 	}
 	return nil, nil
+}
+
+// RemoveDevice remove a device
+func (d *DeviceManagerFile) RemoveDevice(u *uuid.UUID) error {
+	_, _, _, err := d.GetDevice(u)
+	if err != nil {
+		return err
+	}
+	// remove the directory
+	devicePath := d.getDevicePath(*u)
+	err = os.RemoveAll(devicePath)
+	if err != nil {
+		fmt.Errorf("unable to remove the device directory: %v", err)
+	}
+	// refresh the cache
+	err = d.refreshCache()
+	if err != nil {
+		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+	}
+	return nil
+}
+
+// GetDevice get an individual device by UUID
+func (d *DeviceManagerFile) GetDevice(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
+	if u == nil {
+		return nil, nil, "", fmt.Errorf("empty UUID")
+	}
+	// easiest to just check the filesystem
+	devicePath := d.getDevicePath(*u)
+	// does it exist?
+	found, err := exists(deviceDir)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("error reading device directory: %v", err)
+	}
+	if !found {
+		return nil, nil, "", &NotFoundError{}
+	}
+	// get the certificate, onboard certificate, serial
+	certPath := path.Join(devicePath, DeviceCertFilename)
+	cert, err := ax.ReadCert(certPath)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("error reading device certificate at %s: %v", certPath, err)
+	}
+
+	certPath = path.Join(devicePath, DeviceOnboardFilename)
+	onboard, err := ax.ReadCert(certPath)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("error reading onboard certificate at %s: %v", certPath, err)
+	}
+	serialPath := path.Join(devicePath, deviceSerialFilename)
+	serial, err := ioutil.ReadFile(serialPath)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("error reading device serial at %s: %v", serialPath, err)
+	}
+	// done
+	return cert, onboard, string(serial), nil
 }
 
 // RegisterDeviceCert register a new device cert
@@ -509,6 +616,11 @@ func (d *DeviceManagerFile) getDevicePath(u uuid.UUID) string {
 	return GetDevicePath(d.databasePath, u)
 }
 
+// getOnboardPath get the path for a given onboard
+func (d *DeviceManagerFile) getOnboardPath(cn string) string {
+	return path.Join(d.databasePath, onboardDir, cn)
+}
+
 // writeProtobufToJSONFile write a protobuf to a named file in the given directory
 func (d *DeviceManagerFile) writeProtobufToJSONFile(u uuid.UUID, dir, filename string, msg proto.Message) error {
 	// if dir == "", then path.Join() automatically ignores it
@@ -572,4 +684,15 @@ func GetDevicePath(databasePath string, u uuid.UUID) string {
 func getOnboardCertName(cn string) string {
 	re := regexp.MustCompile(`[^a-zA-Z0-9\\.\\-]`)
 	return re.ReplaceAllString(cn, "_")
+}
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
 }

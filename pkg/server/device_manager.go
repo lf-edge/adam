@@ -20,8 +20,16 @@ type DeviceManager interface {
 	SetCacheTimeout(int)
 	// CheckOnboardCert check if a certificate+serial combination are valid to use for registration. Includes checking for duplicates in devices
 	CheckOnboardCert(*x509.Certificate, string) (bool, error)
+	// RemoveOnboard remove an onboarding cert
+	RemoveOnboard(string) error
+	// GetOnboard get the details for an onboarding certificate and its serials by Common Name
+	GetOnboard(string) (*x509.Certificate, []string, error)
 	// CheckDeviceCert check if a certificate is valid to use for a device
 	CheckDeviceCert(*x509.Certificate) (*uuid.UUID, error)
+	// RemoveDevice remove a device
+	RemoveDevice(*uuid.UUID) error
+	// GetDevice get the details for a device based on its UUID
+	GetDevice(*uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error)
 	// RegisterDeviceCert register a new device certificate, including the onboarding certificate used to register it and its serial
 	RegisterDeviceCert(*x509.Certificate, *x509.Certificate, string) (*uuid.UUID, error)
 	// RegisterOnboardCert apply an onboard cert and serials that apply to it. If the onboard cert already exists, will replace the serials and return without error. It is  idempotent.
@@ -34,4 +42,12 @@ type DeviceManager interface {
 	WriteMetrics(*metrics.ZMetricMsg) error
 	// GetConfig get the config for a given uuid
 	GetConfig(uuid.UUID) (*config.EdgeDevConfig, error)
+}
+
+type NotFoundError struct {
+	err string
+}
+
+func (n *NotFoundError) Error() string {
+	return n.err
 }

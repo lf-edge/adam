@@ -48,6 +48,38 @@ func (d *DeviceManagerMemory) CheckOnboardCert(cert *x509.Certificate, serial st
 	return true, nil
 }
 
+// RemoveOnboard remove an onboard certificate based on Common Name
+func (d *DeviceManagerMemory) RemoveOnboard(cn string) error {
+	cert, _, err := d.GetOnboard(cn)
+	if err != nil {
+		return err
+	}
+	delete(d.onboardCerts, string(cert.Raw))
+	return nil
+}
+
+// GetOnboard get the onboard certificate and serials based on Common Name
+func (d *DeviceManagerMemory) GetOnboard(cn string) (*x509.Certificate, []string, error) {
+	if cn == "" {
+		return nil, nil, fmt.Errorf("empty cn")
+	}
+	for certStr, serials := range d.onboardCerts {
+		certRaw := []byte(certStr)
+		cert, err := x509.ParseCertificate(certRaw)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to parse certificate: %v", err)
+		}
+		if cert.Subject.CommonName == cn {
+			serialSlice := make([]string, 0, len(serials))
+			for k := range serials {
+				serialSlice = append(serialSlice, k)
+			}
+			return cert, serialSlice, nil
+		}
+	}
+	return nil, nil, &NotFoundError{}
+}
+
 // CheckDeviceCert see if a particular certificate is a valid registered device certificate
 func (d *DeviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
@@ -58,6 +90,28 @@ func (d *DeviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUI
 		return &u, nil
 	}
 	return nil, nil
+}
+
+// RemoveDevice remove a device
+func (d *DeviceManagerMemory) RemoveDevice(u *uuid.UUID) error {
+	cert, _, _, err := d.GetDevice(u)
+	if err != nil {
+		return err
+	}
+	delete(d.deviceCerts, string(cert.Raw))
+	delete(d.devices, *u)
+	return nil
+}
+
+// GetDevice get an individual device by UUID
+func (d *DeviceManagerMemory) GetDevice(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
+	if u == nil {
+		return nil, nil, "", fmt.Errorf("empty UUID")
+	}
+	if _, ok := d.devices[*u]; ok {
+		return d.devices[*u].cert, d.devices[*u].onboard, d.devices[*u].serial, nil
+	}
+	return nil, nil, "", &NotFoundError{}
 }
 
 // RegisterDeviceCert register a new device cert
