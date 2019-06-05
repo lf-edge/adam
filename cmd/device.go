@@ -26,7 +26,10 @@ var deviceListCmd = &cobra.Command{
 	Short: "list UUIDs of known devices",
 	Long:  `List the current registered UUIDs`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u := path.Join(serverURL, "/admin/device")
+		u, err := resolveUrl(serverURL, "/admin/device")
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
 		client := getClient()
 		response, err := client.Get(u)
 		if err != nil {
@@ -52,7 +55,10 @@ var deviceAddCmd = &cobra.Command{
 		case err != nil:
 			log.Fatalf("error reading cert file %s: %v", certPath, err)
 		}
-		u := path.Join(serverURL, "/admin/device")
+		u, err := resolveUrl(serverURL, "/admin/device")
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
 		client := getClient()
 		_, err = client.Post(u, textContentType, bytes.NewReader(b))
 		if err != nil {
@@ -66,7 +72,10 @@ var deviceRemoveCmd = &cobra.Command{
 	Short: "remove registered device",
 	Long:  `Remove a registered device`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u := path.Join(serverURL, "/admin/device", devUUID)
+		u, err := resolveUrl(serverURL, path.Join("/admin/device", devUUID))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
 		client := getClient()
 
 		req, err := http.NewRequest("DELETE", u, nil)
@@ -86,7 +95,10 @@ var deviceClearCmd = &cobra.Command{
 	Short: "clear all registered devices",
 	Long:  `Clear all of the registered devices. This command is idempotent.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u := path.Join(serverURL, "/admin/device")
+		u, err := resolveUrl(serverURL, "/admin/device")
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
 		client := getClient()
 
 		req, err := http.NewRequest("DELETE", u, nil)

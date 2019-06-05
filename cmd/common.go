@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"net/http"
+	"net/url"
 	"regexp"
 	"time"
 )
@@ -36,4 +37,15 @@ func getClient() *http.Client {
 		Timeout: time.Second * 10,
 	}
 	return client
+}
+func resolveUrl(b, p string) (string, error) {
+	u, err := url.Parse(p)
+	if err != nil {
+		return "", err
+	}
+	base, err := url.Parse(b)
+	if err != nil {
+		return "", err
+	}
+	return base.ResolveReference(u).String(), nil
 }

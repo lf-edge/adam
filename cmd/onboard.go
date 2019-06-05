@@ -28,7 +28,10 @@ var onboardListCmd = &cobra.Command{
 	Short: "list onboarding certificates and their valid serials",
 	Long:  `List the current registered onboarding certificates and their serials`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u := path.Join(serverURL, "/admin/onboard")
+		u, err := resolveUrl(serverURL, "/admin/onboard")
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
 		client := getClient()
 		response, err := client.Get(u)
 		if err != nil {
@@ -55,7 +58,10 @@ var onboardAddCmd = &cobra.Command{
 			log.Fatalf("error reading cert file %s: %v", certPath, err)
 		}
 		body := fmt.Sprintf(`{"cert":"%s", "serials":"%s"}`, string(b), serials)
-		u := path.Join(serverURL, "/admin/onboard")
+		u, err := resolveUrl(serverURL, "/admin/onboard")
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
 		client := getClient()
 		_, err = client.Post(u, jsonContentType, strings.NewReader(body))
 		if err != nil {
@@ -80,7 +86,10 @@ var onboardRemoveCmd = &cobra.Command{
 			}
 			cn = cert.Subject.CommonName
 		}
-		u := path.Join(serverURL, "/admin/onboard", getFriendlyCN(cn))
+		u, err := resolveUrl(serverURL, path.Join("/admin/onboard", getFriendlyCN(cn)))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
 		client := getClient()
 
 		req, err := http.NewRequest("DELETE", u, nil)
@@ -100,7 +109,10 @@ var onboardClearCmd = &cobra.Command{
 	Short: "clear all onboard certificates",
 	Long:  `Clear all of the existing onboard certificates. This command is idempotent.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u := path.Join(serverURL, "/admin/onboard")
+		u, err := resolveUrl(serverURL, "/admin/onboard")
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
 		client := getClient()
 
 		req, err := http.NewRequest("DELETE", u, nil)
