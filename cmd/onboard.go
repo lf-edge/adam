@@ -44,8 +44,8 @@ var onboardListCmd = &cobra.Command{
 
 var onboardAddCmd = &cobra.Command{
 	Use:   "add",
-	Short: "add new serial",
-	Long:  `Add new serial, to the current serials for a given cn cert`,
+	Short: "add new onboarding certificate",
+	Long:  `Add new onboarding certificate, as well as the valid serials. If the certificate already exists, its serials are replaced by the provided list`,
 	Run: func(cmd *cobra.Command, args []string) {
 		b, err := ioutil.ReadFile(certPath)
 		switch {
