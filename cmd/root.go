@@ -11,8 +11,6 @@ func init() {
 	serverInit()
 	rootCmd.AddCommand(generateCmd)
 	generateInit()
-	rootCmd.AddCommand(serialsCmd)
-	serialsInit()
 	rootCmd.AddCommand(onboardCmd)
 	onboardInit()
 	rootCmd.AddCommand(deviceCmd)
