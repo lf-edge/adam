@@ -1,7 +1,9 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -14,7 +16,34 @@ type adminHandler struct {
 	manager DeviceManager
 }
 
+type onboardCert struct {
+	Cert   []byte
+	Serial string
+}
+
 func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
+	// extract certificate and serials from request body
+	contentType := r.Header.Get(contentType)
+	if contentType != mimeJson {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+	decoder := json.NewDecoder(r.Body)
+	var t onboardCert
+	err := decoder.Decode(&t)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+
+	serials := strings.Split(t.Serial, ",")
+	cert, err := ax.ParseCert(t.Cert)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+	err = h.manager.RegisterOnboardCert(cert, serials)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
+	w.WriteHeader(http.StatusCreated)
 }
 
 func (h *adminHandler) onboardList(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +95,26 @@ func (h *adminHandler) onboardClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
+	// extract certificate and serials from request body
+	contentType := r.Header.Get(contentType)
+	if contentType != mimeTextPlain {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+
+	cert, err := ax.ParseCert(b)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+	_, err = h.manager.RegisterDeviceCert(cert, nil, "")
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
+	w.WriteHeader(http.StatusCreated)
 }
 
 func (h *adminHandler) deviceList(w http.ResponseWriter, r *http.Request) {
