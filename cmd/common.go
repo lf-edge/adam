@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"net/http"
-	"path"
 	"regexp"
 	"time"
 )
@@ -29,16 +28,6 @@ var (
 func getFriendlyCN(cn string) string {
 	re := regexp.MustCompile(`[^a-zA-Z0-9\\.\\-]`)
 	return re.ReplaceAllString(cn, "_")
-}
-
-func getOnboardCertPath(cn string) string {
-	return path.Join(getOnboardCertBase(), getFriendlyCN(cn))
-}
-func getOnboardCertBase() string {
-	return path.Join(databaseURL, "onboard")
-}
-func getDeviceBase() string {
-	return path.Join(databaseURL, "device")
 }
 
 // http client with correct config
