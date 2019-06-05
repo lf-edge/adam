@@ -131,6 +131,25 @@ func (d *DeviceManagerFile) GetOnboard(cn string) (*x509.Certificate, []string, 
 	return cert, strings.Split(string(serial), "\n"), nil
 }
 
+// ListOnboard list all of the known Common Names for onboard
+func (d *DeviceManagerFile) ListOnboard() ([]string, error) {
+	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+	}
+	cns := make([]string, 0)
+	for certStr, _ := range d.onboardCerts {
+		certRaw := []byte(certStr)
+		cert, err := x509.ParseCertificate(certRaw)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse certificate: %v", err)
+		}
+		cns = append(cns, cert.Subject.CommonName)
+	}
+	return cns, nil
+}
+
 // RemoveOnboard remove an onboard certificate based on Common Name
 func (d *DeviceManagerFile) RemoveOnboard(cn string) error {
 	_, _, err := d.GetOnboard(cn)
@@ -222,6 +241,20 @@ func (d *DeviceManagerFile) GetDevice(u *uuid.UUID) (*x509.Certificate, *x509.Ce
 	}
 	// done
 	return cert, onboard, string(serial), nil
+}
+
+// ListDevice list all of the known UUIDs for devices
+func (d *DeviceManagerFile) ListDevice() ([]*uuid.UUID, error) {
+	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+	}
+	ids := make([]*uuid.UUID, 0, len(d.devices))
+	for u := range d.devices {
+		ids = append(ids, &u)
+	}
+	return ids, nil
 }
 
 // RegisterDeviceCert register a new device cert

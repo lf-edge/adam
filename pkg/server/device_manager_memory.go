@@ -80,6 +80,20 @@ func (d *DeviceManagerMemory) GetOnboard(cn string) (*x509.Certificate, []string
 	return nil, nil, &NotFoundError{}
 }
 
+// ListOnboard list all of the known Common Names for onboard
+func (d *DeviceManagerMemory) ListOnboard() ([]string, error) {
+	cns := make([]string, 0, len(d.onboardCerts))
+	for certStr, _ := range d.onboardCerts {
+		certRaw := []byte(certStr)
+		cert, err := x509.ParseCertificate(certRaw)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse certificate: %v", err)
+		}
+		cns = append(cns, cert.Subject.CommonName)
+	}
+	return cns, nil
+}
+
 // CheckDeviceCert see if a particular certificate is a valid registered device certificate
 func (d *DeviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
@@ -112,6 +126,15 @@ func (d *DeviceManagerMemory) GetDevice(u *uuid.UUID) (*x509.Certificate, *x509.
 		return d.devices[*u].cert, d.devices[*u].onboard, d.devices[*u].serial, nil
 	}
 	return nil, nil, "", &NotFoundError{}
+}
+
+// ListDevice list all of the known UUIDs for devices
+func (d *DeviceManagerMemory) ListDevice() ([]*uuid.UUID, error) {
+	ids := make([]*uuid.UUID, 0, len(d.devices))
+	for u := range d.devices {
+		ids = append(ids, &u)
+	}
+	return ids, nil
 }
 
 // RegisterDeviceCert register a new device cert

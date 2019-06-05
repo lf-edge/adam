@@ -24,12 +24,16 @@ type DeviceManager interface {
 	RemoveOnboard(string) error
 	// GetOnboard get the details for an onboarding certificate and its serials by Common Name
 	GetOnboard(string) (*x509.Certificate, []string, error)
+	// ListOnboard list all of the known Common Names for onboard
+	ListOnboard() ([]string, error)
 	// CheckDeviceCert check if a certificate is valid to use for a device
 	CheckDeviceCert(*x509.Certificate) (*uuid.UUID, error)
 	// RemoveDevice remove a device
 	RemoveDevice(*uuid.UUID) error
 	// GetDevice get the details for a device based on its UUID
 	GetDevice(*uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error)
+	// ListDevice list all of the known UUIDs for devices
+	ListDevice() ([]*uuid.UUID, error)
 	// RegisterDeviceCert register a new device certificate, including the onboarding certificate used to register it and its serial
 	RegisterDeviceCert(*x509.Certificate, *x509.Certificate, string) (*uuid.UUID, error)
 	// RegisterOnboardCert apply an onboard cert and serials that apply to it. If the onboard cert already exists, will replace the serials and return without error. It is  idempotent.

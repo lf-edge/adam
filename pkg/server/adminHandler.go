@@ -18,6 +18,14 @@ func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) onboardList(w http.ResponseWriter, r *http.Request) {
+	cns, err := h.manager.ListOnboard()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+	w.WriteHeader(http.StatusOK)
+	body := strings.Join(cns, "\n")
+	w.Header().Add(contentType, mimeTextPlain)
+	w.Write([]byte(body))
 }
 
 func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +65,21 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceList(w http.ResponseWriter, r *http.Request) {
+	uids, err := h.manager.ListDevice()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	}
+	// convert the UUIDs
+	ids := make([]string, 0, len(uids))
+	for _, i := range uids {
+		if i != nil {
+			ids = append(ids, i.String())
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+	body := strings.Join(ids, "\n")
+	w.Header().Add(contentType, mimeTextPlain)
+	w.Write([]byte(body))
 }
 
 func (h *adminHandler) deviceGet(w http.ResponseWriter, r *http.Request) {

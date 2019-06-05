@@ -13,11 +13,6 @@ import (
 	"github.com/lf-edge/eve/api/go/register"
 )
 
-const (
-	contentType = "Content-Type"
-	mimeProto   = "application/x-proto-binary"
-)
-
 type apiHandler struct {
 	manager DeviceManager
 }
