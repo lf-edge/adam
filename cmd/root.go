@@ -13,6 +13,10 @@ func init() {
 	generateInit()
 	rootCmd.AddCommand(serialsCmd)
 	serialsInit()
+	rootCmd.AddCommand(onboardCmd)
+	onboardInit()
+	rootCmd.AddCommand(deviceCmd)
+	deviceInit()
 }
 
 // Execute primary function for cobra
