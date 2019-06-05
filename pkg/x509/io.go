@@ -48,10 +48,8 @@ func WriteKey(key *rsa.PrivateKey, keyPath string, force bool) error {
 // ReadCert read a cert file
 func ReadCert(p string) (*x509.Certificate, error) {
 	var (
-		b       []byte
-		err     error
-		certPem *pem.Block
-		cert    *x509.Certificate
+		b   []byte
+		err error
 	)
 	if _, err = os.Stat(p); err != nil && os.IsNotExist(err) {
 		return nil, fmt.Errorf("certificate file %s does not exist", p)
@@ -59,10 +57,20 @@ func ReadCert(p string) (*x509.Certificate, error) {
 	if b, err = ioutil.ReadFile(p); err != nil {
 		return nil, fmt.Errorf("error reading certificate file %s: %v", p, err)
 	}
+	return ParseCert(b)
+}
+
+// ParseCert parse a cert from a PEM-encoded byte slice
+func ParseCert(b []byte) (*x509.Certificate, error) {
+	var (
+		err     error
+		certPem *pem.Block
+		cert    *x509.Certificate
+	)
 	certPem, _ = pem.Decode(b)
 	cert, err = x509.ParseCertificate(certPem.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert data from file %s to certificate: %v", p, err)
+		return nil, fmt.Errorf("unable to convert data to certificate: %v", err)
 	}
 	return cert, nil
 }
