@@ -35,7 +35,7 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serial := msg.Serial
-	valid, err := h.manager.CheckOnboardCert(onboardCert, serial)
+	valid, err := h.manager.OnboardCheck(onboardCert, serial)
 	switch {
 	case err != nil:
 		log.Printf("Error checking onboard cert and serial: %v", err)
@@ -54,7 +54,7 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// we do not keep the uuid or send it back; perhaps a future version of the API will support it
-	_, err = h.manager.RegisterDeviceCert(deviceCert, onboardCert, serial)
+	_, err = h.manager.DeviceRegister(deviceCert, onboardCert, serial)
 	if err != nil {
 		log.Printf("error registering new device: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -67,7 +67,7 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) ping(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	_, err := h.manager.CheckDeviceCert(cert)
+	_, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
@@ -80,7 +80,7 @@ func (h *apiHandler) ping(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	u, err := h.manager.CheckDeviceCert(cert)
+	u, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -109,7 +109,7 @@ func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	_, err := h.manager.CheckDeviceCert(cert)
+	_, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
@@ -140,7 +140,7 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	_, err := h.manager.CheckDeviceCert(cert)
+	_, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
@@ -171,7 +171,7 @@ func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	_, err := h.manager.CheckDeviceCert(cert)
+	_, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)

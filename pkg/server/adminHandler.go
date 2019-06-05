@@ -39,7 +39,7 @@ func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
-	err = h.manager.RegisterOnboardCert(cert, serials)
+	err = h.manager.OnboardRegister(cert, serials)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
@@ -47,7 +47,7 @@ func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) onboardList(w http.ResponseWriter, r *http.Request) {
-	cns, err := h.manager.ListOnboard()
+	cns, err := h.manager.OnboardList()
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
@@ -59,7 +59,7 @@ func (h *adminHandler) onboardList(w http.ResponseWriter, r *http.Request) {
 
 func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
 	cn := mux.Vars(r)["cn"]
-	cert, serials, err := h.manager.GetOnboard(cn)
+	cert, serials, err := h.manager.OnboardGet(cn)
 	_, isNotFound := err.(*NotFoundError)
 	switch {
 	case err != nil && isNotFound:
@@ -75,7 +75,7 @@ func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
 
 func (h *adminHandler) onboardRemove(w http.ResponseWriter, r *http.Request) {
 	cn := mux.Vars(r)["cn"]
-	err := h.manager.RemoveOnboard(cn)
+	err := h.manager.OnboardRemove(cn)
 	_, isNotFound := err.(*NotFoundError)
 	switch {
 	case err != nil && isNotFound:
@@ -88,7 +88,7 @@ func (h *adminHandler) onboardRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) onboardClear(w http.ResponseWriter, r *http.Request) {
-	err := h.manager.ClearOnboard()
+	err := h.manager.OnboardClear()
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
@@ -110,7 +110,7 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
-	_, err = h.manager.RegisterDeviceCert(cert, nil, "")
+	_, err = h.manager.DeviceRegister(cert, nil, "")
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
@@ -118,7 +118,7 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceList(w http.ResponseWriter, r *http.Request) {
-	uids, err := h.manager.ListDevice()
+	uids, err := h.manager.DeviceList()
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
@@ -142,7 +142,7 @@ func (h *adminHandler) deviceGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	deviceCert, onboardCert, serial, err := h.manager.GetDevice(&uid)
+	deviceCert, onboardCert, serial, err := h.manager.DeviceGet(&uid)
 	_, isNotFound := err.(*NotFoundError)
 	switch {
 	case err != nil && isNotFound:
@@ -163,7 +163,7 @@ func (h *adminHandler) deviceRemove(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	err = h.manager.RemoveDevice(&uid)
+	err = h.manager.DeviceRemove(&uid)
 	_, isNotFound := err.(*NotFoundError)
 	switch {
 	case err != nil && isNotFound:
@@ -176,7 +176,7 @@ func (h *adminHandler) deviceRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceClear(w http.ResponseWriter, r *http.Request) {
-	err := h.manager.ClearDevice()
+	err := h.manager.DeviceClear()
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}

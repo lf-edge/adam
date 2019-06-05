@@ -80,8 +80,8 @@ func (d *DeviceManagerFile) SetCacheTimeout(timeout int) {
 	d.cacheTimeout = timeout
 }
 
-// CheckOnboardCert see if a particular certificate and serial combination is valid
-func (d *DeviceManagerFile) CheckOnboardCert(cert *x509.Certificate, serial string) (bool, error) {
+// OnboardCheck see if a particular certificate and serial combination is valid
+func (d *DeviceManagerFile) OnboardCheck(cert *x509.Certificate, serial string) (bool, error) {
 	// do not accept a nil certificate
 	if cert == nil {
 		return false, fmt.Errorf("invalid nil certificate")
@@ -100,8 +100,8 @@ func (d *DeviceManagerFile) CheckOnboardCert(cert *x509.Certificate, serial stri
 	return true, nil
 }
 
-// GetOnboard get the onboard cert and its serials based on Common Name
-func (d *DeviceManagerFile) GetOnboard(cn string) (*x509.Certificate, []string, error) {
+// OnboardGet get the onboard cert and its serials based on Common Name
+func (d *DeviceManagerFile) OnboardGet(cn string) (*x509.Certificate, []string, error) {
 	if cn == "" {
 		return nil, nil, fmt.Errorf("empty cn")
 	}
@@ -131,8 +131,8 @@ func (d *DeviceManagerFile) GetOnboard(cn string) (*x509.Certificate, []string, 
 	return cert, strings.Split(string(serial), "\n"), nil
 }
 
-// ListOnboard list all of the known Common Names for onboard
-func (d *DeviceManagerFile) ListOnboard() ([]string, error) {
+// OnboardList list all of the known Common Names for onboard
+func (d *DeviceManagerFile) OnboardList() ([]string, error) {
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
@@ -150,9 +150,9 @@ func (d *DeviceManagerFile) ListOnboard() ([]string, error) {
 	return cns, nil
 }
 
-// RemoveOnboard remove an onboard certificate based on Common Name
-func (d *DeviceManagerFile) RemoveOnboard(cn string) error {
-	_, _, err := d.GetOnboard(cn)
+// OnboardRemove remove an onboard certificate based on Common Name
+func (d *DeviceManagerFile) OnboardRemove(cn string) error {
+	_, _, err := d.OnboardGet(cn)
 	if err != nil {
 		return err
 	}
@@ -170,8 +170,8 @@ func (d *DeviceManagerFile) RemoveOnboard(cn string) error {
 	return nil
 }
 
-// ClearOnboard remove all onboarding certs
-func (d *DeviceManagerFile) ClearOnboard() error {
+// OnboardClear remove all onboarding certs
+func (d *DeviceManagerFile) OnboardClear() error {
 	// remove the directory and clear the cache
 	onboardPath := path.Join(d.databasePath, onboardDir)
 	candidates, err := ioutil.ReadDir(onboardPath)
@@ -195,8 +195,8 @@ func (d *DeviceManagerFile) ClearOnboard() error {
 	return nil
 }
 
-// CheckDeviceCert see if a particular certificate is a valid registered device certificate
-func (d *DeviceManagerFile) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
+// DeviceCheckCert see if a particular certificate is a valid registered device certificate
+func (d *DeviceManagerFile) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("invalid nil certificate")
 	}
@@ -212,9 +212,9 @@ func (d *DeviceManagerFile) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID,
 	return nil, nil
 }
 
-// RemoveDevice remove a device
-func (d *DeviceManagerFile) RemoveDevice(u *uuid.UUID) error {
-	_, _, _, err := d.GetDevice(u)
+// DeviceRemove remove a device
+func (d *DeviceManagerFile) DeviceRemove(u *uuid.UUID) error {
+	_, _, _, err := d.DeviceGet(u)
 	if err != nil {
 		return err
 	}
@@ -232,8 +232,8 @@ func (d *DeviceManagerFile) RemoveDevice(u *uuid.UUID) error {
 	return nil
 }
 
-// ClearDevice remove all devices
-func (d *DeviceManagerFile) ClearDevice() error {
+// DeviceClear remove all devices
+func (d *DeviceManagerFile) DeviceClear() error {
 	// remove the directory and clear the cache
 	devicePath := path.Join(d.databasePath, deviceDir)
 	candidates, err := ioutil.ReadDir(devicePath)
@@ -258,8 +258,8 @@ func (d *DeviceManagerFile) ClearDevice() error {
 	return nil
 }
 
-// GetDevice get an individual device by UUID
-func (d *DeviceManagerFile) GetDevice(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
+// DeviceGet get an individual device by UUID
+func (d *DeviceManagerFile) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
 	if u == nil {
 		return nil, nil, "", fmt.Errorf("empty UUID")
 	}
@@ -294,8 +294,8 @@ func (d *DeviceManagerFile) GetDevice(u *uuid.UUID) (*x509.Certificate, *x509.Ce
 	return cert, onboard, string(serial), nil
 }
 
-// ListDevice list all of the known UUIDs for devices
-func (d *DeviceManagerFile) ListDevice() ([]*uuid.UUID, error) {
+// DeviceList list all of the known UUIDs for devices
+func (d *DeviceManagerFile) DeviceList() ([]*uuid.UUID, error) {
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
@@ -308,15 +308,15 @@ func (d *DeviceManagerFile) ListDevice() ([]*uuid.UUID, error) {
 	return ids, nil
 }
 
-// RegisterDeviceCert register a new device cert
-func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
+// DeviceRegister register a new device cert
+func (d *DeviceManagerFile) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
 	// check if it already exists - this also checks for nil cert
-	u, err := d.CheckDeviceCert(cert)
+	u, err := d.DeviceCheckCert(cert)
 	if err != nil {
 		return nil, err
 	}
@@ -380,8 +380,8 @@ func (d *DeviceManagerFile) RegisterDeviceCert(cert, onboard *x509.Certificate, 
 	return &unew, nil
 }
 
-// RegisterOnboardCert register an onboard cert and update its serials
-func (d *DeviceManagerFile) RegisterOnboardCert(cert *x509.Certificate, serial []string) error {
+// OnboardRegister register an onboard cert and update its serials
+func (d *DeviceManagerFile) OnboardRegister(cert *x509.Certificate, serial []string) error {
 	if cert == nil {
 		return fmt.Errorf("empty nil certificate")
 	}

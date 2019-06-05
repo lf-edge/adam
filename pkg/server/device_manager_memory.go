@@ -34,8 +34,8 @@ func (d *DeviceManagerMemory) Init(s string) (bool, error) {
 func (d *DeviceManagerMemory) SetCacheTimeout(timeout int) {
 }
 
-// CheckOnboardCert see if a particular certificate plus serial combinaton is valid
-func (d *DeviceManagerMemory) CheckOnboardCert(cert *x509.Certificate, serial string) (bool, error) {
+// OnboardCheck see if a particular certificate plus serial combinaton is valid
+func (d *DeviceManagerMemory) OnboardCheck(cert *x509.Certificate, serial string) (bool, error) {
 	if cert == nil {
 		return false, fmt.Errorf("invalid nil certificate")
 	}
@@ -48,9 +48,9 @@ func (d *DeviceManagerMemory) CheckOnboardCert(cert *x509.Certificate, serial st
 	return true, nil
 }
 
-// RemoveOnboard remove an onboard certificate based on Common Name
-func (d *DeviceManagerMemory) RemoveOnboard(cn string) error {
-	cert, _, err := d.GetOnboard(cn)
+// OnboardRemove remove an onboard certificate based on Common Name
+func (d *DeviceManagerMemory) OnboardRemove(cn string) error {
+	cert, _, err := d.OnboardGet(cn)
 	if err != nil {
 		return err
 	}
@@ -58,14 +58,14 @@ func (d *DeviceManagerMemory) RemoveOnboard(cn string) error {
 	return nil
 }
 
-// ClearOnboard remove all onboarding certs
-func (d *DeviceManagerMemory) ClearOnboard() error {
+// OnboardClear remove all onboarding certs
+func (d *DeviceManagerMemory) OnboardClear() error {
 	d.onboardCerts = map[string]map[string]bool{}
 	return nil
 }
 
-// GetOnboard get the onboard certificate and serials based on Common Name
-func (d *DeviceManagerMemory) GetOnboard(cn string) (*x509.Certificate, []string, error) {
+// OnboardGet get the onboard certificate and serials based on Common Name
+func (d *DeviceManagerMemory) OnboardGet(cn string) (*x509.Certificate, []string, error) {
 	if cn == "" {
 		return nil, nil, fmt.Errorf("empty cn")
 	}
@@ -86,8 +86,8 @@ func (d *DeviceManagerMemory) GetOnboard(cn string) (*x509.Certificate, []string
 	return nil, nil, &NotFoundError{}
 }
 
-// ListOnboard list all of the known Common Names for onboard
-func (d *DeviceManagerMemory) ListOnboard() ([]string, error) {
+// OnboardList list all of the known Common Names for onboard
+func (d *DeviceManagerMemory) OnboardList() ([]string, error) {
 	cns := make([]string, 0, len(d.onboardCerts))
 	for certStr, _ := range d.onboardCerts {
 		certRaw := []byte(certStr)
@@ -100,8 +100,8 @@ func (d *DeviceManagerMemory) ListOnboard() ([]string, error) {
 	return cns, nil
 }
 
-// CheckDeviceCert see if a particular certificate is a valid registered device certificate
-func (d *DeviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
+// DeviceCheckCert see if a particular certificate is a valid registered device certificate
+func (d *DeviceManagerMemory) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("invalid nil certificate")
 	}
@@ -112,9 +112,9 @@ func (d *DeviceManagerMemory) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUI
 	return nil, nil
 }
 
-// RemoveDevice remove a device
-func (d *DeviceManagerMemory) RemoveDevice(u *uuid.UUID) error {
-	cert, _, _, err := d.GetDevice(u)
+// DeviceRemove remove a device
+func (d *DeviceManagerMemory) DeviceRemove(u *uuid.UUID) error {
+	cert, _, _, err := d.DeviceGet(u)
 	if err != nil {
 		return err
 	}
@@ -123,14 +123,14 @@ func (d *DeviceManagerMemory) RemoveDevice(u *uuid.UUID) error {
 	return nil
 }
 
-// ClearDevice remove all devices
-func (d *DeviceManagerMemory) ClearDevice() error {
+// DeviceClear remove all devices
+func (d *DeviceManagerMemory) DeviceClear() error {
 	d.devices = make(map[uuid.UUID]deviceStorage)
 	return nil
 }
 
-// GetDevice get an individual device by UUID
-func (d *DeviceManagerMemory) GetDevice(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
+// DeviceGet get an individual device by UUID
+func (d *DeviceManagerMemory) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
 	if u == nil {
 		return nil, nil, "", fmt.Errorf("empty UUID")
 	}
@@ -140,8 +140,8 @@ func (d *DeviceManagerMemory) GetDevice(u *uuid.UUID) (*x509.Certificate, *x509.
 	return nil, nil, "", &NotFoundError{}
 }
 
-// ListDevice list all of the known UUIDs for devices
-func (d *DeviceManagerMemory) ListDevice() ([]*uuid.UUID, error) {
+// DeviceList list all of the known UUIDs for devices
+func (d *DeviceManagerMemory) DeviceList() ([]*uuid.UUID, error) {
 	ids := make([]*uuid.UUID, 0, len(d.devices))
 	for u := range d.devices {
 		ids = append(ids, &u)
@@ -149,10 +149,10 @@ func (d *DeviceManagerMemory) ListDevice() ([]*uuid.UUID, error) {
 	return ids, nil
 }
 
-// RegisterDeviceCert register a new device cert
-func (d *DeviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
+// DeviceRegister register a new device cert
+func (d *DeviceManagerMemory) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
 	// first check if it already exists - this also checks for nil cert
-	u, err := d.CheckDeviceCert(cert)
+	u, err := d.DeviceCheckCert(cert)
 	if err != nil {
 		return nil, err
 	}
@@ -179,8 +179,8 @@ func (d *DeviceManagerMemory) RegisterDeviceCert(cert, onboard *x509.Certificate
 	return &unew, nil
 }
 
-// RegisterOnboardCert register a new onboard certificate and its serials or update an existing one
-func (d *DeviceManagerMemory) RegisterOnboardCert(cert *x509.Certificate, serial []string) error {
+// OnboardRegister register a new onboard certificate and its serials or update an existing one
+func (d *DeviceManagerMemory) OnboardRegister(cert *x509.Certificate, serial []string) error {
 	if cert == nil {
 		return fmt.Errorf("empty nil certificate")
 	}
