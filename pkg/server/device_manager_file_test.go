@@ -109,12 +109,36 @@ func TestDeviceManagerFile(t *testing.T) {
 		}
 	})
 
-	// CheckOnboardCert for file is identical to Memory, since it just uses the cache, so no testing here
-	t.Run("TestCheckOnboardCert", func(t *testing.T) {
+	// OnboardCheck for file is identical to Memory, since it just uses the cache, so no testing here
+	t.Run("TestOnboardCheck", func(t *testing.T) {
 	})
 
-	// CheckDeviceCert for file is identical to Memory, since it just uses the cache, so no testing here
-	t.Run("TestCheckDeviceCert", func(t *testing.T) {
+	t.Run("TestOnboardGet", func(t *testing.T) {
+	})
+
+	t.Run("TestOnboardList", func(t *testing.T) {
+	})
+
+	t.Run("TestOnboardRemove", func(t *testing.T) {
+	})
+
+	t.Run("TestOnboardClear", func(t *testing.T) {
+	})
+
+	// DeviceCheckCert for file is identical to Memory, since it just uses the cache, so no testing here
+	t.Run("TestDeviceCheckCert", func(t *testing.T) {
+	})
+
+	t.Run("TestDeviceRemove", func(t *testing.T) {
+	})
+
+	t.Run("TestDeviceClear", func(t *testing.T) {
+	})
+
+	t.Run("TestDeviceGet", func(t *testing.T) {
+	})
+
+	t.Run("TestDeviceList", func(t *testing.T) {
 	})
 
 	writeTester := func(t *testing.T, sectionName string, cmd func(int64, string, bool, bool, DeviceManagerFile) error) {
@@ -216,7 +240,7 @@ func TestDeviceManagerFile(t *testing.T) {
 		})
 	})
 
-	t.Run("TestRegisterDeviceCert", func(t *testing.T) {
+	t.Run("TestDeviceRegister", func(t *testing.T) {
 		u, _ := uuid.NewV4()
 		serial := "abcdefgh"
 		certB, _, err := ax.Generate("onboard", "")
@@ -276,7 +300,7 @@ func TestDeviceManagerFile(t *testing.T) {
 					t.Fatalf("%d: error writing existing device certificate file %s: %v", i, deviceUCertPath, err)
 				}
 			}
-			unew, err := d.RegisterDeviceCert(deviceCert, onboard, serial)
+			unew, err := d.DeviceRegister(deviceCert, onboard, serial)
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
@@ -293,7 +317,7 @@ func TestDeviceManagerFile(t *testing.T) {
 		}
 	})
 
-	t.Run("TestRegisterOnboardCert", func(t *testing.T) {
+	t.Run("TestOnboardRegister", func(t *testing.T) {
 		tests := []struct {
 			validCert bool
 			serial    []string
@@ -316,7 +340,15 @@ func TestDeviceManagerFile(t *testing.T) {
 			)
 
 			// reset with each test
-			d := DeviceManagerFile{}
+			// make a temporary directory with which to work
+			dir, err := ioutil.TempDir("", "adam-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			d := DeviceManagerFile{
+				databasePath: dir,
+			}
 
 			if tt.validCert {
 				cert, _, err = ax.GenerateCertAndKey("onboard", "")
@@ -332,12 +364,13 @@ func TestDeviceManagerFile(t *testing.T) {
 				}
 				d.onboardCerts[certStr] = map[string]bool{}
 
+				onboardDir := path.Join(dir, "onboard")
 				err := saveOnboardCertAndSerials(onboardDir, cert, tt.serial)
 				if err != nil {
 					t.Fatalf("%d: error saving onboard directory: %v", i, err)
 				}
 			}
-			err = d.RegisterOnboardCert(cert, tt.serial)
+			err = d.OnboardRegister(cert, tt.serial)
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)

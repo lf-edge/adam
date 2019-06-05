@@ -396,6 +396,11 @@ func (d *DeviceManagerFile) OnboardRegister(cert *x509.Certificate, serial []str
 	// update the filesystem
 	// onboard cert file
 	onboardPath := path.Join(d.databasePath, onboardDir, getOnboardCertName(cn))
+	// need the directory
+	err = os.MkdirAll(onboardPath, 0755)
+	if err != nil {
+		return fmt.Errorf("unable to create onboard certificate path path %s: %v", onboardPath, err)
+	}
 	f := path.Join(onboardPath, onboardCertFilename)
 	// fix contents!!
 	err = ax.WriteCert(cert.Raw, f, true)

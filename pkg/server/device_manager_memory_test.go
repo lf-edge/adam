@@ -20,7 +20,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 		d.SetCacheTimeout(10)
 	})
 
-	t.Run("TestCheckOnboardCert", func(t *testing.T) {
+	t.Run("TestOnboardCheck", func(t *testing.T) {
 		cn := "CN=abcdefg"
 		hosts := "localhost,127.0.0.1"
 
@@ -80,7 +80,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 					serial:  serial,
 				}
 			}
-			valid, err := dm.CheckOnboardCert(cert, serial)
+			valid, err := dm.OnboardCheck(cert, serial)
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
@@ -90,7 +90,19 @@ func TestDeviceManagerMemory(t *testing.T) {
 		}
 	})
 
-	t.Run("TestCheckDeviceCert", func(t *testing.T) {
+	t.Run("TestOnboardRemove", func(t *testing.T) {
+	})
+
+	t.Run("TestOnboardClear", func(t *testing.T) {
+	})
+
+	t.Run("TestOnboardGet", func(t *testing.T) {
+	})
+
+	t.Run("TestOnboardList", func(t *testing.T) {
+	})
+
+	t.Run("TestDeviceCheckCert", func(t *testing.T) {
 		cn := "CN=abcdefg"
 		hosts := "localhost,127.0.0.1"
 		u, _ := uuid.NewV4()
@@ -131,7 +143,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 				dm.deviceCerts = map[string]uuid.UUID{}
 				dm.deviceCerts[certStr] = u
 			}
-			devu, err := dm.CheckDeviceCert(cert)
+			devu, err := dm.DeviceCheckCert(cert)
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
@@ -139,6 +151,18 @@ func TestDeviceManagerMemory(t *testing.T) {
 				t.Errorf("%d: mismatched uuid, actual %v, expected %v", i, devu, tt.u)
 			}
 		}
+	})
+
+	t.Run("TestDeviceRemove", func(t *testing.T) {
+	})
+
+	t.Run("TestDeviceClear", func(t *testing.T) {
+	})
+
+	t.Run("TestDeviceGet", func(t *testing.T) {
+	})
+
+	t.Run("TestDeviceList", func(t *testing.T) {
 	})
 
 	t.Run("TestWriteInfo", func(t *testing.T) {
@@ -252,7 +276,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 		}
 	})
 
-	t.Run("TestRegisterDeviceCert", func(t *testing.T) {
+	t.Run("TestDeviceRegister", func(t *testing.T) {
 		u, _ := uuid.NewV4()
 		d := DeviceManagerMemory{}
 		serial := "abcdefgh"
@@ -297,7 +321,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 				certStr := string(deviceCert.Raw)
 				d.deviceCerts[certStr] = u
 			}
-			u, err := d.RegisterDeviceCert(deviceCert, onboard, serial)
+			u, err := d.DeviceRegister(deviceCert, onboard, serial)
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
@@ -315,7 +339,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 		}
 	})
 
-	t.Run("TestRegisterOnboardCert", func(t *testing.T) {
+	t.Run("TestOnboardRegister", func(t *testing.T) {
 		tests := []struct {
 			validCert bool
 			serial    []string
@@ -355,7 +379,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			if tt.used {
 				d.onboardCerts[certStr] = map[string]bool{}
 			}
-			err := d.RegisterOnboardCert(cert, tt.serial)
+			err := d.OnboardRegister(cert, tt.serial)
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
