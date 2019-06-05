@@ -22,6 +22,8 @@ type DeviceManager interface {
 	CheckOnboardCert(*x509.Certificate, string) (bool, error)
 	// RemoveOnboard remove an onboarding cert
 	RemoveOnboard(string) error
+	// ClearOnboard remove all onboarding certs
+	ClearOnboard() error
 	// GetOnboard get the details for an onboarding certificate and its serials by Common Name
 	GetOnboard(string) (*x509.Certificate, []string, error)
 	// ListOnboard list all of the known Common Names for onboard
@@ -30,6 +32,8 @@ type DeviceManager interface {
 	CheckDeviceCert(*x509.Certificate) (*uuid.UUID, error)
 	// RemoveDevice remove a device
 	RemoveDevice(*uuid.UUID) error
+	// ClearDevice remove all devices
+	ClearDevice() error
 	// GetDevice get the details for a device based on its UUID
 	GetDevice(*uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error)
 	// ListDevice list all of the known UUIDs for devices

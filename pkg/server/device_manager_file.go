@@ -170,6 +170,31 @@ func (d *DeviceManagerFile) RemoveOnboard(cn string) error {
 	return nil
 }
 
+// ClearOnboard remove all onboarding certs
+func (d *DeviceManagerFile) ClearOnboard() error {
+	// remove the directory and clear the cache
+	onboardPath := path.Join(d.databasePath, onboardDir)
+	candidates, err := ioutil.ReadDir(onboardPath)
+	if err != nil {
+		return fmt.Errorf("unable to read onboarding certificates at %s: %v", onboardPath, err)
+	}
+	// remove each directory
+	for _, fi := range candidates {
+		// we only are interested in directories
+		if !fi.IsDir() {
+			continue
+		}
+		name := fi.Name()
+		f := path.Join(onboardPath, name)
+		err = os.RemoveAll(f)
+		if err != nil {
+			return fmt.Errorf("unable to remove the onboard directory: %v", err)
+		}
+	}
+	d.onboardCerts = map[string]map[string]bool{}
+	return nil
+}
+
 // CheckDeviceCert see if a particular certificate is a valid registered device certificate
 func (d *DeviceManagerFile) CheckDeviceCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
@@ -204,6 +229,32 @@ func (d *DeviceManagerFile) RemoveDevice(u *uuid.UUID) error {
 	if err != nil {
 		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
+	return nil
+}
+
+// ClearDevice remove all devices
+func (d *DeviceManagerFile) ClearDevice() error {
+	// remove the directory and clear the cache
+	devicePath := path.Join(d.databasePath, deviceDir)
+	candidates, err := ioutil.ReadDir(devicePath)
+	if err != nil {
+		return fmt.Errorf("unable to read device certificates at %s: %v", devicePath, err)
+	}
+	// remove each directory
+	for _, fi := range candidates {
+		// we only are interested in directories
+		if !fi.IsDir() {
+			continue
+		}
+		name := fi.Name()
+		f := path.Join(devicePath, name)
+		err = os.RemoveAll(f)
+		if err != nil {
+			return fmt.Errorf("unable to remove the device directory: %v", err)
+		}
+	}
+	d.deviceCerts = map[string]uuid.UUID{}
+	d.devices = map[uuid.UUID]deviceStorage{}
 	return nil
 }
 

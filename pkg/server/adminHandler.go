@@ -59,6 +59,10 @@ func (h *adminHandler) onboardRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) onboardClear(w http.ResponseWriter, r *http.Request) {
+	err := h.manager.ClearOnboard()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
 }
 
 func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
@@ -123,4 +127,8 @@ func (h *adminHandler) deviceRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceClear(w http.ResponseWriter, r *http.Request) {
+	err := h.manager.ClearDevice()
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
 }

@@ -58,6 +58,12 @@ func (d *DeviceManagerMemory) RemoveOnboard(cn string) error {
 	return nil
 }
 
+// ClearOnboard remove all onboarding certs
+func (d *DeviceManagerMemory) ClearOnboard() error {
+	d.onboardCerts = map[string]map[string]bool{}
+	return nil
+}
+
 // GetOnboard get the onboard certificate and serials based on Common Name
 func (d *DeviceManagerMemory) GetOnboard(cn string) (*x509.Certificate, []string, error) {
 	if cn == "" {
@@ -114,6 +120,12 @@ func (d *DeviceManagerMemory) RemoveDevice(u *uuid.UUID) error {
 	}
 	delete(d.deviceCerts, string(cert.Raw))
 	delete(d.devices, *u)
+	return nil
+}
+
+// ClearDevice remove all devices
+func (d *DeviceManagerMemory) ClearDevice() error {
+	d.devices = make(map[uuid.UUID]deviceStorage)
 	return nil
 }
 
