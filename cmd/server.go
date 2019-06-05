@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 	"github.com/zededa/adam/pkg/server"
+	"path"
 )
 
 const (
@@ -34,8 +35,8 @@ var serverCmd = &cobra.Command{
 
 func serverInit() {
 	serverCmd.Flags().StringVar(&port, "port", defaultPort, "port on which to listen")
-	serverCmd.Flags().StringVar(&certPath, "server-cert", defaultCertPath, "path to server certificate")
-	serverCmd.Flags().StringVar(&keyPath, "server-key", defaultKeyPath, "path to server key")
+	serverCmd.Flags().StringVar(&certPath, "server-cert", path.Join(defaultDatabaseURL, serverCertFilename), "path to server certificate")
+	serverCmd.Flags().StringVar(&keyPath, "server-key", path.Join(defaultDatabaseURL, serverKeyFilename), "path to server key")
 	serverCmd.Flags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where we will store and find device information, including onboarding certificates, device certificates, config, logs and metrics. See the readme for more details.")
 	serverCmd.Flags().IntVar(&certRefresh, "cert-refresh", defaultCertRefresh, "how often, in seconds, to refresh the onboarding and device certs from the filesystem; 0 means not to cache at all.")
 }
