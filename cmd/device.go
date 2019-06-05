@@ -54,7 +54,7 @@ var deviceAddCmd = &cobra.Command{
 		}
 		u := path.Join(serverURL, "/admin/device")
 		client := getClient()
-		_, err = client.Post(u, "text/plain", bytes.NewReader(b))
+		_, err = client.Post(u, textContentType, bytes.NewReader(b))
 		if err != nil {
 			log.Fatalf("unable to post data to URL %s: %v", u, err)
 		}

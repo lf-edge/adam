@@ -13,6 +13,7 @@ const (
 	defaultDatabaseURL = "./run/adam"
 	defaultServerURL   = "https://localhost:8080"
 	jsonContentType    = "application/json"
+	textContentType    = "text/plain"
 )
 
 var (
