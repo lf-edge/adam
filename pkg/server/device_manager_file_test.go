@@ -417,9 +417,75 @@ func TestDeviceManagerFile(t *testing.T) {
 	})
 
 	t.Run("TestDeviceGet", func(t *testing.T) {
+		tests := []struct {
+			valid  bool
+			exists bool
+			err    error
+		}{
+			{false, false, fmt.Errorf("")},
+			{true, false, fmt.Errorf("")},
+			{true, true, nil},
+		}
+		for i, tt := range tests {
+			// make a temporary directory with which to work
+			dir, err := ioutil.TempDir("", "adam-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			dm := DeviceManagerFile{
+				databasePath: dir,
+			}
+
+			uids := fillDevice(&dm)
+
+			var (
+				u        *uuid.UUID
+				fileCert *x509.Certificate
+			)
+			// populate the UUID we will pass
+			switch {
+			case tt.exists:
+				u = uids[0]
+			case tt.valid:
+				ui, _ := uuid.NewV4()
+				u = &ui
+			}
+			cert, _, _, err := dm.DeviceGet(u)
+			if u != nil && tt.exists {
+				devicePath := dm.getDevicePath(*u)
+				fileCert, _ = ax.ReadCert(path.Join(devicePath, DeviceCertFilename))
+			}
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case err == nil && cert != nil && fileCert != nil && bytes.Compare(fileCert.Raw, cert.Raw) != 0:
+				t.Errorf("%d: mismatched cert", i)
+			}
+		}
 	})
 
 	t.Run("TestDeviceList", func(t *testing.T) {
+		// make a temporary directory with which to work
+		dir, err := ioutil.TempDir("", "adam-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+		dm := DeviceManagerFile{
+			databasePath: dir,
+		}
+
+		uids := fillDevice(&dm)
+
+		// if valid, create the certificate
+		got, err := dm.DeviceList()
+		switch {
+		case err != nil:
+			t.Errorf("unexpected error: %v", err)
+		case !equalUUIDSlice(uids, got):
+			t.Errorf("mismatched UUIDs, actual '%v', expected '%v'", got, uids)
+		}
 	})
 
 	writeTester := func(t *testing.T, sectionName string, cmd func(int64, string, bool, bool, DeviceManagerFile) error) {

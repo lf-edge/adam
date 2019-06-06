@@ -303,11 +303,15 @@ func (d *DeviceManagerFile) DeviceList() ([]*uuid.UUID, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
-	ids := make([]*uuid.UUID, 0, len(d.devices))
+	ids := make([]uuid.UUID, 0, len(d.devices))
 	for u := range d.devices {
-		ids = append(ids, &u)
+		ids = append(ids, u)
 	}
-	return ids, nil
+	pids := make([]*uuid.UUID, 0, len(ids))
+	for i := range ids {
+		pids = append(pids, &ids[i])
+	}
+	return pids, nil
 }
 
 // DeviceRegister register a new device cert
