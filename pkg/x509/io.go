@@ -52,7 +52,7 @@ func ReadCert(p string) (*x509.Certificate, error) {
 		err error
 	)
 	if _, err = os.Stat(p); err != nil && os.IsNotExist(err) {
-		return nil, fmt.Errorf("certificate file %s does not exist", p)
+		return nil, err
 	}
 	if b, err = ioutil.ReadFile(p); err != nil {
 		return nil, fmt.Errorf("error reading certificate file %s: %v", p, err)

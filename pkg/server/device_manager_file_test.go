@@ -341,6 +341,54 @@ func TestDeviceManagerFile(t *testing.T) {
 	})
 
 	t.Run("TestDeviceRemove", func(t *testing.T) {
+		tests := []struct {
+			valid  bool
+			exists bool
+			err    error
+		}{
+			{false, false, fmt.Errorf("")},
+			{true, false, fmt.Errorf("")},
+			{true, true, nil},
+		}
+		for i, tt := range tests {
+			// make a temporary directory with which to work
+			dir, err := ioutil.TempDir("", "adam-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			dm := DeviceManagerFile{
+				databasePath: dir,
+			}
+
+			uids := fillDevice(&dm)
+
+			var (
+				u      *uuid.UUID
+				exists bool
+			)
+			// populate the UUID we will pass
+			switch {
+			case tt.exists:
+				u = uids[0]
+			case tt.valid:
+				ui, _ := uuid.NewV4()
+				u = &ui
+			}
+			err = dm.DeviceRemove(u)
+			// read the dirs
+			if u != nil {
+				devicePath := dm.getDevicePath(*u)
+				_, e2 := os.Stat(devicePath)
+				exists = e2 != nil && !os.IsNotExist(e2)
+			}
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case err == nil && exists:
+				t.Errorf("device directory still exists")
+			}
+		}
 	})
 
 	t.Run("TestDeviceClear", func(t *testing.T) {

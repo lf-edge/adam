@@ -266,7 +266,7 @@ func (d *DeviceManagerFile) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Ce
 	// easiest to just check the filesystem
 	devicePath := d.getDevicePath(*u)
 	// does it exist?
-	found, err := exists(deviceDir)
+	found, err := exists(devicePath)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("error reading device directory: %v", err)
 	}
@@ -282,12 +282,14 @@ func (d *DeviceManagerFile) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Ce
 
 	certPath = path.Join(devicePath, DeviceOnboardFilename)
 	onboard, err := ax.ReadCert(certPath)
-	if err != nil {
+	// we can accept not reading the onboard cert
+	if err != nil && !os.IsNotExist(err) {
 		return nil, nil, "", fmt.Errorf("error reading onboard certificate at %s: %v", certPath, err)
 	}
 	serialPath := path.Join(devicePath, deviceSerialFilename)
 	serial, err := ioutil.ReadFile(serialPath)
-	if err != nil {
+	// we can accept not reading the onboard serial
+	if err != nil && !os.IsNotExist(err) {
 		return nil, nil, "", fmt.Errorf("error reading device serial at %s: %v", serialPath, err)
 	}
 	// done
