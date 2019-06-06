@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -515,20 +514,3 @@ func saveOnboardCertAndSerials(onboardDir string, cert *x509.Certificate, serial
 	return nil
 }
 
-func equalStringSlice(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	as := make([]string, len(a))
-	copy(as, a)
-	bs := make([]string, len(b))
-	copy(bs, b)
-	sort.Strings(as)
-	sort.Strings(bs)
-	for i, v := range as {
-		if v != bs[i] {
-			return false
-		}
-	}
-	return true
-}

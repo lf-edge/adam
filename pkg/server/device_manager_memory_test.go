@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/satori/go.uuid"
-	"sort"
 	"strings"
 	"testing"
 
@@ -518,26 +517,3 @@ func TestDeviceManagerMemory(t *testing.T) {
 	})
 }
 
-func compareStringSliceMap(s []string, m map[string]bool) error {
-	if s == nil && m == nil {
-		return nil
-	}
-	if len(s) != len(m) {
-		return fmt.Errorf("map '%v', slice '%v'", m, s)
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-
-	// same length, so compare
-	sort.Strings(keys)
-	sort.Strings(s)
-
-	sj := strings.Join(s, "\n")
-	mj := strings.Join(keys, "\n")
-	if sj != mj {
-		return fmt.Errorf("mismatched entries, slice '%s', map '%s'", sj, mj)
-	}
-	return nil
-}
