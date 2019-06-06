@@ -20,6 +20,79 @@ import (
 )
 
 func TestDeviceManagerFile(t *testing.T) {
+	fillOnboard := func(dm *DeviceManagerFile) []string {
+		dm.onboardCerts = map[string]map[string]bool{}
+		cns := []string{"abcd", "efgh", "jklm"}
+		for _, cn := range cns {
+			serials := make([]string, 0, 3)
+			for i := 0; i < 3; i++ {
+				serials = append(serials, randomString(8))
+			}
+			certB, _, err := ax.Generate(cn, "")
+			if err != nil {
+				t.Fatalf("error generating cert for tests: %v", err)
+			}
+			cert, err := x509.ParseCertificate(certB)
+			if err != nil {
+				t.Fatalf("unexpected error parsing certificate: %v", err)
+			}
+			certStr := string(cert.Raw)
+			dm.onboardCerts[certStr] = map[string]bool{}
+
+			onboardPath := dm.getOnboardPath(cn)
+			err = os.MkdirAll(onboardPath, 0755)
+			if err != nil {
+				t.Fatalf("Unable to make dir %s: %v", onboardPath, err)
+			}
+			err = ax.WriteCert(cert.Raw, path.Join(onboardPath, onboardCertFilename), true)
+			if err != nil {
+				t.Fatalf("Unable to write certificate: %v", err)
+			}
+			ioutil.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(serials, "\n")), 0644)
+			if err != nil {
+				t.Fatalf("Unable to write serials: %v", err)
+			}
+		}
+		return cns
+	}
+
+	fillDevice := func(dm *DeviceManagerFile) []*uuid.UUID {
+		dm.deviceCerts = map[string]uuid.UUID{}
+		dm.devices = map[uuid.UUID]deviceStorage{}
+		uids := []uuid.UUID{}
+		for i := 0; i < 3; i++ {
+			u, _ := uuid.NewV4()
+			certB, _, err := ax.Generate("abcdefg", "")
+			if err != nil {
+				t.Fatalf("error generating cert for tests: %v", err)
+			}
+			cert, err := x509.ParseCertificate(certB)
+			if err != nil {
+				t.Fatalf("unexpected error parsing certificate: %v", err)
+			}
+			certStr := string(cert.Raw)
+			devicePath := dm.getDevicePath(u)
+			err = os.MkdirAll(devicePath, 0755)
+			if err != nil {
+				t.Fatalf("error creating a temporary device directory: %v", err)
+			}
+			err = ax.WriteCert(certB, path.Join(devicePath, DeviceCertFilename), false)
+			if err != nil {
+				t.Fatalf("error writing device certificate: %v", err)
+			}
+			dm.deviceCerts[certStr] = u
+			dm.devices[u] = deviceStorage{
+				cert: cert,
+			}
+			uids = append(uids, u)
+		}
+		puids := make([]*uuid.UUID, 0, len(uids))
+		for i := range uids {
+			puids = append(puids, &uids[i])
+		}
+		return puids
+	}
+
 	t.Run("TestSetCacheTimeout", func(t *testing.T) {
 		// basics
 		cn := "abcdefgh"
@@ -170,12 +243,97 @@ func TestDeviceManagerFile(t *testing.T) {
 	})
 
 	t.Run("TestOnboardList", func(t *testing.T) {
+		// make a temporary directory with which to work
+		dir, err := ioutil.TempDir("", "adam-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+		dm := DeviceManagerFile{
+			databasePath: dir,
+		}
+		cns := fillOnboard(&dm)
+
+		// if valid, create the certificate
+		got, err := dm.OnboardList()
+		switch {
+		case err != nil:
+			t.Errorf("unexpected error: %v", err)
+		case !equalStringSlice(cns, got):
+			t.Errorf("mismatched CNs, actual '%v', expected '%v'", got, cns)
+		}
 	})
 
 	t.Run("TestOnboardRemove", func(t *testing.T) {
+		tests := []struct {
+			valid  bool
+			exists bool
+			err    error
+		}{
+			{false, false, fmt.Errorf("empty cn")},
+			{true, false, fmt.Errorf("onboard directory not found")},
+			{true, true, nil},
+		}
+
+		for i, tt := range tests {
+			// make a temporary directory with which to work
+			dir, err := ioutil.TempDir("", "adam-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			dm := DeviceManagerFile{
+				databasePath: dir,
+			}
+
+			cns := fillOnboard(&dm)
+
+			// hold the cert and serial
+			var (
+				cn      string
+				certStr string
+			)
+			// if valid, create the certificate
+			switch {
+			case tt.valid && !tt.exists:
+				cn = randomString(10)
+			case tt.exists:
+				cn = cns[0]
+			}
+			err = dm.OnboardRemove(cn)
+			if mismatchedErrors(err, tt.err) {
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			} else if _, ok := dm.onboardCerts[certStr]; ok {
+				t.Errorf("%d: cert still exists after OnboardRemove", i)
+			} else if _, err = os.Stat(dm.getOnboardPath(cn)); cn != "" && !os.IsNotExist(err) {
+				t.Errorf("%d: directory for %s still exists", i, cn)
+			}
+		}
 	})
 
 	t.Run("TestOnboardClear", func(t *testing.T) {
+		// make a temporary directory with which to work
+		dir, err := ioutil.TempDir("", "adam-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+		dm := DeviceManagerFile{
+			databasePath: dir,
+		}
+
+		fillOnboard(&dm)
+
+		err = dm.OnboardClear()
+		// read the dirs
+		onboardPath := path.Join(dm.databasePath, onboardDir)
+		candidates, err := ioutil.ReadDir(onboardPath)
+		switch {
+		case err != nil:
+			t.Errorf("unexpected error: %v", err)
+		case len(candidates) != 0:
+			t.Errorf("still have onboard dirs after OnboardClear")
+		}
 	})
 
 	// DeviceCheckCert for file is identical to Memory, since it just uses the cache, so no testing here
@@ -186,6 +344,28 @@ func TestDeviceManagerFile(t *testing.T) {
 	})
 
 	t.Run("TestDeviceClear", func(t *testing.T) {
+		// make a temporary directory with which to work
+		dir, err := ioutil.TempDir("", "adam-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+		dm := DeviceManagerFile{
+			databasePath: dir,
+		}
+
+		fillDevice(&dm)
+
+		err = dm.DeviceClear()
+		// read the dirs
+		devicePath := path.Join(dm.databasePath, deviceDir)
+		candidates, err := ioutil.ReadDir(devicePath)
+		switch {
+		case err != nil:
+			t.Errorf("unexpected error: %v", err)
+		case len(candidates) != 0:
+			t.Errorf("still have device dirs after OnboardClear")
+		}
 	})
 
 	t.Run("TestDeviceGet", func(t *testing.T) {
