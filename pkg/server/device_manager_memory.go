@@ -118,13 +118,16 @@ func (d *DeviceManagerMemory) DeviceRemove(u *uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	delete(d.deviceCerts, string(cert.Raw))
 	delete(d.devices, *u)
+	if cert != nil {
+		delete(d.deviceCerts, string(cert.Raw))
+	}
 	return nil
 }
 
 // DeviceClear remove all devices
 func (d *DeviceManagerMemory) DeviceClear() error {
+	d.deviceCerts = make(map[string]uuid.UUID)
 	d.devices = make(map[uuid.UUID]deviceStorage)
 	return nil
 }
@@ -142,11 +145,15 @@ func (d *DeviceManagerMemory) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.
 
 // DeviceList list all of the known UUIDs for devices
 func (d *DeviceManagerMemory) DeviceList() ([]*uuid.UUID, error) {
-	ids := make([]*uuid.UUID, 0, len(d.devices))
+	ids := make([]uuid.UUID, 0, len(d.devices))
 	for u := range d.devices {
-		ids = append(ids, &u)
+		ids = append(ids, u)
 	}
-	return ids, nil
+	pids := make([]*uuid.UUID, 0, len(ids))
+	for i := range ids {
+		pids = append(pids, &ids[i])
+	}
+	return pids, nil
 }
 
 // DeviceRegister register a new device cert

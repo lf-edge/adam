@@ -513,4 +513,3 @@ func saveOnboardCertAndSerials(onboardDir string, cert *x509.Certificate, serial
 	}
 	return nil
 }
-

@@ -4,7 +4,21 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/satori/go.uuid"
 )
+
+func equalUUIDSlice(a, b []*uuid.UUID) bool {
+	as := make([]string, 0, len(a))
+	bs := make([]string, 0, len(b))
+	for _, u := range a {
+		as = append(as, u.String())
+	}
+	for _, u := range b {
+		bs = append(bs, u.String())
+	}
+	return equalStringSlice(as, bs)
+}
 
 func equalStringSlice(a, b []string) bool {
 	if len(a) != len(b) {
@@ -25,25 +39,25 @@ func equalStringSlice(a, b []string) bool {
 }
 
 func compareStringSliceMap(s []string, m map[string]bool) error {
-        if s == nil && m == nil {
-                return nil
-        }
-        if len(s) != len(m) {
-                return fmt.Errorf("map '%v', slice '%v'", m, s)
-        }
-        keys := make([]string, 0, len(m))
-        for k := range m {
-                keys = append(keys, k)
-        }
+	if s == nil && m == nil {
+		return nil
+	}
+	if len(s) != len(m) {
+		return fmt.Errorf("map '%v', slice '%v'", m, s)
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
 
-        // same length, so compare
-        sort.Strings(keys)
-        sort.Strings(s)
+	// same length, so compare
+	sort.Strings(keys)
+	sort.Strings(s)
 
-        sj := strings.Join(s, "\n")
-        mj := strings.Join(keys, "\n")
-        if sj != mj {
-                return fmt.Errorf("mismatched entries, slice '%s', map '%s'", sj, mj)
-        }
-        return nil
+	sj := strings.Join(s, "\n")
+	mj := strings.Join(keys, "\n")
+	if sj != mj {
+		return fmt.Errorf("mismatched entries, slice '%s', map '%s'", sj, mj)
+	}
+	return nil
 }

@@ -32,6 +32,33 @@ func TestDeviceManagerMemory(t *testing.T) {
 		}
 		return cns
 	}
+
+	fillDevice := func(dm *DeviceManagerMemory) []*uuid.UUID {
+		dm.deviceCerts = map[string]uuid.UUID{}
+		dm.devices = map[uuid.UUID]deviceStorage{}
+		uids := []uuid.UUID{}
+		for i := 0; i < 3; i++ {
+			u, _ := uuid.NewV4()
+			certB, _, err := ax.Generate("abcdefg", "")
+			if err != nil {
+				t.Fatalf("error generating cert for tests: %v", err)
+			}
+			cert, err := x509.ParseCertificate(certB)
+			if err != nil {
+				t.Fatalf("unexpected error parsing certificate: %v", err)
+			}
+			certStr := string(cert.Raw)
+			dm.deviceCerts[certStr] = u
+			dm.devices[u] = deviceStorage{}
+			uids = append(uids, u)
+		}
+		puids := make([]*uuid.UUID, 0, len(uids))
+		for i := range uids {
+			puids = append(puids, &uids[i])
+		}
+		return puids
+	}
+
 	t.Run("TestSetCacheTimeout", func(t *testing.T) {
 		d := DeviceManagerMemory{}
 		d.SetCacheTimeout(10)
@@ -161,7 +188,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
 		case len(dm.onboardCerts) != 0:
-			t.Errorf("still have certs after OnboardRemove: %d", len(dm.onboardCerts))
+			t.Errorf("still have certs after OnboardClear: %d", len(dm.onboardCerts))
 		}
 	})
 
@@ -275,15 +302,101 @@ func TestDeviceManagerMemory(t *testing.T) {
 	})
 
 	t.Run("TestDeviceRemove", func(t *testing.T) {
+		tests := []struct {
+			valid  bool
+			exists bool
+			err    error
+		}{
+			{false, false, fmt.Errorf("")},
+			{true, false, fmt.Errorf("")},
+			{true, true, nil},
+		}
+		for i, tt := range tests {
+			dm := DeviceManagerMemory{}
+			uids := fillDevice(&dm)
+
+			// populate the UUID we will pass
+			var u *uuid.UUID
+			switch {
+			case tt.exists:
+				u = uids[0]
+			case tt.valid:
+				ui, _ := uuid.NewV4()
+				u = &ui
+			}
+			err := dm.DeviceRemove(u)
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case err == nil:
+				// check if the device still exists
+				if _, ok := dm.devices[*u]; ok {
+					t.Errorf("device still exists")
+				}
+			}
+		}
 	})
 
 	t.Run("TestDeviceClear", func(t *testing.T) {
+		dm := DeviceManagerMemory{}
+		fillDevice(&dm)
+
+		err := dm.DeviceClear()
+		switch {
+		case err != nil:
+			t.Errorf("unexpected error: %v", err)
+		case len(dm.deviceCerts) != 0:
+			t.Errorf("deviceCerts map is not empty")
+		case len(dm.devices) != 0:
+			t.Errorf("devices map is not empty")
+		}
 	})
 
 	t.Run("TestDeviceGet", func(t *testing.T) {
+		tests := []struct {
+			valid  bool
+			exists bool
+			err    error
+		}{
+			{false, false, fmt.Errorf("")},
+			{true, false, fmt.Errorf("")},
+			{true, true, nil},
+		}
+		for i, tt := range tests {
+			dm := DeviceManagerMemory{}
+			uids := fillDevice(&dm)
+
+			// populate the UUID we will pass
+			var u *uuid.UUID
+			switch {
+			case tt.exists:
+				u = uids[0]
+			case tt.valid:
+				ui, _ := uuid.NewV4()
+				u = &ui
+			}
+			cert, _, _, err := dm.DeviceGet(u)
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case err == nil && dm.devices[*u].cert != cert:
+				t.Errorf("%d: mismatched cert", i)
+			}
+		}
 	})
 
 	t.Run("TestDeviceList", func(t *testing.T) {
+		dm := DeviceManagerMemory{}
+		uids := fillDevice(&dm)
+
+		// if valid, create the certificate
+		got, err := dm.DeviceList()
+		switch {
+		case err != nil:
+			t.Errorf("unexpected error: %v", err)
+		case !equalUUIDSlice(uids, got):
+			t.Errorf("mismatched UUIDs, actual '%v', expected '%v'", got, uids)
+		}
 	})
 
 	t.Run("TestWriteInfo", func(t *testing.T) {
@@ -516,4 +629,3 @@ func TestDeviceManagerMemory(t *testing.T) {
 		}
 	})
 }
-
