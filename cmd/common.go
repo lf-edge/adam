@@ -38,7 +38,7 @@ func getClient() *http.Client {
 	}
 	return client
 }
-func resolveUrl(b, p string) (string, error) {
+func resolveURL(b, p string) (string, error) {
 	u, err := url.Parse(p)
 	if err != nil {
 		return "", err

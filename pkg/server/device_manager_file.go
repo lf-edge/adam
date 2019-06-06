@@ -113,7 +113,7 @@ func (d *DeviceManagerFile) OnboardGet(cn string) (*x509.Certificate, []string, 
 		return nil, nil, fmt.Errorf("error reading onboard directory: %v", err)
 	}
 	if !found {
-		return nil, nil, &NotFoundError{}
+		return nil, nil, &NotFoundError{err: fmt.Sprintf("onboard directory not found %s", onboardDir)}
 	}
 
 	// get the certificate and serials
@@ -128,7 +128,7 @@ func (d *DeviceManagerFile) OnboardGet(cn string) (*x509.Certificate, []string, 
 		return nil, nil, fmt.Errorf("error reading onboard serials at %s: %v", serialPath, err)
 	}
 	// done
-	return cert, strings.Split(string(serial), "\n"), nil
+	return cert, strings.Fields(string(serial)), nil
 }
 
 // OnboardList list all of the known Common Names for onboard
@@ -139,7 +139,7 @@ func (d *DeviceManagerFile) OnboardList() ([]string, error) {
 		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
 	cns := make([]string, 0)
-	for certStr, _ := range d.onboardCerts {
+	for certStr := range d.onboardCerts {
 		certRaw := []byte(certStr)
 		cert, err := x509.ParseCertificate(certRaw)
 		if err != nil {
@@ -160,7 +160,7 @@ func (d *DeviceManagerFile) OnboardRemove(cn string) error {
 	// remove the directory
 	err = os.RemoveAll(onboardPath)
 	if err != nil {
-		fmt.Errorf("unable to remove the onboard directory: %v", err)
+		return fmt.Errorf("unable to remove the onboard directory: %v", err)
 	}
 	// refresh the cache
 	err = d.refreshCache()
@@ -222,7 +222,7 @@ func (d *DeviceManagerFile) DeviceRemove(u *uuid.UUID) error {
 	devicePath := d.getDevicePath(*u)
 	err = os.RemoveAll(devicePath)
 	if err != nil {
-		fmt.Errorf("unable to remove the device directory: %v", err)
+		return fmt.Errorf("unable to remove the device directory: %v", err)
 	}
 	// refresh the cache
 	err = d.refreshCache()
@@ -271,7 +271,7 @@ func (d *DeviceManagerFile) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Ce
 		return nil, nil, "", fmt.Errorf("error reading device directory: %v", err)
 	}
 	if !found {
-		return nil, nil, "", &NotFoundError{}
+		return nil, nil, "", &NotFoundError{err: fmt.Sprintf("device directory %s not found", onboardDir)}
 	}
 	// get the certificate, onboard certificate, serial
 	certPath := path.Join(devicePath, DeviceCertFilename)

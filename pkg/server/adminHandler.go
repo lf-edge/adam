@@ -24,7 +24,7 @@ type onboardCert struct {
 func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
 	// extract certificate and serials from request body
 	contentType := r.Header.Get(contentType)
-	if contentType != mimeJson {
+	if contentType != mimeJSON {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
 	decoder := json.NewDecoder(r.Body)

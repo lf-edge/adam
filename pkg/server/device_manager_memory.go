@@ -83,13 +83,13 @@ func (d *DeviceManagerMemory) OnboardGet(cn string) (*x509.Certificate, []string
 			return cert, serialSlice, nil
 		}
 	}
-	return nil, nil, &NotFoundError{}
+	return nil, nil, &NotFoundError{err: fmt.Sprintf("onboard cn not found: %s", cn)}
 }
 
 // OnboardList list all of the known Common Names for onboard
 func (d *DeviceManagerMemory) OnboardList() ([]string, error) {
 	cns := make([]string, 0, len(d.onboardCerts))
-	for certStr, _ := range d.onboardCerts {
+	for certStr := range d.onboardCerts {
 		certRaw := []byte(certStr)
 		cert, err := x509.ParseCertificate(certRaw)
 		if err != nil {
@@ -137,7 +137,7 @@ func (d *DeviceManagerMemory) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.
 	if _, ok := d.devices[*u]; ok {
 		return d.devices[*u].cert, d.devices[*u].onboard, d.devices[*u].serial, nil
 	}
-	return nil, nil, "", &NotFoundError{}
+	return nil, nil, "", &NotFoundError{err: fmt.Sprintf("device uuid not found: %s", u.String())}
 }
 
 // DeviceList list all of the known UUIDs for devices

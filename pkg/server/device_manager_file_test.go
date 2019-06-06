@@ -1,11 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +116,58 @@ func TestDeviceManagerFile(t *testing.T) {
 	})
 
 	t.Run("TestOnboardGet", func(t *testing.T) {
+		tests := []struct {
+			cn        string
+			serials   []string
+			dirExists bool
+			err       error
+		}{
+			{"", nil, false, fmt.Errorf("empty cn")},
+			{"abcdefg", nil, false, fmt.Errorf("onboard directory not found")},
+			{"abcdefg", nil, true, nil},
+			{"abcdefg", []string{"123"}, true, nil},
+			{"abcdefg", []string{"123", "456"}, true, nil},
+		}
+		for i, tt := range tests {
+			// make a temporary directory with which to work
+			dir, err := ioutil.TempDir("", "adam-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			d := DeviceManagerFile{
+				databasePath: dir,
+			}
+			var validCert *x509.Certificate
+			if tt.dirExists {
+				onboardPath := d.getOnboardPath(tt.cn)
+				err = os.MkdirAll(onboardPath, 0755)
+				if err != nil {
+					t.Fatalf("Unable to make dir %s: %v", onboardPath, err)
+				}
+				validCert, _, err = ax.GenerateCertAndKey(tt.cn, "")
+				if err != nil {
+					t.Fatalf("Unable to generate certificate: %v", err)
+				}
+				err = ax.WriteCert(validCert.Raw, path.Join(onboardPath, onboardCertFilename), true)
+				if err != nil {
+					t.Fatalf("Unable to write certificate: %v", err)
+				}
+				ioutil.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(tt.serials, "\n")), 0644)
+				if err != nil {
+					t.Fatalf("Unable to write serials: %v", err)
+				}
+			}
+			cert, serial, err := d.OnboardGet(tt.cn)
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case err == nil && !equalStringSlice(serial, tt.serials):
+				t.Errorf("%d: mismatched serials, actual '%v', expected '%v'", i, serial, tt.serials)
+			case err == nil && bytes.Compare(validCert.Raw, cert.Raw) != 0:
+				t.Errorf("%d: mismatched certs", i)
+			}
+		}
 	})
 
 	t.Run("TestOnboardList", func(t *testing.T) {
@@ -459,4 +513,22 @@ func saveOnboardCertAndSerials(onboardDir string, cert *x509.Certificate, serial
 		return fmt.Errorf("error writing onboard serials: %v", err)
 	}
 	return nil
+}
+
+func equalStringSlice(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	as := make([]string, len(a))
+	copy(as, a)
+	bs := make([]string, len(b))
+	copy(bs, b)
+	sort.Strings(as)
+	sort.Strings(bs)
+	for i, v := range as {
+		if v != bs[i] {
+			return false
+		}
+	}
+	return true
 }

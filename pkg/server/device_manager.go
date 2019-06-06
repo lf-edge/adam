@@ -52,6 +52,7 @@ type DeviceManager interface {
 	GetConfig(uuid.UUID) (*config.EdgeDevConfig, error)
 }
 
+// NotFoundError error representing that an item was not found
 type NotFoundError struct {
 	err string
 }

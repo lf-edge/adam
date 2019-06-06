@@ -28,7 +28,7 @@ var onboardListCmd = &cobra.Command{
 	Short: "list onboarding certificates and their valid serials",
 	Long:  `List the current registered onboarding certificates and their serials`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u, err := resolveUrl(serverURL, "/admin/onboard")
+		u, err := resolveURL(serverURL, "/admin/onboard")
 		if err != nil {
 			log.Fatalf("error constructing URL: %v", err)
 		}
@@ -58,7 +58,7 @@ var onboardAddCmd = &cobra.Command{
 			log.Fatalf("error reading cert file %s: %v", certPath, err)
 		}
 		body := fmt.Sprintf(`{"cert":"%s", "serials":"%s"}`, string(b), serials)
-		u, err := resolveUrl(serverURL, "/admin/onboard")
+		u, err := resolveURL(serverURL, "/admin/onboard")
 		if err != nil {
 			log.Fatalf("error constructing URL: %v", err)
 		}
@@ -86,7 +86,7 @@ var onboardRemoveCmd = &cobra.Command{
 			}
 			cn = cert.Subject.CommonName
 		}
-		u, err := resolveUrl(serverURL, path.Join("/admin/onboard", getFriendlyCN(cn)))
+		u, err := resolveURL(serverURL, path.Join("/admin/onboard", getFriendlyCN(cn)))
 		if err != nil {
 			log.Fatalf("error constructing URL: %v", err)
 		}
@@ -109,7 +109,7 @@ var onboardClearCmd = &cobra.Command{
 	Short: "clear all onboard certificates",
 	Long:  `Clear all of the existing onboard certificates. This command is idempotent.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		u, err := resolveUrl(serverURL, "/admin/onboard")
+		u, err := resolveURL(serverURL, "/admin/onboard")
 		if err != nil {
 			log.Fatalf("error constructing URL: %v", err)
 		}

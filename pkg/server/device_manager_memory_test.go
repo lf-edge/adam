@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/x509"
 	"fmt"
 	"github.com/satori/go.uuid"
@@ -97,6 +98,47 @@ func TestDeviceManagerMemory(t *testing.T) {
 	})
 
 	t.Run("TestOnboardGet", func(t *testing.T) {
+		tests := []struct {
+			cn      string
+			serials []string
+			exists  bool
+			err     error
+		}{
+			{"", nil, false, fmt.Errorf("empty cn")},
+			{"abcdefg", nil, false, fmt.Errorf("onboard cn not found")},
+			{"abcdefg", nil, true, nil},
+			{"abcdefg", []string{"123"}, true, nil},
+			{"abcdefg", []string{"123", "456"}, true, nil},
+		}
+		for i, tt := range tests {
+			d := DeviceManagerMemory{
+				onboardCerts: map[string]map[string]bool{},
+			}
+			var (
+				validCert *x509.Certificate
+				err       error
+			)
+			if tt.exists {
+				validCert, _, err = ax.GenerateCertAndKey(tt.cn, "")
+				if err != nil {
+					t.Fatalf("Unable to generate certificate: %v", err)
+				}
+				ser := map[string]bool{}
+				for _, k := range tt.serials {
+					ser[k] = true
+				}
+				d.onboardCerts[string(validCert.Raw)] = ser
+			}
+			cert, serial, err := d.OnboardGet(tt.cn)
+			switch {
+			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case err == nil && !equalStringSlice(serial, tt.serials):
+				t.Errorf("%d: mismatched serials, actual '%v', expected '%v'", i, serial, tt.serials)
+			case err == nil && bytes.Compare(validCert.Raw, cert.Raw) != 0:
+				t.Errorf("%d: mismatched certs", i)
+			}
+		}
 	})
 
 	t.Run("TestOnboardList", func(t *testing.T) {

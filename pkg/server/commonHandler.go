@@ -6,5 +6,5 @@ const (
 	contentType   = "Content-Type"
 	mimeProto     = "application/x-proto-binary"
 	mimeTextPlain = "text/plain"
-	mimeJson      = "application/json"
+	mimeJSON      = "application/json"
 )
