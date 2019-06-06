@@ -16,6 +16,23 @@ import (
 )
 
 func TestDeviceManagerMemory(t *testing.T) {
+	fillOnboard := func(dm *DeviceManagerMemory) []string {
+		dm.onboardCerts = map[string]map[string]bool{}
+		cns := []string{"abcd", "efgh", "jklm"}
+		for _, cn := range cns {
+			certB, _, err := ax.Generate(cn, "")
+			if err != nil {
+				t.Fatalf("error generating cert for tests: %v", err)
+			}
+			cert, err := x509.ParseCertificate(certB)
+			if err != nil {
+				t.Fatalf("unexpected error parsing certificate: %v", err)
+			}
+			certStr := string(cert.Raw)
+			dm.onboardCerts[certStr] = map[string]bool{}
+		}
+		return cns
+	}
 	t.Run("TestSetCacheTimeout", func(t *testing.T) {
 		d := DeviceManagerMemory{}
 		d.SetCacheTimeout(10)
@@ -92,9 +109,61 @@ func TestDeviceManagerMemory(t *testing.T) {
 	})
 
 	t.Run("TestOnboardRemove", func(t *testing.T) {
+		tests := []struct {
+			cn     string
+			exists bool
+			err    error
+		}{
+			{"", false, fmt.Errorf("empty cn")},
+			{"abcdefg", false, fmt.Errorf("onboard cn not found")},
+			{"abcdefg", true, nil},
+		}
+
+		for i, tt := range tests {
+			// the item we will test
+			dm := DeviceManagerMemory{}
+
+			// hold the cert and serial
+			var (
+				cert *x509.Certificate
+			)
+			var certStr string
+			// if valid, create the certificate
+			if tt.exists {
+				certB, _, err := ax.Generate(tt.cn, "")
+				if err != nil {
+					t.Fatalf("error generating cert for tests: %v", err)
+				}
+				cert, err = x509.ParseCertificate(certB)
+				if err != nil {
+					t.Fatalf("%d: unexpected error parsing certificate: %v", i, err)
+				}
+				certStr = string(cert.Raw)
+				dm.onboardCerts = map[string]map[string]bool{}
+				dm.onboardCerts[certStr] = map[string]bool{}
+			}
+			err := dm.OnboardRemove(tt.cn)
+			if (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())) {
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			} else if _, ok := dm.onboardCerts[certStr]; ok {
+				t.Errorf("%d: cert still exists after OnboardRemove", i)
+			}
+		}
 	})
 
 	t.Run("TestOnboardClear", func(t *testing.T) {
+		// the item we will test
+		dm := DeviceManagerMemory{}
+		fillOnboard(&dm)
+
+		// if valid, create the certificate
+		err := dm.OnboardClear()
+		switch {
+		case err != nil:
+			t.Errorf("unexpected error: %v", err)
+		case len(dm.onboardCerts) != 0:
+			t.Errorf("still have certs after OnboardRemove: %d", len(dm.onboardCerts))
+		}
 	})
 
 	t.Run("TestOnboardGet", func(t *testing.T) {
@@ -142,6 +211,17 @@ func TestDeviceManagerMemory(t *testing.T) {
 	})
 
 	t.Run("TestOnboardList", func(t *testing.T) {
+		dm := DeviceManagerMemory{}
+		cns := fillOnboard(&dm)
+
+		// if valid, create the certificate
+		got, err := dm.OnboardList()
+		switch {
+		case err != nil:
+			t.Errorf("unexpected error: %v", err)
+		case !equalStringSlice(cns, got):
+			t.Errorf("mismatched CNs, actual '%v', expected '%v'", got, cns)
+		}
 	})
 
 	t.Run("TestDeviceCheckCert", func(t *testing.T) {
