@@ -350,16 +350,20 @@ func (d *DeviceManagerFile) DeviceRegister(cert, onboard *x509.Certificate, seri
 		return nil, fmt.Errorf("error saving device certificate to %s: %v", certPath, err)
 	}
 
-	// save the onboard certificate and serial
+	// save the onboard certificate and serial, if provided
 	certPath = path.Join(devicePath, DeviceOnboardFilename)
-	err = ax.WriteCert(onboard.Raw, certPath, true)
-	if err != nil {
-		return nil, fmt.Errorf("error saving device onboard certificate to %s: %v", certPath, err)
+	if onboard != nil {
+		err = ax.WriteCert(onboard.Raw, certPath, true)
+		if err != nil {
+			return nil, fmt.Errorf("error saving device onboard certificate to %s: %v", certPath, err)
+		}
 	}
-	serialPath := path.Join(devicePath, deviceSerialFilename)
-	err = ioutil.WriteFile(serialPath, []byte(serial), 0644)
-	if err != nil {
-		return nil, fmt.Errorf("error saving device serial to %s: %v", serialPath, err)
+	if serial != "" {
+		serialPath := path.Join(devicePath, deviceSerialFilename)
+		err = ioutil.WriteFile(serialPath, []byte(serial), 0644)
+		if err != nil {
+			return nil, fmt.Errorf("error saving device serial to %s: %v", serialPath, err)
+		}
 	}
 	// save the base configuration
 	err = d.writeProtobufToJSONFile(unew, "", deviceConfigFilename, createBaseConfig(unew))
