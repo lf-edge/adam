@@ -16,7 +16,8 @@ type adminHandler struct {
 	manager DeviceManager
 }
 
-type onboardCert struct {
+// OnboardCert encoding for sending an onboard cert and serials via json
+type OnboardCert struct {
 	Cert   []byte
 	Serial string
 }
@@ -28,7 +29,7 @@ func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
 	decoder := json.NewDecoder(r.Body)
-	var t onboardCert
+	var t OnboardCert
 	err := decoder.Decode(&t)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)

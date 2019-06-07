@@ -1,15 +1,16 @@
 package cmd
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/zededa/adam/pkg/server"
 	ax "github.com/zededa/adam/pkg/x509"
 )
 
@@ -57,13 +58,19 @@ var onboardAddCmd = &cobra.Command{
 		case err != nil:
 			log.Fatalf("error reading cert file %s: %v", certPath, err)
 		}
-		body := fmt.Sprintf(`{"cert":"%s", "serials":"%s"}`, string(b), serials)
+		body, err := json.Marshal(server.OnboardCert{
+			Cert:   b,
+			Serial: serials,
+		})
+		if err != nil {
+			log.Fatalf("error encoding json: %v", err)
+		}
 		u, err := resolveURL(serverURL, "/admin/onboard")
 		if err != nil {
 			log.Fatalf("error constructing URL: %v", err)
 		}
 		client := getClient()
-		_, err = client.Post(u, jsonContentType, strings.NewReader(body))
+		_, err = client.Post(u, jsonContentType, bytes.NewBuffer(body))
 		if err != nil {
 			log.Fatalf("unable to post data to URL %s: %v", u, err)
 		}
