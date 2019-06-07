@@ -89,7 +89,7 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device/{uuid}", admin.deviceRemove).Methods("DELETE")
 
 	tlsConfig := &tls.Config{
-		ClientAuth: tls.RequireAnyClientCert,
+		ClientAuth: tls.RequestClientCert,
 	}
 
 	server := &http.Server{

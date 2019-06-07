@@ -8,7 +8,6 @@ const (
 	serverCertFilename = "server.pem"
 	serverKeyFilename  = "server-key.pem"
 	defaultDatabaseURL = "./run/adam"
-	defaultServerURL   = "https://localhost:8080"
 	jsonContentType    = "application/json"
 	textContentType    = "text/plain"
 )
@@ -20,7 +19,6 @@ var (
 	hosts       string
 	force       bool
 	databaseURL string
-	serverURL   string
 )
 
 func getFriendlyCN(cn string) string {

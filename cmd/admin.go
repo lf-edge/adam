@@ -1,11 +1,25 @@
 package cmd
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"time"
 
 	"github.com/spf13/cobra"
+)
+
+const (
+	defaultServerURL = "https://localhost:8080"
+)
+
+var (
+	serverURL string
+	serverCA  string
 )
 
 var adminCmd = &cobra.Command{
@@ -17,6 +31,7 @@ var adminCmd = &cobra.Command{
 func adminInit() {
 	adminCmd.PersistentFlags().StringVar(&serverURL, "server", defaultServerURL, "full URL to running Adam server")
 	adminCmd.MarkFlagRequired("server")
+	adminCmd.PersistentFlags().StringVar(&serverCA, "server-ca", path.Join(defaultDatabaseURL, serverCertFilename), "path to CA certificate for trusting server; set to blank if using a certificate signed by a CA already on your system")
 	// onboard
 	adminCmd.AddCommand(onboardCmd)
 	onboardInit()
@@ -27,8 +42,21 @@ func adminInit() {
 
 // http client with correct config
 func getClient() *http.Client {
+	tlsConfig := &tls.Config{}
+	if serverCA != "" {
+		caCert, err := ioutil.ReadFile(serverCA)
+		if err != nil {
+			log.Fatalf("unable to read server CA file at %s: %v", serverCA, err)
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+		tlsConfig.RootCAs = caCertPool
+	}
 	var client = &http.Client{
 		Timeout: time.Second * 10,
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
 	}
 	return client
 }
