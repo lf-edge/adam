@@ -11,10 +11,8 @@ func init() {
 	serverInit()
 	rootCmd.AddCommand(generateCmd)
 	generateInit()
-	rootCmd.AddCommand(onboardCmd)
-	onboardInit()
-	rootCmd.AddCommand(deviceCmd)
-	deviceInit()
+	rootCmd.AddCommand(adminCmd)
+	adminInit()
 }
 
 // Execute primary function for cobra

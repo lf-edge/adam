@@ -114,8 +114,6 @@ var deviceClearCmd = &cobra.Command{
 }
 
 func deviceInit() {
-	deviceCmd.PersistentFlags().StringVar(&serverURL, "server", defaultServerURL, "full URL to running Adam server")
-	deviceCmd.MarkFlagRequired("server")
 	// deviceList
 	deviceCmd.AddCommand(deviceListCmd)
 	// deviceAdd

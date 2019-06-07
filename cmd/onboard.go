@@ -135,14 +135,12 @@ var onboardClearCmd = &cobra.Command{
 }
 
 func onboardInit() {
-	onboardCmd.PersistentFlags().StringVar(&serverURL, "server", defaultServerURL, "full URL to running Adam server")
-	onboardCmd.MarkFlagRequired("server")
 	// onboardList
 	onboardCmd.AddCommand(onboardListCmd)
 	// onboardAdd
 	onboardCmd.AddCommand(onboardAddCmd)
-	onboardAddCmd.PersistentFlags().StringVar(&serials, "serial", "", "serials to include with the certificate")
-	onboardAddCmd.PersistentFlags().StringVar(&certPath, "path", "", "path to certificate to add")
+	onboardAddCmd.Flags().StringVar(&serials, "serial", "", "serials to include with the certificate")
+	onboardAddCmd.Flags().StringVar(&certPath, "path", "", "path to certificate to add")
 	onboardAddCmd.MarkFlagRequired("path")
 	// onboardRemove
 	onboardCmd.AddCommand(onboardRemoveCmd)
