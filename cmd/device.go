@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"path"
 
 	"github.com/spf13/cobra"
+	"github.com/zededa/adam/pkg/server"
 )
 
 var (
@@ -43,6 +45,30 @@ var deviceListCmd = &cobra.Command{
 	},
 }
 
+var deviceGetCmd = &cobra.Command{
+	Use:   "get",
+	Short: "get an individual device certificate, its onboard certificate, and its onboard serial by UUID",
+	Long:  `Get the details of a device, specifically its actual certificate, its onboard certificate (if any), and its onboard serial (if any) by supplying its UUID.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		u, err := resolveURL(serverURL, path.Join("/admin/device", devUUID))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
+		client := getClient()
+		response, err := client.Get(u)
+		if err != nil {
+			log.Fatalf("error reading URL %s: %v", u, err)
+		}
+		buf, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			log.Fatalf("unable to read data from URL %s: %v", u, err)
+		}
+		var t server.DeviceCert
+		err = json.Unmarshal(buf, &t)
+		log.Printf("\nUUID: %s\nDevice Cert:\n%s\nOnboard Cert:\n%s\nOnboard Serial: %s", devUUID, string(t.Cert), string(t.Onboard), string(t.Serial))
+	},
+}
+
 var deviceAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "add new device",
@@ -59,8 +85,14 @@ var deviceAddCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error constructing URL: %v", err)
 		}
+		body, err := json.Marshal(server.DeviceCert{
+			Cert: b,
+		})
+		if err != nil {
+			log.Fatalf("error encoding json: %v", err)
+		}
 		client := getClient()
-		_, err = client.Post(u, textContentType, bytes.NewReader(b))
+		_, err = client.Post(u, jsonContentType, bytes.NewBuffer(body))
 		if err != nil {
 			log.Fatalf("unable to post data to URL %s: %v", u, err)
 		}
@@ -116,6 +148,10 @@ var deviceClearCmd = &cobra.Command{
 func deviceInit() {
 	// deviceList
 	deviceCmd.AddCommand(deviceListCmd)
+	// deviceGet
+	deviceCmd.AddCommand(deviceGetCmd)
+	deviceGetCmd.Flags().StringVar(&devUUID, "uuid", "", "uuid of device to get")
+	deviceGetCmd.MarkFlagRequired("uuid")
 	// deviceAdd
 	deviceCmd.AddCommand(deviceAddCmd)
 	deviceAddCmd.Flags().StringVar(&certPath, "path", "", "path to certificate to add")
@@ -123,6 +159,7 @@ func deviceInit() {
 	// deviceRemove
 	deviceCmd.AddCommand(deviceRemoveCmd)
 	deviceRemoveCmd.Flags().StringVar(&devUUID, "uuid", "", "uuid of device to remove")
+	deviceRemoveCmd.MarkFlagRequired("uuid")
 	// deviceClear
 	deviceCmd.AddCommand(deviceClearCmd)
 }

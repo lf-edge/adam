@@ -83,7 +83,7 @@ func (s *Server) Start() {
 	ad.HandleFunc("/onboard", admin.onboardClear).Methods("DELETE")
 	ad.HandleFunc("/onboard/{cn}", admin.onboardRemove).Methods("DELETE")
 	ad.HandleFunc("/device", admin.deviceList).Methods("GET")
-	ad.HandleFunc("/device/{cn}", admin.deviceGet).Methods("GET")
+	ad.HandleFunc("/device/{uuid}", admin.deviceGet).Methods("GET")
 	ad.HandleFunc("/device", admin.deviceAdd).Methods("POST")
 	ad.HandleFunc("/device", admin.deviceClear).Methods("DELETE")
 	ad.HandleFunc("/device/{uuid}", admin.deviceRemove).Methods("DELETE")

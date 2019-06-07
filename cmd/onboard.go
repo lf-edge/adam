@@ -77,6 +77,30 @@ var onboardAddCmd = &cobra.Command{
 	},
 }
 
+var onboardGetCmd = &cobra.Command{
+	Use:   "get",
+	Short: "get an individual onboard certificate and serials by Common Name",
+	Long:  `Get the details of an onboard certificate by supplying its Common Name. If it exists, will return the certificate and its valid serials.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		u, err := resolveURL(serverURL, path.Join("/admin/onboard", getFriendlyCN(cn)))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
+		client := getClient()
+		response, err := client.Get(u)
+		if err != nil {
+			log.Fatalf("error reading URL %s: %v", u, err)
+		}
+		buf, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			log.Fatalf("unable to read data from URL %s: %v", u, err)
+		}
+		var t server.OnboardCert
+		err = json.Unmarshal(buf, &t)
+		log.Printf("\nCommon Name: %s\n%s\nserials: %s", cn, string(t.Cert), string(t.Serial))
+	},
+}
+
 var onboardRemoveCmd = &cobra.Command{
 	Use:   "remove",
 	Short: "remove existing onboard certificate",
@@ -137,6 +161,10 @@ var onboardClearCmd = &cobra.Command{
 func onboardInit() {
 	// onboardList
 	onboardCmd.AddCommand(onboardListCmd)
+	// onboardGet
+	onboardCmd.AddCommand(onboardGetCmd)
+	onboardGetCmd.Flags().StringVar(&cn, "cn", "", "cn of certificate to get details")
+	onboardGetCmd.MarkFlagRequired("cn")
 	// onboardAdd
 	onboardCmd.AddCommand(onboardAddCmd)
 	onboardAddCmd.Flags().StringVar(&serials, "serial", "", "serials to include with the certificate")

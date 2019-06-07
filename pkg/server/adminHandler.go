@@ -1,9 +1,9 @@
 package server
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -20,6 +20,13 @@ type adminHandler struct {
 type OnboardCert struct {
 	Cert   []byte
 	Serial string
+}
+
+// DeviceCert encoding for sending a device information, including device cert, onboard cert, and serial, if any
+type DeviceCert struct {
+	Cert    []byte
+	Onboard []byte
+	Serial  string
 }
 
 func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +76,13 @@ func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusOK)
-		body := fmt.Sprintf(`{"cert":"%s", "serials":"%s"}`, string(ax.PemEncodeCert(cert.Raw)), strings.Join(serials, ","))
+		body, err := json.Marshal(OnboardCert{
+			Cert:   ax.PemEncodeCert(cert.Raw),
+			Serial: strings.Join(serials, ","),
+		})
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		w.Write([]byte(body))
 	}
 }
@@ -102,16 +115,28 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
 
-	b, err := ioutil.ReadAll(r.Body)
+	decoder := json.NewDecoder(r.Body)
+	var (
+		t       DeviceCert
+		cert    *x509.Certificate
+		onboard *x509.Certificate
+	)
+	err := decoder.Decode(&t)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
 
-	cert, err := ax.ParseCert(b)
+	cert, err = ax.ParseCert(t.Cert)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("bad device cert: %v", err), http.StatusBadRequest)
 	}
-	_, err = h.manager.DeviceRegister(cert, nil, "")
+	if t.Onboard != nil && len(t.Onboard) > 0 {
+		onboard, err = ax.ParseCert(t.Onboard)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("bad onboard cert: %v", err), http.StatusBadRequest)
+		}
+	}
+	_, err = h.manager.DeviceRegister(cert, onboard, t.Serial)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
@@ -140,7 +165,7 @@ func (h *adminHandler) deviceGet(w http.ResponseWriter, r *http.Request) {
 	u := mux.Vars(r)["uuid"]
 	uid, err := uuid.FromString(u)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	deviceCert, onboardCert, serial, err := h.manager.DeviceGet(&uid)
@@ -150,9 +175,21 @@ func (h *adminHandler) deviceGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	case err != nil:
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	case deviceCert == nil:
+		http.Error(w, "found device information, but cert was empty", http.StatusInternalServerError)
 	default:
+		dc := DeviceCert{
+			Cert:   ax.PemEncodeCert(deviceCert.Raw),
+			Serial: serial,
+		}
+		if onboardCert != nil {
+			dc.Onboard = ax.PemEncodeCert(onboardCert.Raw)
+		}
+		body, err := json.Marshal(dc)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		w.WriteHeader(http.StatusOK)
-		body := fmt.Sprintf(`{"cert":"%s", "onboard": "%s", "serial":"%s"}`, string(ax.PemEncodeCert(deviceCert.Raw)), string(ax.PemEncodeCert(onboardCert.Raw)), serial)
 		w.Write([]byte(body))
 	}
 }
