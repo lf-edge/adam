@@ -70,37 +70,24 @@ Adam has an onboarding directory where it maintains acceptable onboarding certif
 
 You _can_ modify these files directly; it is not, however, recommended. 
 
-Instead, use Adam's command-line options to work with the files:
+Instead, use Adam's command-line `admin` options to work with the files:
 
 ```
-adam generate onboard
+adam generate
 ```
 
-will generate onboard certificates, with a Common Name that you provide. Run `adam generate onboard --help` for options.
+will generate a key/certificate pair, with a Common Name that you provide. Run `adam generate --help` for options.
+
+You then can interact with the Adam server using `adam admin`:
 
 ```
-adam serials
+$ adam admin device
+$ adam admin onboard
 ```
 
-will list, add, remove or clear serials for usage with a given certificate. Run `adam serials --help` for options.
-
-There is no required order between serials and certificates; you can generate certs and then serials, or serials and then certs.
+These will list, add, remove, get or clear onboarding certificates and their serials, as well as devices directly.
 
 Once you have generated an onboarding certificate, copy the certificate and key to the device to onboard.
-
-### Registering
-
-If, instead, you prefer to register devices directly, you can generate a device certificate with:
-
-```
-adam generate device
-```
-
-which will generate a device certificate and save it to the appropriate directory. Once it is done, save the certificate and key to the device.
-
-## Private Keys
-
-When generating onboarding and device certificates using `adam generate onboard` or `adam generate device`, the Adam server does _not_ need access to the keys (not should it have), only the certificates. The keys are stored in a `private/` directory, which is configurable via CLI. Run `adam generate onboard --help` or `adam generate device --help` to see the default and options.
 
 ## More Documentation
 
