@@ -50,6 +50,8 @@ type DeviceManager interface {
 	WriteMetrics(*metrics.ZMetricMsg) error
 	// GetConfig get the config for a given uuid
 	GetConfig(uuid.UUID) (*config.EdgeDevConfig, error)
+	// SetConfig set the config for a given uuid
+	SetConfig(uuid.UUID, *config.EdgeDevConfig) error
 }
 
 // NotFoundError error representing that an item was not found

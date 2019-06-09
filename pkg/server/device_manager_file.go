@@ -531,6 +531,33 @@ func (d *DeviceManagerFile) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error
 	return msg, nil
 }
 
+// SetConfig set the config for a particular device
+func (d *DeviceManagerFile) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
+	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+	}
+	// look up the device by uuid
+	_, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	if m == nil {
+		return fmt.Errorf("empty configuration")
+	}
+	// check for UUID mismatch
+	if m.Id == nil || m.Id.Uuid != u.String() {
+		return fmt.Errorf("mismatched UUID")
+	}
+	// save the base configuration
+	err = d.writeProtobufToJSONFile(u, "", deviceConfigFilename, m)
+	if err != nil {
+		return fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
+	}
+	return nil
+}
+
 // refreshCache refresh cache from disk
 func (d *DeviceManagerFile) refreshCache() error {
 	// is it time to update the cache again?

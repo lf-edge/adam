@@ -280,6 +280,24 @@ func (d *DeviceManagerMemory) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, err
 	return dev.config, nil
 }
 
+// SetConfig set the config for a particular device
+func (d *DeviceManagerMemory) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	if m == nil {
+		return fmt.Errorf("empty configuration")
+	}
+	// check for UUID mismatch
+	if m.Id == nil || m.Id.Uuid != u.String() {
+		return fmt.Errorf("mismatched UUID")
+	}
+	dev.config = m
+	return nil
+}
+
 // checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
 // does **not** check if it has been used
 func (d *DeviceManagerMemory) checkValidOnboardSerial(cert *x509.Certificate, serial string) bool {

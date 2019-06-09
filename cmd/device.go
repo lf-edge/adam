@@ -14,7 +14,8 @@ import (
 )
 
 var (
-	devUUID string
+	devUUID    string
+	configPath string
 )
 
 var deviceCmd = &cobra.Command{
@@ -145,6 +146,62 @@ var deviceClearCmd = &cobra.Command{
 	},
 }
 
+var deviceConfigCmd = &cobra.Command{
+	Use:   "config",
+	Short: "get or set configuration information for a device",
+	Long:  `Managed configuration for a registered and known device`,
+}
+
+var deviceConfigGetCmd = &cobra.Command{
+	Use:   "get",
+	Short: "get a device config, in JSON format",
+	Long:  `Get the configuration for a device in JSON format.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		u, err := resolveURL(serverURL, path.Join("/admin/device", devUUID, "config"))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
+		client := getClient()
+		response, err := client.Get(u)
+		if err != nil {
+			log.Fatalf("error reading URL %s: %v", u, err)
+		}
+		buf, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			log.Fatalf("unable to read data from URL %s: %v", u, err)
+		}
+		log.Printf("\n%s\n%v\n", devUUID, string(buf))
+	},
+}
+
+var deviceConfigSetCmd = &cobra.Command{
+	Use:   "set",
+	Short: "set a device config, from JSON format",
+	Long:  `Set the configuration for a device, from JSON format.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		b, err := ioutil.ReadFile(configPath)
+		switch {
+		case err != nil && os.IsNotExist(err):
+			log.Fatalf("config file %s does not exist", configPath)
+		case err != nil:
+			log.Fatalf("error reading config file %s: %v", configPath, err)
+		}
+		u, err := resolveURL(serverURL, path.Join("/admin/device", devUUID, "config"))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
+		client := getClient()
+		req, err := http.NewRequest("PUT", u, bytes.NewBuffer(b))
+		if err != nil {
+			log.Fatalf("unable to create new http request: %v", err)
+		}
+		_, err = client.Do(req)
+		if err != nil {
+			log.Fatalf("error PUT URL %s: %v", u, err)
+		}
+	},
+}
+
 func deviceInit() {
 	// deviceList
 	deviceCmd.AddCommand(deviceListCmd)
@@ -162,4 +219,14 @@ func deviceInit() {
 	deviceRemoveCmd.MarkFlagRequired("uuid")
 	// deviceClear
 	deviceCmd.AddCommand(deviceClearCmd)
+	// deviceConfig
+	deviceCmd.AddCommand(deviceConfigCmd)
+	deviceConfigCmd.PersistentFlags().StringVar(&devUUID, "uuid", "", "uuid of device to get")
+	deviceConfigCmd.MarkFlagRequired("uuid")
+	// deviceConfigGet
+	deviceConfigCmd.AddCommand(deviceConfigGetCmd)
+	// deviceConfigSet
+	deviceConfigCmd.AddCommand(deviceConfigSetCmd)
+	deviceConfigSetCmd.Flags().StringVar(&configPath, "config-path", "", "path to config file to set")
+	deviceConfigSetCmd.MarkFlagRequired("config-path")
 }

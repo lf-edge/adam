@@ -4,10 +4,12 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/lf-edge/eve/api/go/config"
 	"github.com/satori/go.uuid"
 	ax "github.com/zededa/adam/pkg/x509"
 )
@@ -217,5 +219,58 @@ func (h *adminHandler) deviceClear(w http.ResponseWriter, r *http.Request) {
 	err := h.manager.DeviceClear()
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	}
+}
+
+func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
+	u := mux.Vars(r)["uuid"]
+	uid, err := uuid.FromString(u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	deviceConfig, err := h.manager.GetConfig(uid)
+	_, isNotFound := err.(*NotFoundError)
+	switch {
+	case err != nil && isNotFound:
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	case err != nil:
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	case deviceConfig == nil:
+		http.Error(w, "found device information, but cert was empty", http.StatusInternalServerError)
+	default:
+		body, err := json.Marshal(deviceConfig)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error marshaling config to json: %v", err), http.StatusInternalServerError)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	}
+}
+
+func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
+	u := mux.Vars(r)["uuid"]
+	uid, err := uuid.FromString(u)
+	if err != nil {
+		http.Error(w, "bad UUID", http.StatusBadRequest)
+	}
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("bad body: %v", err), http.StatusBadRequest)
+	}
+	var deviceConfig config.EdgeDevConfig
+	err = json.Unmarshal(body, &deviceConfig)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
+	}
+	err = h.manager.SetConfig(uid, &deviceConfig)
+	_, isNotFound := err.(*NotFoundError)
+	switch {
+	case err != nil && isNotFound:
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	case err != nil:
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	default:
+		w.WriteHeader(http.StatusOK)
 	}
 }

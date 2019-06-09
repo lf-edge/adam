@@ -6,10 +6,14 @@ Adam does _not_ require pre-registration or pre-configuration of devices. You _c
 
 When Adam receives its first request for a configuration for a registered device, it is likely to find no configuration present. It will generate an empty one containing just the UUID. 
 
-You then can modify that configuration by editing the file, which will be sent to the device at the next request for `/config`.
-
-The Adam file device manager stores the configuration as a json file `config.json` in the device-specific path. For example:
+You can request the current config using 
 
 ```
-run/adam/device/<uuid>/config.json
+adam admin device config get --uuid <UUID>
+```
+
+It will return the config as a JSON string. Save the JSON to a file, modify it by editing that file, and then update it using:
+
+```
+adam admin device config set --uuid <UUID> --config-path <path-to-file>
 ```
