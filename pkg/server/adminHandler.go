@@ -11,11 +11,12 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/satori/go.uuid"
+	"github.com/zededa/adam/pkg/driver"
 	ax "github.com/zededa/adam/pkg/x509"
 )
 
 type adminHandler struct {
-	manager DeviceManager
+	manager driver.DeviceManager
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
@@ -70,7 +71,7 @@ func (h *adminHandler) onboardList(w http.ResponseWriter, r *http.Request) {
 func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
 	cn := mux.Vars(r)["cn"]
 	cert, serials, err := h.manager.OnboardGet(cn)
-	_, isNotFound := err.(*NotFoundError)
+	_, isNotFound := err.(*driver.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -92,7 +93,7 @@ func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
 func (h *adminHandler) onboardRemove(w http.ResponseWriter, r *http.Request) {
 	cn := mux.Vars(r)["cn"]
 	err := h.manager.OnboardRemove(cn)
-	_, isNotFound := err.(*NotFoundError)
+	_, isNotFound := err.(*driver.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -171,7 +172,7 @@ func (h *adminHandler) deviceGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceCert, onboardCert, serial, err := h.manager.DeviceGet(&uid)
-	_, isNotFound := err.(*NotFoundError)
+	_, isNotFound := err.(*driver.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -204,7 +205,7 @@ func (h *adminHandler) deviceRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = h.manager.DeviceRemove(&uid)
-	_, isNotFound := err.(*NotFoundError)
+	_, isNotFound := err.(*driver.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -230,7 +231,7 @@ func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceConfig, err := h.manager.GetConfig(uid)
-	_, isNotFound := err.(*NotFoundError)
+	_, isNotFound := err.(*driver.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -264,7 +265,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
 	}
 	err = h.manager.SetConfig(uid, &deviceConfig)
-	_, isNotFound := err.(*NotFoundError)
+	_, isNotFound := err.(*driver.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)

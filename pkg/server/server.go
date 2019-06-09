@@ -9,15 +9,16 @@ import (
 	"os"
 
 	"github.com/gorilla/mux"
+	"github.com/zededa/adam/pkg/driver"
 )
 
 // Server an adam server
 type Server struct {
-	Port        string
-	CertPath    string
-	KeyPath     string
-	DatabaseURL string
-	CertRefresh int
+	Port          string
+	CertPath      string
+	KeyPath       string
+	DeviceManager driver.DeviceManager
+	CertRefresh   int
 }
 
 // Start start the server
@@ -32,33 +33,19 @@ func (s *Server) Start() {
 		log.Fatalf("server key %s does not exist", s.KeyPath)
 	}
 
-	// create a handler based on where our device database is
-	// in the future, we may support other device manager types
-	var mgr DeviceManager
-	for _, m := range getDeviceManagers() {
-		name := m.Name()
-		valid, err := m.Init(s.DatabaseURL)
-		if err != nil {
-			log.Fatalf("error initializing the %s device manager: %v", name, err)
-		}
-		if valid {
-			mgr = m
-			break
-		}
-	}
-	if mgr == nil {
-		log.Fatalf("could not find valid device manager")
+	if s.DeviceManager == nil {
+		log.Fatalf("empty device manager")
 	}
 
 	// save the device manager settings
-	mgr.SetCacheTimeout(s.CertRefresh)
+	s.DeviceManager.SetCacheTimeout(s.CertRefresh)
 
 	router := mux.NewRouter()
 	router.NotFoundHandler = http.HandlerFunc(notFound)
 
 	// edgedevice endpoint - fully compliant with EVE open API
 	api := &apiHandler{
-		manager: mgr,
+		manager: s.DeviceManager,
 	}
 
 	ed := router.PathPrefix("/api/v1/edgedevice").Subrouter()
@@ -73,7 +60,7 @@ func (s *Server) Start() {
 
 	// admin endpoint - custom, used to manage adam
 	admin := &adminHandler{
-		manager: mgr,
+		manager: s.DeviceManager,
 	}
 
 	ad := router.PathPrefix("/admin").Subrouter()
@@ -101,8 +88,8 @@ func (s *Server) Start() {
 	}
 	log.Println("Starting adam:")
 	log.Printf("\tPort: %s\n", s.Port)
-	log.Printf("\tstorage: %s\n", mgr.Name())
-	log.Printf("\tdatabase: %s\n", s.DatabaseURL)
+	log.Printf("\tstorage: %s\n", s.DeviceManager.Name())
+	log.Printf("\tdatabase: %s\n", s.DeviceManager.Database())
 	log.Printf("\tserver cert: %s\n", s.CertPath)
 	log.Printf("\tserver key: %s\n", s.KeyPath)
 	log.Fatal(server.ListenAndServeTLS(s.CertPath, s.KeyPath))

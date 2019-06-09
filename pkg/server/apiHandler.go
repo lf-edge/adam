@@ -11,10 +11,11 @@ import (
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
+	"github.com/zededa/adam/pkg/driver"
 )
 
 type apiHandler struct {
-	manager DeviceManager
+	manager driver.DeviceManager
 }
 
 func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {

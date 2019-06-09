@@ -1,4 +1,4 @@
-package server
+package driver
 
 import (
 	"crypto/x509"
@@ -51,6 +51,11 @@ type DeviceManagerFile struct {
 // Name return name
 func (d *DeviceManagerFile) Name() string {
 	return "file"
+}
+
+// Database return database path
+func (d *DeviceManagerFile) Database() string {
+	return d.databasePath
 }
 
 // Init check if a URL is valid and initialize

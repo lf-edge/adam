@@ -1,4 +1,4 @@
-package server
+package driver
 
 import (
 	"crypto/x509"
@@ -19,6 +19,11 @@ type DeviceManagerMemory struct {
 
 // Name return name
 func (d *DeviceManagerMemory) Name() string {
+	return "memory"
+}
+
+// Database return database path
+func (d *DeviceManagerMemory) Database() string {
 	return "memory"
 }
 
