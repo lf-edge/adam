@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -181,12 +182,24 @@ var deviceConfigSetCmd = &cobra.Command{
 	Short: "set a device config, from JSON format",
 	Long:  `Set the configuration for a device, from JSON format.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		b, err := ioutil.ReadFile(configPath)
-		switch {
-		case err != nil && os.IsNotExist(err):
-			log.Fatalf("config file %s does not exist", configPath)
-		case err != nil:
-			log.Fatalf("error reading config file %s: %v", configPath, err)
+		// handle stdin
+		var (
+			b   []byte
+			err error
+		)
+		if configPath == "-" {
+			b, err = ioutil.ReadAll(os.Stdin)
+			if err != nil && err != io.EOF {
+				log.Fatalf("Error reading stdin: %v", err)
+			}
+		} else {
+			b, err = ioutil.ReadFile(configPath)
+			switch {
+			case err != nil && os.IsNotExist(err):
+				log.Fatalf("config file %s does not exist", configPath)
+			case err != nil:
+				log.Fatalf("error reading config file %s: %v", configPath, err)
+			}
 		}
 		u, err := resolveURL(serverURL, path.Join("/admin/device", devUUID, "config"))
 		if err != nil {
@@ -229,6 +242,6 @@ func deviceInit() {
 	deviceConfigCmd.AddCommand(deviceConfigGetCmd)
 	// deviceConfigSet
 	deviceConfigCmd.AddCommand(deviceConfigSetCmd)
-	deviceConfigSetCmd.Flags().StringVar(&configPath, "config-path", "", "path to config file to set")
+	deviceConfigSetCmd.Flags().StringVar(&configPath, "config-path", "", "path to config file to set; use "-" to read from stdin")
 	deviceConfigSetCmd.MarkFlagRequired("config-path")
 }

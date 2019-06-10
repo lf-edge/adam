@@ -17,3 +17,27 @@ It will return the config as a JSON string. Save the JSON to a file, modify it b
 ```
 adam admin device config set --uuid <UUID> --config-path <path-to-file>
 ```
+
+`admin config set` supports reading from stdin using the path of `-`, so you can use the following process:
+
+1. Get a list of devices
+
+```
+adam admin device list
+```
+
+1. Get the config for an individual device and save to a file
+
+```
+adam admin device config get --uuid 1234567 > config.json
+```
+
+1. Edit the json as you wish
+1. Save the new config
+
+```
+adam admin device config set --uuid 1234567 --config-path config.json
+# OR
+cat config.json | adam admin device config set --uuid 1234567
+```
+
