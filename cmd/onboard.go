@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -42,7 +43,7 @@ var onboardListCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("unable to read data from URL %s: %v", u, err)
 		}
-		log.Printf(string(buf))
+		fmt.Printf("\n%s\n", string(buf))
 	},
 }
 
@@ -97,7 +98,7 @@ var onboardGetCmd = &cobra.Command{
 		}
 		var t server.OnboardCert
 		err = json.Unmarshal(buf, &t)
-		log.Printf("\nCommon Name: %s\n%s\nserials: %s", cn, string(t.Cert), string(t.Serial))
+		fmt.Printf("\nCommon Name: %s\n%s\nserials: %s", cn, string(t.Cert), string(t.Serial))
 	},
 }
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -42,7 +43,7 @@ var deviceListCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("unable to read data from URL %s: %v", u, err)
 		}
-		log.Printf(string(buf))
+		fmt.Printf("%s\n", string(buf))
 	},
 }
 
@@ -66,7 +67,7 @@ var deviceGetCmd = &cobra.Command{
 		}
 		var t server.DeviceCert
 		err = json.Unmarshal(buf, &t)
-		log.Printf("\nUUID: %s\nDevice Cert:\n%s\nOnboard Cert:\n%s\nOnboard Serial: %s", devUUID, string(t.Cert), string(t.Onboard), string(t.Serial))
+		fmt.Printf("\nUUID: %s\nDevice Cert:\n%s\nOnboard Cert:\n%s\nOnboard Serial: %s", devUUID, string(t.Cert), string(t.Onboard), string(t.Serial))
 	},
 }
 
@@ -170,7 +171,8 @@ var deviceConfigGetCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("unable to read data from URL %s: %v", u, err)
 		}
-		log.Printf("\n%s\n%v\n", devUUID, string(buf))
+		log.Printf("config for %s", devUUID)
+		fmt.Printf("%s\n", string(buf))
 	},
 }
 
