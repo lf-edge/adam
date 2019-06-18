@@ -2,6 +2,8 @@ package server
 
 import (
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -47,8 +49,17 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
+	// the passed cert is base64 encoded PEM. So we need to base64 decode it, and then extract the DER bytes
 	// register the new device cert
-	deviceCert, err := x509.ParseCertificate(msg.PemCert)
+	certPemBytes, err := base64.StdEncoding.DecodeString(string(msg.PemCert))
+	if err != nil {
+		log.Printf("error base64-decoding device certficate from registration: %v", err)
+		http.Error(w, "error base64-decoding device certificate", http.StatusBadRequest)
+		return
+	}
+
+	certDer, _ := pem.Decode(certPemBytes)
+	deviceCert, err := x509.ParseCertificate(certDer.Bytes)
 	if err != nil {
 		log.Printf("unable to convert device cert data from message to x509 certificate: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
