@@ -11,6 +11,7 @@ import (
 
 const (
 	defaultPort        = "8080"
+	defaultIP          = "0.0.0.0"
 	defaultCertRefresh = 60
 )
 
@@ -18,6 +19,7 @@ var (
 	serverCert     string
 	serverKey      string
 	port           string
+	hostIP         string
 	clientCertPath string
 	certRefresh    int
 )
@@ -47,6 +49,7 @@ var serverCmd = &cobra.Command{
 
 		s := &server.Server{
 			Port:          port,
+			Address:       hostIP,
 			CertPath:      serverCert,
 			KeyPath:       serverKey,
 			DeviceManager: mgr,
@@ -58,6 +61,7 @@ var serverCmd = &cobra.Command{
 
 func serverInit() {
 	serverCmd.Flags().StringVar(&port, "port", defaultPort, "port on which to listen")
+	serverCmd.Flags().StringVar(&hostIP, "ip", defaultIP, "IP address on which to listen")
 	serverCmd.Flags().StringVar(&serverCert, "server-cert", path.Join(defaultDatabaseURL, serverCertFilename), "path to server certificate")
 	serverCmd.Flags().StringVar(&serverKey, "server-key", path.Join(defaultDatabaseURL, serverKeyFilename), "path to server key")
 	serverCmd.Flags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where we will store and find device information, including onboarding certificates, device certificates, config, logs and metrics. See the readme for more details.")

@@ -15,6 +15,7 @@ import (
 // Server an adam server
 type Server struct {
 	Port          string
+	Address       string
 	CertPath      string
 	KeyPath       string
 	DeviceManager driver.DeviceManager
@@ -83,11 +84,11 @@ func (s *Server) Start() {
 
 	server := &http.Server{
 		Handler:   router,
-		Addr:      fmt.Sprintf(":%s", s.Port),
+		Addr:      fmt.Sprintf("%s:%s", s.Address, s.Port),
 		TLSConfig: tlsConfig,
 	}
 	log.Println("Starting adam:")
-	log.Printf("\tPort: %s\n", s.Port)
+	log.Printf("\tIP:Port: %s:%s\n", s.Address, s.Port)
 	log.Printf("\tstorage: %s\n", s.DeviceManager.Name())
 	log.Printf("\tdatabase: %s\n", s.DeviceManager.Database())
 	log.Printf("\tserver cert: %s\n", s.CertPath)
