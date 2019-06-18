@@ -98,7 +98,7 @@ var onboardGetCmd = &cobra.Command{
 		}
 		var t server.OnboardCert
 		err = json.Unmarshal(buf, &t)
-		fmt.Printf("\nCommon Name: %s\n%s\nserials: %s", cn, string(t.Cert), string(t.Serial))
+		fmt.Printf("\nCommon Name: %s\n%s\nserials: %s\n", cn, string(t.Cert), string(t.Serial))
 	},
 }
 
