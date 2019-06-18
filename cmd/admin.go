@@ -18,8 +18,9 @@ const (
 )
 
 var (
-	serverURL string
-	serverCA  string
+	serverURL   string
+	serverCA    string
+	insecureTLS bool
 )
 
 var adminCmd = &cobra.Command{
@@ -32,6 +33,7 @@ func adminInit() {
 	adminCmd.PersistentFlags().StringVar(&serverURL, "server", defaultServerURL, "full URL to running Adam server")
 	adminCmd.MarkFlagRequired("server")
 	adminCmd.PersistentFlags().StringVar(&serverCA, "server-ca", path.Join(defaultDatabaseURL, serverCertFilename), "path to CA certificate for trusting server; set to blank if using a certificate signed by a CA already on your system")
+	adminCmd.PersistentFlags().BoolVar(&insecureTLS, "insecure", false, "accept invalid, expired or mismatched hostname errors for adam server certificate")
 	// onboard
 	adminCmd.AddCommand(onboardCmd)
 	onboardInit()
@@ -51,6 +53,9 @@ func getClient() *http.Client {
 		caCertPool := x509.NewCertPool()
 		caCertPool.AppendCertsFromPEM(caCert)
 		tlsConfig.RootCAs = caCertPool
+	}
+	if insecureTLS {
+		tlsConfig.InsecureSkipVerify = true
 	}
 	var client = &http.Client{
 		Timeout: time.Second * 10,
