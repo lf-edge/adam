@@ -80,6 +80,7 @@ func (s *Server) Start() {
 
 	tlsConfig := &tls.Config{
 		ClientAuth: tls.RequestClientCert,
+		ClientCAs:  nil,
 	}
 
 	server := &http.Server{
