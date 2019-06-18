@@ -242,6 +242,6 @@ func deviceInit() {
 	deviceConfigCmd.AddCommand(deviceConfigGetCmd)
 	// deviceConfigSet
 	deviceConfigCmd.AddCommand(deviceConfigSetCmd)
-	deviceConfigSetCmd.Flags().StringVar(&configPath, "config-path", "", "path to config file to set; use "-" to read from stdin")
+	deviceConfigSetCmd.Flags().StringVar(&configPath, "config-path", "", "path to config file to set; use '-' to read from stdin")
 	deviceConfigSetCmd.MarkFlagRequired("config-path")
 }
