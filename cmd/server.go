@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
 	"log"
+	"os"
 	"path"
 
 	"github.com/spf13/cobra"
@@ -46,6 +50,33 @@ var serverCmd = &cobra.Command{
 		if mgr == nil {
 			log.Fatalf("could not find valid device manager")
 		}
+
+		// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it,
+		//   or if the _files_ already exist
+		err := os.MkdirAll(configDir, 0755)
+		if err != nil {
+			log.Fatalf("failed to make directory %s: %v", configDir, err)
+		}
+
+		catls, err := tls.LoadX509KeyPair(serverCert, serverKey)
+		if err != nil {
+			log.Fatalf("error loading server cert %s and server key %s: %v", serverCert, serverKey, err)
+		}
+		ca, err := x509.ParseCertificate(catls.Certificate[0])
+		if err != nil {
+			log.Fatalf("error parsing server cert: %v", err)
+		}
+
+		err = ioutil.WriteFile(path.Join(configDir, "server"), []byte(ca.Subject.CommonName + ":" + port), 0644)
+		if err != nil {
+			log.Fatalf("error writing to server file: %v", err)
+		}
+
+		err = ioutil.WriteFile(path.Join(configDir, "hosts"), []byte(hostIP + " " + ca.Subject.CommonName), 0644)
+		if err != nil {
+			log.Fatalf("error writing hosts file: %v", err)
+		}
+
 
 		s := &server.Server{
 			Port:          port,

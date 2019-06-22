@@ -8,6 +8,7 @@ const (
 	serverCertFilename = "server.pem"
 	serverKeyFilename  = "server-key.pem"
 	defaultDatabaseURL = "./run/adam"
+	configDir          = "./run/adam/config"
 	jsonContentType    = "application/json"
 	textContentType    = "text/plain"
 )
