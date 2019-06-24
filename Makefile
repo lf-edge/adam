@@ -72,7 +72,7 @@ ifeq (, $(shell which golint))
 	$(GO) go get -u golang.org/x/lint/golint
 endif
 ifeq (, $(shell which gometalinter))
-        $(GO) go get -u github.com/alecthomas/gometalinter
+	$(GO) go get -u github.com/alecthomas/gometalinter
 endif
 endif
 
