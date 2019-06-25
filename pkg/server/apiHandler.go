@@ -128,7 +128,7 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b, err := ioutil.ReadAll(r.Body)
-	if err != nil {
+	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -190,7 +190,7 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b, err := ioutil.ReadAll(r.Body)
-	if err != nil {
+	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
