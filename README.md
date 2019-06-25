@@ -59,6 +59,15 @@ For an EVE device to be accepted into Adam, it needs to be listed as one of:
 * acceptable to onboard
 * registered
 
+An EVE device has to know the following before it can communicate with any controller (including Adam):
+
+* controller's host name and port #
+* controller's root certificate
+
+additionally you may need to supply an entry mapping controller's host name to a routable IP address (in the /etc/hosts format)
+
+When Adam server runs, it outputs all the required configuration in a folder specified by the `conf-dir` option (run/adam/config by default)
+
 ### Onboarding
 
 Onboarding is the process of enabling a device to self-register. This requires two pieces: an onboarding certificate, and a unique serial string. Each self-registering device _must_ have a unique combination of onboarding certificate and serial string.

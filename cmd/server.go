@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
 	"log"
+	"os"
 	"path"
 
 	"github.com/spf13/cobra"
@@ -47,6 +51,33 @@ var serverCmd = &cobra.Command{
 			log.Fatalf("could not find valid device manager")
 		}
 
+		// we use MkdirAll, since we are willing to continue if the directory already exists; we only error if we cannot make it,
+		//   or if the _files_ already exist
+		err := os.MkdirAll(configDir, 0755)
+		if err != nil {
+			log.Fatalf("failed to make directory %s: %v", configDir, err)
+		}
+
+		catls, err := tls.LoadX509KeyPair(serverCert, serverKey)
+		if err != nil {
+			log.Fatalf("error loading server cert %s and server key %s: %v", serverCert, serverKey, err)
+		}
+		ca, err := x509.ParseCertificate(catls.Certificate[0])
+		if err != nil {
+			log.Fatalf("error parsing server cert: %v", err)
+		}
+
+		err = ioutil.WriteFile(path.Join(configDir, "server"), []byte(ca.Subject.CommonName + ":" + port), 0644)
+		if err != nil {
+			log.Fatalf("error writing to server file: %v", err)
+		}
+
+		err = ioutil.WriteFile(path.Join(configDir, "hosts"), []byte(hostIP + " " + ca.Subject.CommonName), 0644)
+		if err != nil {
+			log.Fatalf("error writing hosts file: %v", err)
+		}
+
+
 		s := &server.Server{
 			Port:          port,
 			Address:       hostIP,
@@ -65,5 +96,6 @@ func serverInit() {
 	serverCmd.Flags().StringVar(&serverCert, "server-cert", path.Join(defaultDatabaseURL, serverCertFilename), "path to server certificate")
 	serverCmd.Flags().StringVar(&serverKey, "server-key", path.Join(defaultDatabaseURL, serverKeyFilename), "path to server key")
 	serverCmd.Flags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where we will store and find device information, including onboarding certificates, device certificates, config, logs and metrics. See the readme for more details.")
+	serverCmd.Flags().StringVar(&configDir, "conf-dir", defaultConfigDir, "path to directory where running server will output runtime configuration files that can be fed into EVE")
 	serverCmd.Flags().IntVar(&certRefresh, "cert-refresh", defaultCertRefresh, "how often, in seconds, to refresh the onboarding and device certs from the filesystem; 0 means not to cache at all.")
 }
