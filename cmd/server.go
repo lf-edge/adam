@@ -76,6 +76,7 @@ var serverCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error writing hosts file: %v", err)
 		}
+		log.Printf("EVE-compatible configuration directory output to %s", configDir)
 
 		s := &server.Server{
 			Port:          port,
