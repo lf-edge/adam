@@ -38,15 +38,22 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serial := msg.Serial
-	valid, err := h.manager.OnboardCheck(onboardCert, serial)
-	switch {
-	case err != nil:
-		log.Printf("Error checking onboard cert and serial: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	case !valid:
-		log.Printf("failed authentication")
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	err = h.manager.OnboardCheck(onboardCert, serial)
+	if err != nil {
+		_, invalidCert := err.(*driver.InvalidCertError)
+		_, invalidSerial := err.(*driver.InvalidSerialError)
+		_, usedSerial := err.(*driver.UsedSerialError)
+		switch {
+		case invalidCert, invalidSerial:
+			log.Printf("failed authentication %v", err)
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		case usedSerial:
+			log.Printf("used serial %v", err)
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			log.Printf("Error checking onboard cert and serial: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		return
 	}
 	// the passed cert is base64 encoded PEM. So we need to base64 decode it, and then extract the DER bytes

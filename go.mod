@@ -53,4 +53,5 @@ require (
 	google.golang.org/genproto v0.0.0-20190611190212-a7e196e89fd3 // indirect
 	google.golang.org/grpc v1.21.1 // indirect
 	honnef.co/go/tools v0.0.0-20190614002413-cb51c254f01b // indirect
+	sigs.k8s.io/kind v0.4.0 // indirect
 )
