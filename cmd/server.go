@@ -67,16 +67,16 @@ var serverCmd = &cobra.Command{
 			log.Fatalf("error parsing server cert: %v", err)
 		}
 
-		err = ioutil.WriteFile(path.Join(configDir, "server"), []byte(ca.Subject.CommonName + ":" + port), 0644)
+		err = ioutil.WriteFile(path.Join(configDir, "server"), []byte(ca.Subject.CommonName+":"+port), 0644)
 		if err != nil {
 			log.Fatalf("error writing to server file: %v", err)
 		}
 
-		err = ioutil.WriteFile(path.Join(configDir, "hosts"), []byte(hostIP + " " + ca.Subject.CommonName), 0644)
+		err = ioutil.WriteFile(path.Join(configDir, "hosts"), []byte(hostIP+" "+ca.Subject.CommonName), 0644)
 		if err != nil {
 			log.Fatalf("error writing hosts file: %v", err)
 		}
-
+		log.Printf("EVE-compatible configuration directory output to %s", configDir)
 
 		s := &server.Server{
 			Port:          port,
