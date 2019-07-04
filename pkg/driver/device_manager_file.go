@@ -86,23 +86,24 @@ func (d *DeviceManagerFile) SetCacheTimeout(timeout int) {
 }
 
 // OnboardCheck see if a particular certificate and serial combination is valid
-func (d *DeviceManagerFile) OnboardCheck(cert *x509.Certificate, serial string) (bool, error) {
+func (d *DeviceManagerFile) OnboardCheck(cert *x509.Certificate, serial string) error {
 	// do not accept a nil certificate
 	if cert == nil {
-		return false, fmt.Errorf("invalid nil certificate")
+		return fmt.Errorf("invalid nil certificate")
 	}
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return false, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
-	if !d.checkValidOnboardSerial(cert, serial) {
-		return false, nil
+
+	if err := d.checkValidOnboardSerial(cert, serial); err != nil {
+		return err
 	}
 	if d.getOnboardSerialDevice(cert, serial) != nil {
-		return false, nil
+		return &UsedSerialError{err: fmt.Sprintf("serial already used for onboarding certificate: %s", serial)}
 	}
-	return true, nil
+	return nil
 }
 
 // OnboardGet get the onboard cert and its serials based on Common Name
@@ -781,18 +782,19 @@ func (d *DeviceManagerFile) deviceExists(u uuid.UUID) bool {
 
 // checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
 // does **not** check if it has been used
-func (d *DeviceManagerFile) checkValidOnboardSerial(cert *x509.Certificate, serial string) bool {
+func (d *DeviceManagerFile) checkValidOnboardSerial(cert *x509.Certificate, serial string) error {
 	certStr := string(cert.Raw)
 	if c, ok := d.onboardCerts[certStr]; ok {
 		// accept the specific serial or the wildcard
 		if _, ok := c[serial]; ok {
-			return true
+			return nil
 		}
 		if _, ok := c["*"]; ok {
-			return true
+			return nil
 		}
+		return &InvalidSerialError{err: fmt.Sprintf("unknown serial: %s", serial)}
 	}
-	return false
+	return &InvalidCertError{err: "unknown onboarding certificate"}
 }
 
 // getOnboardSerialDevice see if a particular certificate+serial combinaton has been used and get its device uuid

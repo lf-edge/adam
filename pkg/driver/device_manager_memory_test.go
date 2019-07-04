@@ -73,15 +73,14 @@ func TestDeviceManagerMemory(t *testing.T) {
 			certExists   bool
 			serialExists bool
 			used         bool
-			valid        bool
 			err          error
 		}{
-			{false, false, false, false, false, fmt.Errorf("invalid nil certificate")},
-			{true, false, false, false, false, nil},
-			{true, false, true, false, false, nil},
-			{true, true, false, false, false, nil},
-			{true, true, true, true, false, nil},
-			{true, true, true, false, true, nil},
+			{false, false, false, false, fmt.Errorf("invalid nil certificate")},
+			{true, false, false, false, &InvalidCertError{"unknown onboarding certificate"}},
+			{true, false, true, false, &InvalidCertError{"unknown onboarding certificate"}},
+			{true, true, false, false, &InvalidSerialError{"unknown serial"}},
+			{true, true, true, true, &UsedSerialError{"serial already used"}},
+			{true, true, true, false, nil},
 		}
 
 		for i, tt := range tests {
@@ -124,12 +123,9 @@ func TestDeviceManagerMemory(t *testing.T) {
 					serial:  serial,
 				}
 			}
-			valid, err := dm.OnboardCheck(cert, serial)
-			switch {
-			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
+			err := dm.OnboardCheck(cert, serial)
+			if (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())) {
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case valid != tt.valid:
-				t.Errorf("%d: mismatched valid, actual %v, expected %v", i, valid, tt.valid)
 			}
 		}
 	})

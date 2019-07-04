@@ -21,7 +21,7 @@ type DeviceManager interface {
 	//   not to cache
 	SetCacheTimeout(int)
 	// OnboardCheck check if a certificate+serial combination are valid to use for registration. Includes checking for duplicates in devices
-	OnboardCheck(*x509.Certificate, string) (bool, error)
+	OnboardCheck(*x509.Certificate, string) error
 	// OnboardRemove remove an onboarding cert
 	OnboardRemove(string) error
 	// OnboardClear remove all onboarding certs
@@ -62,5 +62,32 @@ type NotFoundError struct {
 }
 
 func (n *NotFoundError) Error() string {
+	return n.err
+}
+
+// InvalidCertError error representing that a certificate is not valid
+type InvalidCertError struct {
+	err string
+}
+
+func (n *InvalidCertError) Error() string {
+	return n.err
+}
+
+// InvalidSerialError error representing that a serial is not valid
+type InvalidSerialError struct {
+	err string
+}
+
+func (n *InvalidSerialError) Error() string {
+	return n.err
+}
+
+// UsedSerialError error representing that a serial was used already
+type UsedSerialError struct {
+	err string
+}
+
+func (n *UsedSerialError) Error() string {
 	return n.err
 }
