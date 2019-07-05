@@ -1,3 +1,6 @@
+# Copyright (c) 2019 Zededa, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
 .PHONY: all build build-docker build-local fmt clean lint test vet image
 
 IMG ?= zededa/adam
