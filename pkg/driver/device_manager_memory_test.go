@@ -14,7 +14,7 @@ import (
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
-	ax "github.com/zededa/adam/pkg/x509"
+	ax "github.com/lf-edge/adam/pkg/x509"
 )
 
 func TestDeviceManagerMemory(t *testing.T) {

@@ -1,4 +1,4 @@
-module github.com/zededa/adam
+module github.com/lf-edge/adam
 
 go 1.12
 

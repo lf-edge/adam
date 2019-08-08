@@ -12,7 +12,7 @@ import (
 	"os"
 
 	"github.com/gorilla/mux"
-	"github.com/zededa/adam/pkg/driver"
+	"github.com/lf-edge/adam/pkg/driver"
 )
 
 // Server an adam server

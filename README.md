@@ -19,10 +19,10 @@ which will run Adam, listening on the default port of `8080` (it will tell you w
 If you prefer to run Adam as a docker container:
 
 ```
-docker run zededa/adam server
+docker run lfedge/adam server
 ```
 
-You can add any of the options that would exist with a local Adam installation, including help: `docker run zededa/adam server --help`.
+You can add any of the options that would exist with a local Adam installation, including help: `docker run lfedge/adam server --help`.
 
 Note that when running in a docker container, directories are ephemeral. If you want to keep the directories, you should bind-mount them into your container. To make things easier, this repository includes a sample `docker-compose.yml` which runs adam, maps port `8080` in the container to `8080` on your host, and mounts the current directory's `./run/adam/` to the default `/adam/run/adam/` in the container.
 

@@ -19,7 +19,7 @@ import (
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/satori/go.uuid"
-	ax "github.com/zededa/adam/pkg/x509"
+	ax "github.com/lf-edge/adam/pkg/x509"
 )
 
 func TestDeviceManagerFile(t *testing.T) {

@@ -15,7 +15,7 @@ import (
 	"path"
 
 	"github.com/spf13/cobra"
-	"github.com/zededa/adam/pkg/server"
+	"github.com/lf-edge/adam/pkg/server"
 )
 
 var (

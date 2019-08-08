@@ -14,8 +14,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/satori/go.uuid"
-	"github.com/zededa/adam/pkg/driver"
-	ax "github.com/zededa/adam/pkg/x509"
+	"github.com/lf-edge/adam/pkg/driver"
+	ax "github.com/lf-edge/adam/pkg/x509"
 )
 
 type adminHandler struct {

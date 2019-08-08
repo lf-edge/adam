@@ -16,7 +16,7 @@ import (
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
-	"github.com/zededa/adam/pkg/driver"
+	"github.com/lf-edge/adam/pkg/driver"
 )
 
 type apiHandler struct {

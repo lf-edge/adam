@@ -4,7 +4,7 @@
 package main
 
 import (
-	"github.com/zededa/adam/cmd"
+	"github.com/lf-edge/adam/cmd"
 )
 
 func main() {

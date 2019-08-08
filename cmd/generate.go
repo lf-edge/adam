@@ -10,7 +10,7 @@ import (
 	"path"
 
 	"github.com/spf13/cobra"
-	"github.com/zededa/adam/pkg/x509"
+	"github.com/lf-edge/adam/pkg/x509"
 )
 
 const (
