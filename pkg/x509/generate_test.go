@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"crypto/x509"
-	ax "github.com/zededa/adam/pkg/x509"
+	ax "github.com/lf-edge/adam/pkg/x509"
 )
 
 func TestGenerate(t *testing.T) {

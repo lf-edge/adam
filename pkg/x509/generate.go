@@ -38,7 +38,7 @@ func Generate(cn, hosts string) ([]byte, *rsa.PrivateKey, error) {
 	notAfter := notBefore.Add(oneYear)
 
 	subject := pkix.Name{
-		Organization: []string{"Zededa"},
+		Organization: []string{"LFEdge"},
 	}
 	if cn != "" {
 		subject.CommonName = cn

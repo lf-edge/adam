@@ -5,7 +5,7 @@ version: '3'
 services:
   adam:
     build: .
-    image: zededa/adam
+    image: lfedge/adam
     ports:
       - "8080:8080"
     volumes:

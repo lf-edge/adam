@@ -3,7 +3,7 @@
 
 .PHONY: all build build-docker build-local fmt clean lint test vet image
 
-IMG ?= zededa/adam
+IMG ?= lfedge/adam
 HASH ?= $(shell git show --format=%T -s)
 GOVER ?= 1.12.4-alpine3.9
 
