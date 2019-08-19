@@ -25,5 +25,6 @@ RUN go build -o /adam/bin/adam main.go
 FROM scratch
 
 COPY --from=build /adam/bin/adam /adam/bin/adam
+WORKDIR /adam
 ENTRYPOINT ["/adam/bin/adam"]
 

@@ -24,7 +24,29 @@ docker run lfedge/adam server
 
 You can add any of the options that would exist with a local Adam installation, including help: `docker run lfedge/adam server --help`.
 
-Note that when running in a docker container, directories are ephemeral. If you want to keep the directories, you should bind-mount them into your container. To make things easier, this repository includes a sample `docker-compose.yml` which runs adam, maps port `8080` in the container to `8080` on your host, and mounts the current directory's `./run/adam/` to the default `/adam/run/adam/` in the container.
+Note that when running in a docker container, directories are ephemeral. If you want to keep the directories, you should bind-mount them into your container.
+
+```
+docker run -v $PWD/run:/somedir/run lfedge/adam server --conf-dir /somedir/run/config --db-url /somedir/run/adam --server-cert /somedir/run/adam/server.pem --server-key /somedir/run/server-key.pem
+```
+
+The default working directory for `adam` in the container is `/adam/`, which means the following will just work:
+
+```
+docker run -v $PWD/run:/adam/run lfedge/adam server
+```
+
+Or, you can use volume containers.
+
+To make things easier, this repository includes a sample `docker-compose.yml` which runs adam, maps port `8080` in the container to `8080` on your host, and mounts the current directory's `./run/adam/` to the default `/adam/run/adam/` in the container.
+
+Finally, remember to map your ports when using a docker container:
+
+```
+docker run -v $PWD/run:/adam/run -p 8080:8080 lfedge/adam server
+```
+
+By default, `adam` listens on port `8080`, but can be configured. Run `adam server --help`.
 
 ## Building Adam
 
