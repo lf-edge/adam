@@ -19,7 +19,7 @@ require (
 	github.com/kisielk/errcheck v1.2.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pty v1.1.5 // indirect
-	github.com/lf-edge/eve/api/go v0.0.0-20200116004546-36f50ae748f7 // indirect
+	github.com/lf-edge/eve/api/go v0.0.0-20200207023706-6117850e11f0 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/mattn/go-colorable v0.1.2 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect
