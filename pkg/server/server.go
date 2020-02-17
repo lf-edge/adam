@@ -57,7 +57,7 @@ func (s *Server) Start() {
 	ed.Use(logRequest)
 	ed.HandleFunc("/register", api.register).Methods("POST")
 	ed.HandleFunc("/ping", api.ping).Methods("GET")
-	ed.HandleFunc("/config", api.config).Methods("GET")
+	ed.HandleFunc("/config", api.config).Methods("GET", "POST")
 	ed.HandleFunc("/info", api.info).Methods("POST")
 	ed.HandleFunc("/metrics", api.metrics).Methods("POST")
 	ed.HandleFunc("/logs", api.logs).Methods("POST")
