@@ -4,15 +4,19 @@
 package server
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/eve/api/go/info"
+	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
@@ -113,16 +117,25 @@ func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	config, err := h.manager.GetConfig(*u)
+	msg, err := h.manager.GetConfig(*u)
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	out, err := proto.Marshal(config)
+	configResp := &config.ConfigResponse{}
+	blob, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("error marshaling config to json: %v", err)
+	}
+	checksum := fmt.Sprintf("%X", sha256.Sum256(blob))
+	configResp.Config = msg
+	configResp.ConfigHash = checksum
+	out, err := proto.Marshal(configResp)
 	if err != nil {
 		log.Printf("error converting config to byte message: %v", err)
 	}
+
 	w.Header().Add(contentType, mimeProto)
 	w.WriteHeader(http.StatusOK)
 	w.Write(out)
