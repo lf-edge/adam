@@ -300,11 +300,8 @@ func (d *DeviceManagerMemory) GetConfigResponse(u uuid.UUID) (*config.ConfigResp
 
 	response := &config.ConfigResponse{}
 
-	cfgOsList := dev.config.GetBase()
 	h := sha256.New()
-	for _, os := range cfgOsList {
-		computeConfigElementSha(h, os)
-	}
+	computeConfigElementSha(h, dev.config)
 	configHash := h.Sum(nil)
 
 	response.Config = dev.config

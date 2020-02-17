@@ -569,11 +569,8 @@ func (d *DeviceManagerFile) GetConfigResponse(u uuid.UUID) (*config.ConfigRespon
 
 	response := &config.ConfigResponse{}
 
-	cfgOsList := msg.GetBase()
 	h := sha256.New()
-	for _, os := range cfgOsList {
-		computeConfigElementSha(h, os)
-	}
+	computeConfigElementSha(h, msg)
 	configHash := h.Sum(nil)
 
 	response.Config = msg

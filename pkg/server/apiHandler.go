@@ -7,16 +7,15 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"io/ioutil"
-	"log"
-	"net/http"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
+	"io/ioutil"
+	"log"
+	"net/http"
 )
 
 type apiHandler struct {
@@ -118,6 +117,16 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error getting device config: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
+	}
+	configRequest, err := getClientConfigRequest(r)
+	if err != nil {
+		log.Printf("error getting config request: %v", err)
+	} else {
+		log.Printf("ConfigRequest hash: %s", configRequest.ConfigHash)
+		/*if strings.Compare(configRequest.ConfigHash, config.ConfigHash) == 0{
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}*/
 	}
 	out, err := proto.Marshal(config)
 	if err != nil {
