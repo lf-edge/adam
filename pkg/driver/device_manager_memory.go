@@ -4,7 +4,9 @@
 package driver
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
@@ -286,6 +288,28 @@ func (d *DeviceManagerMemory) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, err
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
 	return dev.config, nil
+}
+
+// GetConfigResponse retrieve the config for a particular device
+func (d *DeviceManagerMemory) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+
+	response := &config.ConfigResponse{}
+
+	cfgOsList := dev.config.GetBase()
+	h := sha256.New()
+	for _, os := range cfgOsList {
+		computeConfigElementSha(h, os)
+	}
+	configHash := h.Sum(nil)
+
+	response.Config = dev.config
+	response.ConfigHash = base64.URLEncoding.EncodeToString(configHash)
+	return response, nil
 }
 
 // SetConfig set the config for a particular device

@@ -5,12 +5,23 @@ package driver
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
+	"hash"
+	"log"
 )
+
+func computeConfigElementSha(h hash.Hash, msg interface{}) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Fatalf("computeConfigItemSha: json.Marshal: %s\n", err)
+	}
+	h.Write(data)
+}
 
 // DeviceManager interface representing any kind of device manager with any kind of backing store
 type DeviceManager interface {
@@ -57,6 +68,8 @@ type DeviceManager interface {
 	GetConfig(uuid.UUID) (*config.EdgeDevConfig, error)
 	// SetConfig set the config for a given uuid
 	SetConfig(uuid.UUID, *config.EdgeDevConfig) error
+	// GetConfig get the config for a given uuid
+	GetConfigResponse(uuid.UUID) (*config.ConfigResponse, error)
 }
 
 // NotFoundError error representing that an item was not found

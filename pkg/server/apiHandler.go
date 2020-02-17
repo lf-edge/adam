@@ -12,11 +12,11 @@ import (
 	"net/http"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
-	"github.com/lf-edge/adam/pkg/driver"
 )
 
 type apiHandler struct {
@@ -97,6 +97,35 @@ func (h *apiHandler) ping(w http.ResponseWriter, r *http.Request) {
 	}
 	// now just return a 200
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
+	// only uses the device cert
+	cert := getClientCert(r)
+	u, err := h.manager.DeviceCheckCert(cert)
+	if err != nil {
+		log.Printf("error checking device cert: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if u == nil {
+		log.Printf("unknown device cert")
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	config, err := h.manager.GetConfigResponse(*u)
+	if err != nil {
+		log.Printf("error getting device config: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	out, err := proto.Marshal(config)
+	if err != nil {
+		log.Printf("error converting config to byte message: %v", err)
+	}
+	w.Header().Add(contentType, mimeProto)
+	w.WriteHeader(http.StatusOK)
+	w.Write(out)
 }
 
 func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
