@@ -123,6 +123,7 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("error getting config request: %v", err)
 	} else {
+		//compare received config hash with current
 		if strings.Compare(configRequest.ConfigHash, config.ConfigHash) == 0 {
 			w.Header().Add(contentType, mimeProto)
 			w.WriteHeader(http.StatusOK)
