@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 )
 
 type apiHandler struct {
@@ -122,11 +123,11 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("error getting config request: %v", err)
 	} else {
-		log.Printf("ConfigRequest hash: %s", configRequest.ConfigHash)
-		/*if strings.Compare(configRequest.ConfigHash, config.ConfigHash) == 0{
-			w.WriteHeader(http.StatusNotModified)
+		if strings.Compare(configRequest.ConfigHash, config.ConfigHash) == 0 {
+			w.Header().Add(contentType, mimeProto)
+			w.WriteHeader(http.StatusOK)
 			return
-		}*/
+		}
 	}
 	out, err := proto.Marshal(config)
 	if err != nil {
