@@ -11,7 +11,7 @@ require (
 	github.com/cosiner/argv v0.0.1 // indirect
 	github.com/go-delve/delve v1.2.0 // indirect
 	github.com/golang/mock v1.3.1 // indirect
-	github.com/golang/protobuf v1.3.1
+	github.com/golang/protobuf v1.3.2
 	github.com/google/pprof v0.0.0-20190515194954-54271f7e092f // indirect
 	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
 	github.com/gorilla/mux v1.7.2
@@ -19,7 +19,7 @@ require (
 	github.com/kisielk/errcheck v1.2.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pty v1.1.5 // indirect
-	github.com/lf-edge/eve/api/go v0.0.0-20190524193053-fb3b2baf2971
+	github.com/lf-edge/eve/api/go v0.0.0-20200207023706-6117850e11f0 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/mattn/go-colorable v0.1.2 // indirect
 	github.com/mattn/go-runewidth v0.0.4 // indirect

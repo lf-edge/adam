@@ -80,6 +80,7 @@ github.com/golang/protobuf v0.0.0-20161109072736-4bd1920723d7/go.mod h1:6lQm79b+
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.3.1 h1:YF8+flBXS5eO826T4nzqPrxfhQThhXl0YzfuUPu4SBg=
 github.com/golang/protobuf v1.3.1/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
+github.com/golang/protobuf v1.3.2/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.0.0/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
@@ -126,6 +127,9 @@ github.com/kr/pty v1.1.5/go.mod h1:9r2w37qlBe7rQ6e1fg1S/9xpWHSnaqNdHD3WcMdbPDA=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/lf-edge/eve/api/go v0.0.0-20190524193053-fb3b2baf2971 h1:h7ScSs1vOlitgCmSB/M9H/SFG+5j6rDopc7cLib0WM0=
 github.com/lf-edge/eve/api/go v0.0.0-20190524193053-fb3b2baf2971/go.mod h1:epaZVVojW+dsGmZPSgniTZ2KlY/TLorkqo5cy41KOSE=
+github.com/lf-edge/eve/api/go v0.0.0-20200116004546-36f50ae748f7/go.mod h1:DuAv0PyTTzmd3n25iHJ/Hx2SrbON4hf3I0oXfnUH4d8=
+github.com/lf-edge/eve/api/go v0.0.0-20200207023706-6117850e11f0 h1:B3Jbt0ek0R6DCW9khuWzWs9tzH+gxduBpqvtduzyzCQ=
+github.com/lf-edge/eve/api/go v0.0.0-20200207023706-6117850e11f0/go.mod h1:DuAv0PyTTzmd3n25iHJ/Hx2SrbON4hf3I0oXfnUH4d8=
 github.com/magiconair/properties v1.8.0/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
 github.com/magiconair/properties v1.8.1/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
 github.com/mailru/easyjson v0.0.0-20160728113105-d5b7844b561a/go.mod h1:C1wdFJiN94OJF2b5HbByQZoLdCWB1Yqtg26g4irojpc=

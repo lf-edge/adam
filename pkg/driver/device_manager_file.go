@@ -4,7 +4,9 @@
 package driver
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
@@ -16,12 +18,12 @@ import (
 
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
+	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
-	ax "github.com/lf-edge/adam/pkg/x509"
 )
 
 const (
@@ -538,6 +540,43 @@ func (d *DeviceManagerFile) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error
 	}
 
 	return msg, nil
+}
+
+// GetConfigResponse retrieve the config for a particular device
+func (d *DeviceManagerFile) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
+	// hold our config
+	msg := &config.EdgeDevConfig{}
+	// read the config from disk
+	fullConfigPath := path.Join(d.getDevicePath(u), deviceConfigFilename)
+	b, err := ioutil.ReadFile(fullConfigPath)
+	switch {
+	case err != nil && os.IsNotExist(err):
+		// create the base file if it does not exist
+		msg = createBaseConfig(u)
+		err = d.writeProtobufToJSONFile(u, "", deviceConfigFilename, msg)
+		if err != nil {
+			return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
+		}
+	case err != nil:
+		return nil, fmt.Errorf("could not read config from %s: %v", fullConfigPath, err)
+	default:
+		// convert it to the message format
+		err = jsonpb.UnmarshalString(string(b), msg)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing the config to protobuf: %v", err)
+		}
+	}
+
+	response := &config.ConfigResponse{}
+
+	h := sha256.New()
+	computeConfigElementSha(h, msg)
+	configHash := h.Sum(nil)
+
+	response.Config = msg
+	response.ConfigHash = base64.URLEncoding.EncodeToString(configHash)
+
+	return response, nil
 }
 
 // SetConfig set the config for a particular device

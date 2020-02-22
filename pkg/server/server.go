@@ -7,6 +7,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/golang/protobuf/proto"
+	"github.com/lf-edge/eve/api/go/config"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -58,6 +61,7 @@ func (s *Server) Start() {
 	ed.HandleFunc("/register", api.register).Methods("POST")
 	ed.HandleFunc("/ping", api.ping).Methods("GET")
 	ed.HandleFunc("/config", api.config).Methods("GET")
+	ed.HandleFunc("/config", api.configPost).Methods("POST")
 	ed.HandleFunc("/info", api.info).Methods("POST")
 	ed.HandleFunc("/metrics", api.metrics).Methods("POST")
 	ed.HandleFunc("/logs", api.logs).Methods("POST")
@@ -130,6 +134,22 @@ func logRequest(next http.Handler) http.Handler {
 // retrieve the client cert
 func getClientCert(r *http.Request) *x509.Certificate {
 	return r.TLS.PeerCertificates[0]
+}
+
+// retrieve the config request
+func getClientConfigRequest(r *http.Request) (*config.ConfigRequest, error) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Body read failed: %v", err)
+		return nil, err
+	}
+	configRequest := &config.ConfigRequest{}
+	err = proto.Unmarshal(body, configRequest)
+	if err != nil {
+		log.Printf("Unmarshalling failed: %v", err)
+		return nil, err
+	}
+	return configRequest, nil
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
