@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"regexp"
@@ -463,7 +464,13 @@ func (d *DeviceManagerFile) WriteInfo(m *info.ZInfoMsg) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevId)
 	}
-	err = d.writeProtobufToJSONFile(u, infoDir, fmt.Sprintf("%d", m.AtTimeStamp.Seconds), m)
+	var fileToSave = fmt.Sprintf("%d:%09d", time.Now().Unix(), time.Now().Nanosecond())
+	if m.AtTimeStamp != nil {
+		fileToSave = fmt.Sprintf("%d:%09d", m.AtTimeStamp.Seconds, m.AtTimeStamp.Nanos)
+	} else {
+		log.Printf("Failed to parse m.AtTimeStamp, use time.Now()")
+	}
+	err = d.writeProtobufToJSONFile(u, infoDir, fileToSave, m)
 	if err != nil {
 		return fmt.Errorf("failed to write info to file: %v", err)
 	}
@@ -485,7 +492,7 @@ func (d *DeviceManagerFile) WriteLogs(m *logs.LogBundle) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
 	}
-	err = d.writeProtobufToJSONFile(u, logDir, fmt.Sprintf("%d", m.Timestamp.Seconds), m)
+	err = d.writeProtobufToJSONFile(u, logDir, fmt.Sprintf("%d:%09d", m.Timestamp.Seconds, m.Timestamp.Nanos), m)
 	if err != nil {
 		return fmt.Errorf("failed to write logs to file: %v", err)
 	}
@@ -507,7 +514,7 @@ func (d *DeviceManagerFile) WriteMetrics(m *metrics.ZMetricMsg) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
 	}
-	err = d.writeProtobufToJSONFile(u, metricsDir, fmt.Sprintf("%d", m.AtTimeStamp.Seconds), m)
+	err = d.writeProtobufToJSONFile(u, metricsDir, fmt.Sprintf("%d:%09d", m.AtTimeStamp.Seconds, m.AtTimeStamp.Nanos), m)
 	if err != nil {
 		return fmt.Errorf("failed to write metrics to file: %v", err)
 	}
