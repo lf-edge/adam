@@ -86,6 +86,11 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+func (h *apiHandler) probe(w http.ResponseWriter, r *http.Request) {
+	log.Printf("%s requested probe", r.RemoteAddr)
+	w.WriteHeader(http.StatusOK)
+}
+
 func (h *apiHandler) ping(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)

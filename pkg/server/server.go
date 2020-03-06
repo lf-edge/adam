@@ -55,6 +55,8 @@ func (s *Server) Start() {
 		manager: s.DeviceManager,
 	}
 
+	router.HandleFunc("/", api.probe).Methods("GET")
+
 	ed := router.PathPrefix("/api/v1/edgedevice").Subrouter()
 	ed.Use(ensureMTLS)
 	ed.Use(logRequest)
