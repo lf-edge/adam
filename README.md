@@ -48,6 +48,18 @@ docker run -v $PWD/run:/adam/run -p 8080:8080 lfedge/adam server
 
 By default, `adam` listens on port `8080`, but can be configured. Run `adam server --help`.
 
+Finally, you can embed Adam container into an EVE root filesystem creating an EVE instance that can be controlled externally by clients talking to Adam and Adam relaying it to EVE. This comes very handy in testing and any other situation where turning EVE's configuration pull model into a push one makes sense. Note that this deployment mode forever commits a single Adam instance to a single EVE instance and all the communication between EVE and Adam happen via localhost on the running EVE edge node. Adam container has a script [eve-embedded.sh](scripts/eve-embedded.sh) that orchestrates this bond and the Adam container can be used to build EVE image via the following stanza in EVE's image YAML file:
+
+```
+   - name: adam
+     image: lfedge/adam:latest
+     binds:
+        - /var/persist:/persist
+        - /var/config:/config
+     command: ["/bin/eve-embedded.sh"]
+     net: host
+```
+
 ## Building Adam
 
 Building Adam is straightforward:
