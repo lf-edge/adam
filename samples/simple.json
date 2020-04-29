@@ -1,0 +1,128 @@
+{
+    "manufacturer": "Linux Foundation Edge",
+    "productName": "EVE",
+    "reboot": {
+        "counter": 1000,
+        "desiredState": true
+    },
+    "configItems": [
+        {
+            "key": "timer.port.testbetterinterval",
+            "value": "600"
+        },
+	{
+	    "key": "debug.enable.ssh",
+	    "value": "EVE_SSH_KEY"
+	}
+    ],
+    "networks": [
+        {
+            "id": "2e6038c1-ece6-4ffd-b95b-a7302c219d59",
+            "type": 4,
+            "ip": {
+                "dhcp": 4,
+                "dhcpRange": {}
+            },
+            "wireless": {}
+        }
+    ],
+    "systemAdapterList": [
+        {
+            "name": "eth0",
+            "uplink": true,
+            "networkUUID": "2e6038c1-ece6-4ffd-b95b-a7302c219d59"
+        }
+    ],
+    "lispInfo": {
+        "LispMapServers": [
+            {
+                "NameOrIp": "zedcontrol.alpha.zededa.net",
+                "Credential": "zededa-lispers.net"
+            }
+        ],
+        "LispInstance": 1000,
+        "EID": "fdf5:958d:25af:1753:d1a9:28e:ea99:1ef",
+        "EIDHashLen": 120,
+        "ZedServers": [
+            {
+                "HostName": "hikey02",
+                "EID": [
+                    "fdfd:ceef:cf85:7e40:6d4f:2181:ba06:e668"
+                ]
+            },
+            {
+                "HostName": "hikey04",
+                "EID": [
+                    "fd12:df08:d686:602d:2145:f7cf:2382:1683"
+                ]
+            },
+            {
+                "HostName": "hikey05",
+                "EID": [
+                    "fd81:abc5:7d7e:bcd7:40d9:df2c:be4b:600"
+                ]
+            },
+            {
+                "HostName": "zedbobo",
+                "EID": [
+                    "fdd5:79bf:7261:d9df:aea1:c8d2:842d:b99b"
+                ]
+            },
+            {
+                "HostName": "zedcontrol",
+                "EID": [
+                    "fd45:efca:3607:4c1d:eace:a947:3464:d21e"
+                ]
+            },
+            {
+                "HostName": "zedlake",
+                "EID": [
+                    "fd45:efca:3607:4c1d:eace:a947:3464:d21e"
+                ]
+            }
+        ],
+        "EidAllocationPrefix": "/Q==",
+        "EidAllocationPrefixLen": 8
+    },
+    "deviceIoList": [
+        {
+            "ptype": 1,
+            "phylabel": "eth0",
+            "phyaddrs": {
+                "Ifname": "eth0"
+            },
+            "logicallabel": "eth0",
+            "assigngrp": "eth0",
+            "usage": 1,
+            "usagePolicy": {
+                "freeUplink": true
+            }
+        }
+    ],
+    "networkInstances": [
+        {
+            "uuidandversion": {
+                "uuid": "ee2034ba-b520-47f5-b8c6-314b80289c0a"
+            },
+            "displayname": "defaultLocal-eve",
+            "instType": 2,
+            "activate": true,
+            "port": {
+                "name": "uplink"
+            },
+            "cfg": {},
+            "ipType": 1,
+            "ip": {
+                "subnet": "10.1.0.0/16",
+                "gateway": "10.1.0.1",
+                "dns": [
+                    "10.1.0.1"
+                ],
+                "dhcpRange": {
+                    "start": "10.1.0.2",
+                    "end": "10.1.255.254"
+                }
+            }
+        }
+    ]
+}

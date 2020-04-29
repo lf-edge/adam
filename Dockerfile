@@ -22,9 +22,10 @@ ARG GOARCH=amd64
 
 RUN go build -o /adam/bin/adam main.go
 
-FROM scratch
+FROM alpine:3.11
 
-COPY --from=build /adam/bin/adam /adam/bin/adam
+COPY scripts /bin
+COPY samples /adam
+COPY --from=build /adam/bin/adam /bin/
 WORKDIR /adam
-ENTRYPOINT ["/adam/bin/adam"]
-
+ENTRYPOINT ["/bin/adam"]
