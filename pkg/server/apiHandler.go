@@ -7,20 +7,23 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"strings"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"strings"
 )
 
 type apiHandler struct {
-	manager driver.DeviceManager
+	manager     driver.DeviceManager
+	logChannel  chan *logs.LogBundle
+	infoChannel chan *info.ZInfoMsg
 }
 
 func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
@@ -193,6 +196,10 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	select {
+	case h.infoChannel <- msg:
+	default:
+	}
 	err = h.manager.WriteInfo(msg)
 	if err != nil {
 		log.Printf("Failed to write info message: %v", err)
@@ -254,6 +261,10 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to parse logbundle message: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
+	}
+	select {
+	case h.logChannel <- msg:
+	default:
 	}
 	err = h.manager.WriteLogs(msg)
 	if err != nil {

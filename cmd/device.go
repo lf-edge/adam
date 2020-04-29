@@ -14,13 +14,14 @@ import (
 	"os"
 	"path"
 
-	"github.com/spf13/cobra"
 	"github.com/lf-edge/adam/pkg/server"
+	"github.com/spf13/cobra"
 )
 
 var (
 	devUUID    string
 	configPath string
+	follow     bool
 )
 
 var deviceCmd = &cobra.Command{
@@ -220,6 +221,62 @@ var deviceConfigSetCmd = &cobra.Command{
 	},
 }
 
+var deviceLogsCmd = &cobra.Command{
+	Use:   "logs",
+	Short: "view logs",
+	Long:  `View logs for a specific device, either those already in storage or streaming new`,
+	Run: func(cmd *cobra.Command, args []string) {
+		u, err := resolveURL(serverURL, path.Join("/admin/device", devUUID, "logs"))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
+		req, err := http.NewRequest("GET", u, nil)
+		var client *http.Client
+		if follow {
+			req.Header.Add(server.StreamHeader, server.StreamValue)
+			client = getStreamingClient()
+		} else {
+			client = getClient()
+		}
+
+		response, err := client.Do(req)
+		if err != nil {
+			log.Fatalf("error reading URL %s: %v", u, err)
+		}
+		if _, err := io.Copy(os.Stdout, response.Body); err != nil {
+			log.Fatalf("error writing output: %v", err)
+		}
+	},
+}
+
+var deviceInfoCmd = &cobra.Command{
+	Use:   "info",
+	Short: "view info messages",
+	Long:  `View info messages for a specific device, either those already in storage or streaming new`,
+	Run: func(cmd *cobra.Command, args []string) {
+		u, err := resolveURL(serverURL, path.Join("/admin/device", devUUID, "info"))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
+		req, err := http.NewRequest("GET", u, nil)
+		var client *http.Client
+		if follow {
+			req.Header.Add(server.StreamHeader, server.StreamValue)
+			client = getStreamingClient()
+		} else {
+			client = getClient()
+		}
+
+		response, err := client.Do(req)
+		if err != nil {
+			log.Fatalf("error reading URL %s: %v", u, err)
+		}
+		if _, err := io.Copy(os.Stdout, response.Body); err != nil {
+			log.Fatalf("error writing output: %v", err)
+		}
+	},
+}
+
 func deviceInit() {
 	// deviceList
 	deviceCmd.AddCommand(deviceListCmd)
@@ -247,4 +304,14 @@ func deviceInit() {
 	deviceConfigCmd.AddCommand(deviceConfigSetCmd)
 	deviceConfigSetCmd.Flags().StringVar(&configPath, "config-path", "", "path to config file to set; use '-' to read from stdin")
 	deviceConfigSetCmd.MarkFlagRequired("config-path")
+	// deviceLogsCmd
+	deviceCmd.AddCommand(deviceLogsCmd)
+	deviceLogsCmd.PersistentFlags().StringVar(&devUUID, "uuid", "", "uuid of device to get logs")
+	deviceLogsCmd.MarkFlagRequired("uuid")
+	deviceLogsCmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow new logs instead of viewing existing logs")
+	// deviceInfoCmd
+	deviceCmd.AddCommand(deviceInfoCmd)
+	deviceInfoCmd.Flags().StringVar(&devUUID, "uuid", "", "uuid of device to get info messages")
+	deviceInfoCmd.MarkFlagRequired("uuid")
+	deviceInfoCmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow new info messages instead of viewing existing logs")
 }

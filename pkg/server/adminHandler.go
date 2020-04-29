@@ -4,22 +4,34 @@
 package server
 
 import (
+	"bytes"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strings"
 
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/gorilla/mux"
-	"github.com/lf-edge/eve/api/go/config"
-	"github.com/satori/go.uuid"
 	"github.com/lf-edge/adam/pkg/driver"
 	ax "github.com/lf-edge/adam/pkg/x509"
+	"github.com/lf-edge/eve/api/go/config"
+	"github.com/lf-edge/eve/api/go/info"
+	"github.com/lf-edge/eve/api/go/logs"
+	uuid "github.com/satori/go.uuid"
+)
+
+const (
+	StreamHeader = "X-Stream"
+	StreamValue  = "true"
 )
 
 type adminHandler struct {
-	manager driver.DeviceManager
+	manager     driver.DeviceManager
+	logChannel  chan *logs.LogBundle
+	infoChannel chan *info.ZInfoMsg
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
@@ -276,5 +288,133 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+func (h *adminHandler) deviceLogsGet(w http.ResponseWriter, r *http.Request) {
+	u := mux.Vars(r)["uuid"]
+	uid, err := uuid.FromString(u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	watch := r.Header.Get(StreamHeader)
+	if watch == StreamValue {
+		// get a close notifier so we can catch it and close ourselves
+		cn, ok := w.(http.CloseNotifier)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		// get a flusher to send out data when streaming
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-type", "application/json")
+		flusher.Flush()
+
+		for {
+			select {
+			case m := <-h.logChannel:
+				buf := bytes.NewBuffer(make([]byte, 0))
+
+				mler := jsonpb.Marshaler{}
+				err = mler.Marshal(buf, m)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("error converting message to bytes: %v", err), http.StatusInternalServerError)
+				}
+				w.Write(buf.Bytes())
+				flusher.Flush()
+			case <-cn.CloseNotify():
+				// client stopped listening
+				return
+			}
+		}
+	} else {
+		reader, err := h.manager.GetLogsReader(uid)
+		_, isNotFound := err.(*driver.NotFoundError)
+		switch {
+		case err != nil && isNotFound:
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		case err != nil:
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		case reader == nil:
+			http.Error(w, "found device information, but logs were empty", http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-type", "application/json")
+			_, err = io.Copy(w, reader)
+			if err != nil && err != io.EOF {
+				http.Error(w, fmt.Sprintf("error reading logs: %v", err), http.StatusInternalServerError)
+			}
+		}
+	}
+}
+
+func (h *adminHandler) deviceInfoGet(w http.ResponseWriter, r *http.Request) {
+	u := mux.Vars(r)["uuid"]
+	uid, err := uuid.FromString(u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	watch := r.Header.Get(StreamHeader)
+	if watch == StreamValue {
+		// get a close notifier so we can catch it and close ourselves
+		cn, ok := w.(http.CloseNotifier)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		// get a flusher to send out data when streaming
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-type", "application/json")
+		flusher.Flush()
+
+		for {
+			select {
+			case m := <-h.infoChannel:
+				buf := bytes.NewBuffer(make([]byte, 0))
+
+				mler := jsonpb.Marshaler{}
+				err = mler.Marshal(buf, m)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("error converting message to bytes: %v", err), http.StatusInternalServerError)
+				}
+				w.Write(buf.Bytes())
+				flusher.Flush()
+			case <-cn.CloseNotify():
+				// client stopped listening
+				return
+			}
+		}
+	} else {
+		reader, err := h.manager.GetInfoReader(uid)
+		_, isNotFound := err.(*driver.NotFoundError)
+		switch {
+		case err != nil && isNotFound:
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		case err != nil:
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		case reader == nil:
+			http.Error(w, "found device information, but info was empty", http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusOK)
+			w.Header().Set("Content-type", "application/json")
+			_, err = io.Copy(w, reader)
+			if err != nil && err != io.EOF {
+				http.Error(w, fmt.Sprintf("error reading info: %v", err), http.StatusInternalServerError)
+			}
+		}
 	}
 }

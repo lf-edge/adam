@@ -8,6 +8,8 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"io"
+
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
@@ -354,4 +356,30 @@ func (d *DeviceManagerMemory) getOnboardSerialDevice(cert *x509.Certificate, ser
 		}
 	}
 	return nil
+}
+
+// GetLogsReader get the logs for a given uuid
+func (d *DeviceManagerMemory) GetLogsReader(u uuid.UUID) (io.Reader, error) {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	r := &LogsReader{
+		Msgs: dev.logs,
+	}
+	return r, nil
+}
+
+// GetInfoReader get the info for a given uuid
+func (d *DeviceManagerMemory) GetInfoReader(u uuid.UUID) (io.Reader, error) {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	r := &InfoReader{
+		Msgs: dev.info,
+	}
+	return r, nil
 }

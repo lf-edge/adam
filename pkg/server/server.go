@@ -7,12 +7,15 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/golang/protobuf/proto"
-	"github.com/lf-edge/eve/api/go/config"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/lf-edge/eve/api/go/config"
+	"github.com/lf-edge/eve/api/go/info"
+	"github.com/lf-edge/eve/api/go/logs"
 
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
@@ -50,9 +53,15 @@ func (s *Server) Start() {
 	router := mux.NewRouter()
 	router.NotFoundHandler = http.HandlerFunc(notFound)
 
+	// to pass logs and info around
+	logChannel := make(chan *logs.LogBundle)
+	infoChannel := make(chan *info.ZInfoMsg)
+
 	// edgedevice endpoint - fully compliant with EVE open API
 	api := &apiHandler{
-		manager: s.DeviceManager,
+		manager:     s.DeviceManager,
+		logChannel:  logChannel,
+		infoChannel: infoChannel,
 	}
 
 	router.HandleFunc("/", api.probe).Methods("GET")
@@ -70,7 +79,9 @@ func (s *Server) Start() {
 
 	// admin endpoint - custom, used to manage adam
 	admin := &adminHandler{
-		manager: s.DeviceManager,
+		manager:     s.DeviceManager,
+		logChannel:  logChannel,
+		infoChannel: infoChannel,
 	}
 
 	ad := router.PathPrefix("/admin").Subrouter()
@@ -83,6 +94,8 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device/{uuid}", admin.deviceGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/config", admin.deviceConfigGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/config", admin.deviceConfigSet).Methods("PUT")
+	ad.HandleFunc("/device/{uuid}/logs", admin.deviceLogsGet).Methods("GET")
+	ad.HandleFunc("/device/{uuid}/info", admin.deviceInfoGet).Methods("GET")
 	ad.HandleFunc("/device", admin.deviceAdd).Methods("POST")
 	ad.HandleFunc("/device", admin.deviceClear).Methods("DELETE")
 	ad.HandleFunc("/device/{uuid}", admin.deviceRemove).Methods("DELETE")
