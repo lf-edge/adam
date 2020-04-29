@@ -45,8 +45,15 @@ func adminInit() {
 	deviceInit()
 }
 
-// http client with correct config
 func getClient() *http.Client {
+	return getClientStreamingOption(false)
+}
+func getStreamingClient() *http.Client {
+	return getClientStreamingOption(true)
+}
+
+// http client with correct config
+func getClientStreamingOption(stream bool) *http.Client {
 	tlsConfig := &tls.Config{}
 	if serverCA != "" {
 		caCert, err := ioutil.ReadFile(serverCA)
@@ -60,12 +67,22 @@ func getClient() *http.Client {
 	if insecureTLS {
 		tlsConfig.InsecureSkipVerify = true
 	}
+
+	// if we are streaming, then wait forever, but at least put a timeout
+	// on the handshake and the response headers
+	timeout := time.Second * 10
+	if stream {
+		timeout = timeout * 0
+	}
 	var client = &http.Client{
-		Timeout: time.Second * 10,
+		Timeout: timeout,
 		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
+			TLSClientConfig:       tlsConfig,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
 		},
 	}
+
 	return client
 }
 func resolveURL(b, p string) (string, error) {

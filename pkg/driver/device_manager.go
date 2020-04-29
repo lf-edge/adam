@@ -6,13 +6,15 @@ package driver
 import (
 	"crypto/x509"
 	"encoding/json"
+	"hash"
+	"io"
+	"log"
+
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
-	"hash"
-	"log"
 )
 
 func computeConfigElementSha(h hash.Hash, msg interface{}) {
@@ -70,6 +72,10 @@ type DeviceManager interface {
 	SetConfig(uuid.UUID, *config.EdgeDevConfig) error
 	// GetConfig get the config for a given uuid
 	GetConfigResponse(uuid.UUID) (*config.ConfigResponse, error)
+	// GetLogsReader get the logs for a given uuid
+	GetLogsReader(u uuid.UUID) (io.Reader, error)
+	// GetInfoReader get the info for a given uuid
+	GetInfoReader(u uuid.UUID) (io.Reader, error)
 }
 
 // NotFoundError error representing that an item was not found

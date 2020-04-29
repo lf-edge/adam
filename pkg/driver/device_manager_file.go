@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -877,4 +878,30 @@ func exists(path string) (bool, error) {
 		return false, nil
 	}
 	return true, err
+}
+
+// GetLogsReader get the logs for a given uuid
+func (d *DeviceManagerFile) GetLogsReader(u uuid.UUID) (io.Reader, error) {
+	// check that the device actually exists
+	if !d.deviceExists(u) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	deviceLogsDir := path.Join(d.getDevicePath(u), logDir)
+	dr := &DirReader{
+		Path: deviceLogsDir,
+	}
+	return dr, nil
+}
+
+// GetInfoReader get the info for a given uuid
+func (d *DeviceManagerFile) GetInfoReader(u uuid.UUID) (io.Reader, error) {
+	// check that the device actually exists
+	if !d.deviceExists(u) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	deviceInfoDir := path.Join(d.getDevicePath(u), infoDir)
+	dr := &DirReader{
+		Path: deviceInfoDir,
+	}
+	return dr, nil
 }
