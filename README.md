@@ -66,14 +66,21 @@ Building Adam is straightforward:
 
 1. Clone this repo
 2. Ensure you have installed either go >= 1.11, or docker
-3. Run `make build-docker` to build in docker (or just `make build` or even `make`), or `make build-local` to build using a local installation of go
+3. Build
 
-This will build `adam` for your local operating system and architecture.
+There are several options for building:
 
-All `Makefile` commands have the option to run locally or in docker. By default, they run in docker. If you prefer to run using a locally installed go, pass `BUILD=local` to any command, e.g.
+* `make image` will run the entire build in a docker container and give you a docker image. No local binaries will be created.
+* `make build` will create the binary `bin/adam-<os>-<arch>` for your OS and architecture. You can override either by `make OS=<os>` and/or `make ARCH=<arch>`, e.g. `make OS=linux ARCH=arm64`. The build itself will happen with in a docker image or using your locally installed `go`; see below.
+* `make image-local` will take the locally built binary and create an image with it.
+
+These options allow you to do a one-step image build with no dependencies (`make image`), build a binary for your local usage (`make build`) using either your locally installed go or in a docker container, and make an image that uses your local binary (`make image-local`). The latter is often for quick reproducible builds.
+
+All `Makefile` commands that execute `go` have the option to run locally or in docker. By default, they run in docker. If you prefer to run using a locally installed go, pass `BUILD=local` to any command, e.g.
 
 ```
 make vet BUILD=local
+make build BUILD=local
 ```
 
 ## Server TLS

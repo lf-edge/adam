@@ -1,0 +1,7 @@
+FROM alpine:3.11
+
+COPY scripts /bin
+COPY samples /adam
+COPY ./bin/adam-linux-amd64 /bin/adam
+WORKDIR /adam
+ENTRYPOINT ["/bin/adam"]

@@ -1,11 +1,11 @@
 # Copyright (c) 2019 Zededa, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: all build build-docker build-local fmt clean lint test vet image
+.PHONY: all build build-docker fmt clean lint test vet image
 
 IMG ?= lfedge/adam
 HASH ?= $(shell git show --format=%T -s)
-GOVER ?= 1.12.4-alpine3.9
+GOVER ?= 1.14.2-alpine3.11
 
 # check if we should append a dirty tag
 DIRTY ?= $(shell git status --short)
@@ -14,6 +14,38 @@ TAG = $(HASH)-dirty
 else
 TAG = $(HASH)
 endif
+
+# BUILDARCH is the host architecture
+# ARCH is the target architecture
+# we need to keep track of them separately
+BUILDARCH ?= $(shell uname -m)
+BUILDOS ?= $(shell uname -s | tr A-Z a-z)
+
+# canonicalized names for host architecture
+ifeq ($(BUILDARCH),aarch64)
+BUILDARCH=arm64
+endif
+ifeq ($(BUILDARCH),x86_64)
+BUILDARCH=amd64
+endif
+
+# unless otherwise set, I am building for my own architecture, i.e. not cross-compiling
+# and for my OS
+ARCH ?= $(BUILDARCH)
+OS ?= $(BUILDOS)
+
+# canonicalized names for target architecture
+ifeq ($(ARCH),aarch64)
+        override ARCH=arm64
+endif
+ifeq ($(ARCH),x86_64)
+    override ARCH=amd64
+endif
+
+BINDIR := bin
+BIN := adam
+LOCALBIN := $(BINDIR)/$(BIN)-$(OS)-$(ARCH)
+LOCALLINK := $(BINDIR)/$(BIN)
 
 GOENV ?= GO111MODULE=on CGO_ENABLED=0
 GO ?= 
@@ -25,21 +57,23 @@ GO_FILES := $(shell find . -type f -name '*.go')
 
 all: build
 
-bin:
-	mkdir -p bin
+$(BINDIR):
+	mkdir -p $@
 
-build:
-ifneq ($(BUILD),local)
-	$(MAKE) build-docker
-else
-	$(MAKE) build-local
-endif
+build: bin $(LOCALBIN) $(LOCALLINK)
+$(LOCALBIN):
+	$(GO) go build -o $@ main.go
 
-build-local: bin
-	$(GO) go build -o bin/adam main.go
+$(LOCALLINK):
+	@if [ "$(OS)" = "$(BUILDOS)" -a "$(ARCH)" = "$(BUILDARCH)" -a ! -L "$@" -a ! -e "$@" ]; then ln -s $(notdir $(LOCALBIN)) $@; fi
 
 build-docker: 
 	docker build -t $(IMG) .
+
+build-docker-local: build
+	docker build -t $(IMG) -f Dockerfile.local .
+
+image-local: build-docker-local
 
 image: build-docker
 
