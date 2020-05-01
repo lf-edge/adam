@@ -327,7 +327,7 @@ func (h *adminHandler) deviceLogsGet(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					http.Error(w, fmt.Sprintf("error converting message to bytes: %v", err), http.StatusInternalServerError)
 				}
-				w.Write(buf.Bytes())
+				w.Write(append(buf.Bytes(), 0x0a))
 				flusher.Flush()
 			case <-cn.CloseNotify():
 				// client stopped listening
@@ -391,7 +391,7 @@ func (h *adminHandler) deviceInfoGet(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					http.Error(w, fmt.Sprintf("error converting message to bytes: %v", err), http.StatusInternalServerError)
 				}
-				w.Write(buf.Bytes())
+				w.Write(append(buf.Bytes(), 0x0a))
 				flusher.Flush()
 			case <-cn.CloseNotify():
 				// client stopped listening
