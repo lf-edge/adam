@@ -112,7 +112,7 @@ var onboardRemoveCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		// ensure we specified exactly one of cn or path
 		if (cn == "" && certPath == "") || (cn != "" && certPath != "") {
-			log.Fatalf("must specify exactly one of --cn or --certPath <path>")
+			log.Fatalf("must specify exactly one of --cn or --path <path>")
 		}
 		if certPath != "" {
 			cert, err := ax.ReadCert(certPath)
