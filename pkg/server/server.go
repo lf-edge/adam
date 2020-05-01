@@ -14,8 +14,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
 
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
@@ -54,8 +52,8 @@ func (s *Server) Start() {
 	router.NotFoundHandler = http.HandlerFunc(notFound)
 
 	// to pass logs and info around
-	logChannel := make(chan *logs.LogBundle)
-	infoChannel := make(chan *info.ZInfoMsg)
+	logChannel := make(chan proto.Message)
+	infoChannel := make(chan proto.Message)
 
 	// edgedevice endpoint - fully compliant with EVE open API
 	api := &apiHandler{
