@@ -22,8 +22,8 @@ import (
 
 type apiHandler struct {
 	manager     driver.DeviceManager
-	logChannel  chan *logs.LogBundle
-	infoChannel chan *info.ZInfoMsg
+	logChannel  chan proto.Message
+	infoChannel chan proto.Message
 }
 
 func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
