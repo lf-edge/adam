@@ -889,6 +889,7 @@ func (d *DeviceManagerFile) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 	deviceLogsDir := path.Join(d.getDevicePath(u), logDir)
 	dr := &DirReader{
 		Path: deviceLogsDir,
+		LineFeed: true,
 	}
 	return dr, nil
 }
@@ -902,6 +903,7 @@ func (d *DeviceManagerFile) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	deviceInfoDir := path.Join(d.getDevicePath(u), infoDir)
 	dr := &DirReader{
 		Path: deviceInfoDir,
+		LineFeed: true,
 	}
 	return dr, nil
 }

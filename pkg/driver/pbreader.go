@@ -45,7 +45,8 @@ func (r *LogsReader) Read(p []byte) (n int, err error) {
 		if err != nil {
 			return 0, fmt.Errorf("failed to marshal protobuf message into json: %v", err)
 		}
-		r.msgCache = buf.Bytes()
+		// include the linefeed
+		r.msgCache = append(buf.Bytes(), 0x0a)
 	}
 	// read the data from the msg cache
 	copied := copy(p, r.msgCache)
@@ -94,7 +95,8 @@ func (r *InfoReader) Read(p []byte) (n int, err error) {
 		if err != nil {
 			return 0, fmt.Errorf("failed to marshal protobuf message into json: %v", err)
 		}
-		r.msgCache = buf.Bytes()
+		// include a linefeed after each one
+		r.msgCache = append(buf.Bytes(), 0x0a)
 	}
 	// read the data from the msg cache
 	copied := copy(p, r.msgCache)

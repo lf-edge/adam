@@ -11,11 +11,15 @@ import (
 // DirReader reads the contents of all files in a directory, sorted by whatever the OS does
 type DirReader struct {
 	// Path path to the directory to read content from
-	Path        string
+	Path string
+	// LineFeed whether to put a linefeed "\n" (0x0a) after each file
+	LineFeed    bool
 	dir         *os.File
 	fileCache   []os.FileInfo
 	currentFile *os.File
 	complete    bool
+	// if set to true, next Read should return a linefeed character
+	nextLF bool
 }
 
 // Read the next chunk of bytes
@@ -33,6 +37,16 @@ func (d *DirReader) Read(p []byte) (n int, err error) {
 	// if we already read everything, we are done
 	if d.complete {
 		return 0, io.EOF
+	}
+	// cannot write if no space
+	if len(p) == 0 {
+		return 0, errors.New("must have at least one byte in slice to write")
+	}
+	// do we send a linefeed?
+	if d.nextLF {
+		p[0] = 0x0a
+		d.nextLF = false
+		return 1, nil
 	}
 	// if we have no open file, and are not complete, then we start from scratch
 	if d.currentFile == nil {
@@ -57,6 +71,10 @@ func (d *DirReader) Read(p []byte) (n int, err error) {
 	// - we had no error, so keep going
 	if err := d.nextFile(); err != nil {
 		return 0, err
+	}
+	// indicate that the next read should include a linefeed
+	if d.LineFeed {
+		d.nextLF = true
 	}
 
 	return read, nil
