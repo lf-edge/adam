@@ -4,12 +4,19 @@
 package cmd
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var rootCmd = &cobra.Command{Use: "adam"}
 
 func init() {
+	viper.SetEnvPrefix("adam")
+	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	viper.AutomaticEnv()
+
 	rootCmd.AddCommand(serverCmd)
 	serverInit()
 	rootCmd.AddCommand(generateCmd)

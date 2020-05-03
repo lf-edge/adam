@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -29,14 +30,26 @@ var (
 var adminCmd = &cobra.Command{
 	Use:   "admin",
 	Short: "Manage a running Adam server",
-	Long:  `Managed devices and onboard configuration in a running Adam server over https.`,
+	Long: `Managed devices and onboard configuration in a running Adam server over https. Common configuration
+	options for all admin commands are listed below, as well as their defaults. These also can be set
+	via environment variables. Note that environment variables always override defaults, and that CLI flags
+	always override both defaults and environment variables.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		serverURL = viper.GetString("server")
+		serverCA = viper.GetString("server-ca")
+		insecureTLS = viper.GetBool("insecure")
+	},
 }
 
 func adminInit() {
-	adminCmd.PersistentFlags().StringVar(&serverURL, "server", defaultServerURL, "full URL to running Adam server")
+	adminCmd.PersistentFlags().String("server", defaultServerURL, "full URL to running Adam server, can also be set via env var ADAM_SERVER")
 	adminCmd.MarkFlagRequired("server")
-	adminCmd.PersistentFlags().StringVar(&serverCA, "server-ca", path.Join(defaultDatabaseURL, serverCertFilename), "path to CA certificate for trusting server; set to blank if using a certificate signed by a CA already on your system")
-	adminCmd.PersistentFlags().BoolVar(&insecureTLS, "insecure", false, "accept invalid, expired or mismatched hostname errors for adam server certificate")
+	viper.BindPFlag("server", adminCmd.PersistentFlags().Lookup("server"))
+	adminCmd.PersistentFlags().String("server-ca", path.Join(defaultDatabaseURL, serverCertFilename), "path to CA certificate for trusting server; set to blank if using a certificate signed by a CA already on your system; can also be set via env var ADAM_SERVER_CA")
+	viper.BindPFlag("server-ca", adminCmd.PersistentFlags().Lookup("server-ca"))
+	adminCmd.PersistentFlags().Bool("insecure", false, "accept invalid, expired or mismatched hostname errors for adam server certificate, can also be set via env var ADAM_INSECURE")
+	viper.BindPFlag("insecure", adminCmd.PersistentFlags().Lookup("insecure"))
+
 	// onboard
 	adminCmd.AddCommand(onboardCmd)
 	onboardInit()
