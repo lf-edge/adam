@@ -25,3 +25,35 @@ The following are the admin endpoints:
 * `POST /device` - create a new device
 * `DELETE /device` - delete all devices
 * `DELETE /device/{uuid}` - delete one specific device
+
+## Adam Admin
+
+The `adam admin` command allows you to speak directly to a running `adam` device using the CLI.
+It has several subcommands for managing onboarding certificates, devices, etc. Run `adam admin --help`
+to see your options.
+
+There are several options for all `adam admin` commands, primarily:
+
+* the URL to the adam server to use
+* the path to the CA certificate for validating the adam server's TLS certificate
+* whether or not to trust expired or unsigned certificates
+
+Run `adam admin --help` to see the options. All three of these also can read environment variables,
+to avoid your needing to specify common options every time. They also have reasonable defaults.
+`adam admin --help` will tell you the options, the environment variables and the defaults.
+
+In all cases, CLI flag overrides environment variable overrides the default.
+
+For example, the default server URL is `https://localhost:8080`. If nothing else is specified,
+it will use that URL. If you specify `ADAM_SERVER=https://lfedge.org:5000`, it will use that,
+as environment variable overrides the default.
+
+Similarly, if you specify `adam admin --server=https://foo.com:4000`, it will use that,
+as CLI flag overrides the default. Finally, if you specify:
+
+```console
+ADAM_SERVER=https://lfedge.org:5000 adam admin --server=https://foo.com:4000
+```
+
+It will use the CLI flag option, `https://foo.com:4000`, as CLI flag overrides environment
+variable, which overrides the default.
