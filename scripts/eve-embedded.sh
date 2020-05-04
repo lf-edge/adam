@@ -41,10 +41,8 @@ bootstrap() {
 
 # if this is the first run on this /persist -- generate everything
 if [ ! -d $DB ]; then
-   adam generate --db-url $DB --server --hosts 127.0.0.1,localhost --cn localhost.localdomain
-   cp $DB/server.pem /config/root-certificate.pem
-   echo $SERVER > /config/server
+   adam generate --db-url $DB --server --hosts 127.0.0.1,localhost --cn localhost
    bootstrap &
 fi
 
-adam server --port $PORT --db-url $DB --conf-dir $DB/eve-conf --server-cert $DB/server.pem --server-key $DB/server-key.pem
+adam server --port $PORT --db-url $DB --conf-dir /config --server-cert $DB/server.pem --server-key $DB/server-key.pem

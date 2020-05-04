@@ -79,6 +79,21 @@ var serverCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error writing hosts file: %v", err)
 		}
+
+		rootCert, err := ioutil.ReadFile(serverCert)
+		if err != nil {
+			log.Fatalf("error reading %s file: %v", serverCert, err)
+		}
+		err = ioutil.WriteFile(path.Join(configDir, "root-certificate.pem"), rootCert, 0644)
+		if err != nil {
+			log.Fatalf("error writing root-certificate.pem file: %v", err)
+		}
+
+		// FIXME: this is going away as part of fixing https://github.com/lf-edge/adam/issues/16
+		err = ioutil.WriteFile(path.Join(configDir, "Force-API-V1"), []byte{}, 0644)
+		if err != nil {
+			log.Fatalf("error writing Force-API-V1 file: %v", err)
+		}
 		log.Printf("EVE-compatible configuration directory output to %s", configDir)
 
 		s := &server.Server{
