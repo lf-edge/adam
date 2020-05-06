@@ -214,9 +214,13 @@ var deviceConfigSetCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("unable to create new http request: %v", err)
 		}
-		_, err = client.Do(req)
+		res, err := client.Do(req)
 		if err != nil {
 			log.Fatalf("error PUT URL %s: %v", u, err)
+		}
+		if res.StatusCode != 200 {
+			b, _ := ioutil.ReadAll(res.Body)
+			log.Fatalf("error PUT URL %s: %d %s", u, res.StatusCode, string(b))
 		}
 	},
 }
