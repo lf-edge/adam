@@ -9,8 +9,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/spf13/cobra"
 	"github.com/lf-edge/adam/pkg/x509"
+	"github.com/spf13/cobra"
 )
 
 const (

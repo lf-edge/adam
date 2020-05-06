@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
-	ax "github.com/lf-edge/adam/pkg/x509"
 )
 
 func TestDeviceManagerMemory(t *testing.T) {
