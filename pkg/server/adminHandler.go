@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -278,8 +279,58 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
 	}
-	err = h.manager.SetConfig(uid, &deviceConfig)
+	// before setting the config, set any necessary defaults
+	// check for UUID and/or version mismatch
+	var existingId *config.UUIDandVersion
+	existingConfig, err := h.manager.GetConfig(uid)
 	_, isNotFound := err.(*driver.NotFoundError)
+	switch {
+	case err != nil && isNotFound:
+		http.Error(w, fmt.Sprintf("device not found %s", u), http.StatusNotFound)
+		return
+	case err != nil:
+		http.Error(w, fmt.Sprintf("error retrieving existing config for device %s: %v", u, err), http.StatusBadRequest)
+		return
+	case existingConfig == nil:
+		http.Error(w, "found device information, but had no config", http.StatusInternalServerError)
+		return
+	default:
+		existingId = existingConfig.Id
+	}
+
+	// we only can bump the version if it is a valid integer
+	newVersion, versionError := strconv.Atoi(existingId.Version)
+	if versionError == nil {
+		newVersion++
+	}
+	if deviceConfig.Id == nil {
+		if versionError != nil {
+			http.Error(w, fmt.Sprintf("cannot automatically non-number bump version %s", existingId.Version), http.StatusBadRequest)
+			return
+		}
+		deviceConfig.Id = &config.UUIDandVersion{
+			Uuid:    u,
+			Version: strconv.Itoa(newVersion),
+		}
+	} else {
+		if deviceConfig.Id.Uuid == "" {
+			deviceConfig.Id.Uuid = u
+		}
+		if deviceConfig.Id.Version == "" {
+			if versionError != nil {
+				http.Error(w, fmt.Sprintf("cannot automatically non-number bump version %s", existingId.Version), http.StatusBadRequest)
+				return
+			}
+			deviceConfig.Id.Version = strconv.Itoa(newVersion)
+		}
+		if deviceConfig.Id.Uuid != u {
+			http.Error(w, fmt.Sprintf("mismatched UUID, setting %s for device %s", deviceConfig.Id.Uuid, u), http.StatusBadRequest)
+			return
+		}
+	}
+
+	err = h.manager.SetConfig(uid, &deviceConfig)
+	_, isNotFound = err.(*driver.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)

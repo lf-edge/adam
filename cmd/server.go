@@ -11,9 +11,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/spf13/cobra"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/server"
+	"github.com/spf13/cobra"
 )
 
 const (

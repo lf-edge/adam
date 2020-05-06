@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/ptypes/timestamp"
+	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/satori/go.uuid"
-	ax "github.com/lf-edge/adam/pkg/x509"
 )
 
 func TestDeviceManagerFile(t *testing.T) {
