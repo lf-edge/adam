@@ -6,12 +6,15 @@ import (
 	"io"
 	"os"
 	"path"
+	"sort"
 )
 
-// DirReader reads the contents of all files in a directory, sorted by whatever the OS does
+// DirReader reads the contents of all files in a directory, sorted by whatever the OS does and then lexicographically
 type DirReader struct {
 	// Path path to the directory to read content from
 	Path string
+	// MaxFiles maximum files to load in cache, or 0 for the entire directory
+	MaxFiles int
 	// LineFeed whether to put a linefeed "\n" (0x0a) after each file
 	LineFeed    bool
 	dir         *os.File
@@ -91,7 +94,7 @@ func (d *DirReader) nextFile() error {
 		if len(d.fileCache) > 0 {
 			break
 		}
-		entries, err := d.dir.Readdir(10)
+		entries, err := d.dir.Readdir(d.MaxFiles)
 		// even if it is an EOF, we return it
 		if err != nil {
 			d.complete = true
@@ -109,6 +112,10 @@ func (d *DirReader) nextFile() error {
 				files = append(files, e)
 			}
 		}
+		// and sort
+		sort.Slice(files, func(i int, j int) bool {
+			return files[i].Name() < files[j].Name()
+		})
 		d.fileCache = files
 	}
 

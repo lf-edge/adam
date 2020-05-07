@@ -47,8 +47,8 @@ BIN := adam
 LOCALBIN := $(BINDIR)/$(BIN)-$(OS)-$(ARCH)
 LOCALLINK := $(BINDIR)/$(BIN)
 
-GOENV ?= GO111MODULE=on CGO_ENABLED=0
-GO ?= 
+GOENV ?= GOOS=$(OS) GOARCH=$(ARCH) GO111MODULE=on CGO_ENABLED=0
+GO ?= $(GOENV)
 ifneq ($(BUILD),local)
 GO = docker run --rm -v $(PWD):/app -w /app golang:$(GOVER) env $(GOENV)
 endif
