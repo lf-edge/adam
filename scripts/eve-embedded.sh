@@ -29,12 +29,10 @@ bootstrap() {
    # then lets see what should be our default config
    cp /config/adam.json /adam/default.json || cp /adam/simple.json /adam/default.json
    if [ $(wc -l < /config/authorized_keys) -eq 1 ]; then
-      sed -ie 's#EVE_SSH_KEY#'"$(cat /config/authorized_keys)"'#' /adam/default.json
+      sed -ie 's#@EVE_SSH_KEY@#'"$(cat /config/authorized_keys)"'#' /adam/default.json
    fi
    UUID=$($ADAM_CMD device list | head -1)
    if [ -n "$UUID" ]; then
-      # FIXME: this ugly hack is going away soon
-      sed -ie '1s#^{$#{"id":{"uuid":"'$UUID'","version":"5"},#' /adam/default.json
       $ADAM_CMD device config set --uuid $UUID --config-path /adam/default.json
    fi
 }
