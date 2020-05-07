@@ -17,11 +17,83 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+const (
+	maxLogSizeMemory    = 10 * MB
+	maxInfoSizeMemory   = 10 * MB
+	maxMetricSizeMemory = 10 * MB
+)
+
+type ByteSlice struct {
+	// we do this as a slice of byte slice, rather than a single byte slice,
+	// because we need to track breaks, so we can delete from the beginning
+	data         [][]byte
+	dataCache    []byte
+	currentRead  int
+	readComplete bool
+	maxSize      int
+	size         int
+}
+
+func (bs ByteSlice) Get(index int) ([]byte, error) {
+	if len(bs.data) < index+1 {
+		return nil, fmt.Errorf("array out of bounds: %d", index)
+	}
+	return bs.data[index], nil
+}
+func (bs ByteSlice) Read(p []byte) (int, error) {
+	if bs.readComplete {
+		return 0, io.EOF
+	}
+	// start with the current read
+	if len(bs.dataCache) == 0 {
+		if len(bs.data) == 0 || bs.currentRead >= len(bs.data) {
+			bs.readComplete = true
+			return 0, io.EOF
+		}
+		// include the linefeed
+		bs.dataCache = append(bs.data[bs.currentRead], 0x0a)
+		bs.currentRead++
+	}
+	// read the data from the msg cache
+	copied := copy(p, bs.dataCache)
+	// truncate the dataCache
+	if copied >= len(bs.dataCache) {
+		bs.dataCache = bs.dataCache[:0]
+	} else {
+		bs.dataCache = bs.dataCache[copied:]
+	}
+	// we do not worried about returning less than they requested; as long as we
+	// do not return an io.EOF, they will come back for more
+	return copied, nil
+}
+
+func (bs *ByteSlice) Write(b []byte) (int, error) {
+	// write it to the current one
+	bs.data = append(bs.data, b[:])
+	bs.size += len(b)
+	for {
+		if bs.size <= bs.maxSize {
+			break
+		}
+		if len(bs.data) == 0 {
+			break
+		}
+		bs.size -= len(bs.data[0])
+		bs.data = bs.data[1:]
+		// this will mess up the current reader, so we need to update it
+		bs.currentRead--
+	}
+	return len(b), nil
+}
+
 // DeviceManagerMemory implementation of DeviceManager with an ephemeral memory backing store
 type DeviceManagerMemory struct {
-	onboardCerts map[string]map[string]bool
-	deviceCerts  map[string]uuid.UUID
-	devices      map[uuid.UUID]deviceStorage
+	onboardCerts  map[string]map[string]bool
+	deviceCerts   map[string]uuid.UUID
+	devices       map[uuid.UUID]deviceStorage
+	maxLogSize    int
+	maxInfoSize   int
+	maxMetricSize int
 }
 
 // Name return name
@@ -34,11 +106,38 @@ func (d *DeviceManagerMemory) Database() string {
 	return "memory"
 }
 
+// MaxLogSize return the default maximum log size in bytes for this device manager
+func (d *DeviceManagerMemory) MaxLogSize() int {
+	return maxLogSizeMemory
+}
+
+// MaxInfoSize return the maximum info size in bytes for this device manager
+func (d *DeviceManagerMemory) MaxInfoSize() int {
+	return maxInfoSizeMemory
+}
+
+// MaxMetricSize return the maximum metrics size in bytes for this device manager
+func (d *DeviceManagerMemory) MaxMetricSize() int {
+	return maxMetricSizeMemory
+}
+
 // Init initialize, valid only with a blank URL
-func (d *DeviceManagerMemory) Init(s string) (bool, error) {
+func (d *DeviceManagerMemory) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
 	if s != "" {
 		return false, nil
 	}
+	if maxLogSize == 0 {
+		maxLogSize = maxLogSizeMemory
+	}
+	if maxInfoSize == 0 {
+		maxInfoSize = maxInfoSizeMemory
+	}
+	if maxMetricSize == 0 {
+		maxMetricSize = maxMetricSizeMemory
+	}
+	d.maxLogSize = maxLogSize
+	d.maxInfoSize = maxInfoSize
+	d.maxMetricSize = maxMetricSize
 	return true, nil
 }
 
@@ -194,6 +293,15 @@ func (d *DeviceManagerMemory) DeviceRegister(cert, onboard *x509.Certificate, se
 		onboard: onboard,
 		serial:  serial,
 		config:  createBaseConfig(unew),
+		logs: &ByteSlice{
+			maxSize: d.maxLogSize,
+		},
+		info: &ByteSlice{
+			maxSize: d.maxInfoSize,
+		},
+		metrics: &ByteSlice{
+			maxSize: d.maxMetricSize,
+		},
 	}
 	return &unew, nil
 }
@@ -233,7 +341,7 @@ func (d *DeviceManagerMemory) WriteInfo(m *info.ZInfoMsg) error {
 		return fmt.Errorf("unregistered device UUID %s", m.DevId)
 	}
 	// append the messages
-	dev.info = append(dev.info, m)
+	dev.addInfo(m)
 	d.devices[u] = dev
 	return nil
 }
@@ -255,7 +363,8 @@ func (d *DeviceManagerMemory) WriteLogs(m *logs.LogBundle) error {
 		return fmt.Errorf("unregistered device UUID %s", m.DevID)
 	}
 	// append the messages
-	dev.logs = append(dev.logs, m)
+	// each slice in dev.logs is allowed up to `memoryLogSlicePart` of the total maxSize
+	dev.addLog(m)
 	d.devices[u] = dev
 	return nil
 }
@@ -277,7 +386,7 @@ func (d *DeviceManagerMemory) WriteMetrics(m *metrics.ZMetricMsg) error {
 		return fmt.Errorf("unregistered device UUID %s", m.DevID)
 	}
 	// append the messages
-	dev.metrics = append(dev.metrics, m)
+	dev.addMetrics(m)
 	d.devices[u] = dev
 	return nil
 }
@@ -365,10 +474,7 @@ func (d *DeviceManagerMemory) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	r := &LogsReader{
-		Msgs: dev.logs,
-	}
-	return r, nil
+	return dev.logs, nil
 }
 
 // GetInfoReader get the info for a given uuid
@@ -378,8 +484,5 @@ func (d *DeviceManagerMemory) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	r := &InfoReader{
-		Msgs: dev.info,
-	}
-	return r, nil
+	return dev.info, nil
 }

@@ -7,14 +7,15 @@ import (
 	"bytes"
 	"crypto/x509"
 	"fmt"
-	"github.com/satori/go.uuid"
 	"strings"
 	"testing"
 
+	"github.com/golang/protobuf/jsonpb"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
+	uuid "github.com/satori/go.uuid"
 )
 
 func TestDeviceManagerMemory(t *testing.T) {
@@ -423,14 +424,37 @@ func TestDeviceManagerMemory(t *testing.T) {
 			// fresh each time
 			d.devices = map[uuid.UUID]deviceStorage{}
 			if tt.deviceExists {
-				d.devices[u] = deviceStorage{}
+				d.devices[u] = deviceStorage{
+					info: &ByteSlice{
+						maxSize: 500000,
+					},
+				}
 			}
 			err := d.WriteInfo(msg)
+
+			// get the msg as bytes to compare
+			buf := bytes.NewBuffer([]byte{})
+			if msg != nil {
+				mler := jsonpb.Marshaler{}
+				if err := mler.Marshal(buf, msg); err != nil {
+					t.Fatalf("failed to marshal protobuf message into json: %v", err)
+				}
+			}
+
+			outBytes := buf.Bytes()
+			var (
+				actual []byte
+				geterr error
+			)
+
+			if tt.deviceExists {
+				actual, geterr = d.devices[u].info.Get(0)
+			}
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && (len(d.devices[u].info) != 1 || d.devices[u].info[0] != msg):
-				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].info, msg)
+			case err == nil && (geterr != nil || !bytes.Equal(actual, outBytes)):
+				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, actual, msg)
 			}
 		}
 	})
@@ -460,13 +484,35 @@ func TestDeviceManagerMemory(t *testing.T) {
 			// fresh each time
 			d.devices = map[uuid.UUID]deviceStorage{}
 			if tt.deviceExists {
-				d.devices[u] = deviceStorage{}
+				d.devices[u] = deviceStorage{
+					logs: &ByteSlice{
+						maxSize: 500000,
+					},
+				}
 			}
 			err := d.WriteLogs(msg)
+
+			// get the msg as bytes to compare
+			buf := bytes.NewBuffer([]byte{})
+			if msg != nil {
+				mler := jsonpb.Marshaler{}
+				if err := mler.Marshal(buf, msg); err != nil {
+					t.Fatalf("failed to marshal protobuf message into json: %v", err)
+				}
+			}
+
+			var (
+				actual []byte
+				geterr error
+			)
+			if tt.deviceExists {
+				actual, geterr = d.devices[u].logs.Get(0)
+			}
+
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && (len(d.devices[u].logs) != 1 || d.devices[u].logs[0] != msg):
+			case err == nil && (geterr != nil || !bytes.Equal(actual, buf.Bytes())):
 				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].logs, msg)
 			}
 		}
@@ -497,13 +543,34 @@ func TestDeviceManagerMemory(t *testing.T) {
 			// fresh each time
 			d.devices = map[uuid.UUID]deviceStorage{}
 			if tt.deviceExists {
-				d.devices[u] = deviceStorage{}
+				d.devices[u] = deviceStorage{
+					metrics: &ByteSlice{
+						maxSize: 500000,
+					},
+				}
 			}
 			err := d.WriteMetrics(msg)
+			// get the msg as bytes to compare
+			buf := bytes.NewBuffer([]byte{})
+			if msg != nil {
+				mler := jsonpb.Marshaler{}
+				if err := mler.Marshal(buf, msg); err != nil {
+					t.Fatalf("failed to marshal protobuf message into json: %v", err)
+				}
+			}
+
+			var (
+				actual []byte
+				geterr error
+			)
+			if tt.deviceExists {
+				actual, geterr = d.devices[u].metrics.Get(0)
+			}
+
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && (len(d.devices[u].metrics) != 1 || d.devices[u].metrics[0] != msg):
+			case err == nil && (geterr != nil || !bytes.Equal(actual, buf.Bytes())):
 				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].metrics, msg)
 			}
 		}

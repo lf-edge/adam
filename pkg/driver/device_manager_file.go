@@ -8,13 +8,14 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -42,7 +43,84 @@ const (
 	infoDir               = "info"
 	deviceDir             = "device"
 	onboardDir            = "onboard"
+	maxLogSizeFile        = 100 * MB
+	maxInfoSizeFile       = 100 * MB
+	maxMetricSizeFile     = 100 * MB
+	fileSplit             = 10
 )
+
+type ManagedFile struct {
+	dir         string
+	file        *os.File
+	maxSize     int64
+	currentSize int64
+	totalSize   int64
+	dirReader   *DirReader
+}
+
+func (m *ManagedFile) Get(index int) ([]byte, error) {
+	return nil, errors.New("unsupported")
+}
+
+func (m *ManagedFile) Write(b []byte) (int, error) {
+	if m.file == nil {
+		f, err := openTimestampFile(m.dir)
+		if err != nil {
+			return 0, fmt.Errorf("failed to open file: %v", err)
+		}
+		m.file = f
+	}
+	written, err := m.file.Write(b)
+	if err != nil {
+		return 0, fmt.Errorf("failed to write log: %v", err)
+	}
+	m.currentSize += int64(written)
+	m.totalSize += int64(written)
+
+	// do we need to open a new file?
+	if m.currentSize > m.maxSize/fileSplit {
+		m.file.Close()
+		f, err := openTimestampFile(m.dir)
+		if err != nil {
+			return 0, fmt.Errorf("failed top open file: %v", err)
+		}
+		// use the new log file pointer and reset the size
+		m.file = f
+		m.currentSize = 0
+	}
+
+	if m.totalSize > m.maxSize {
+		// get all of the files from the directory
+		fi, err := ioutil.ReadDir(m.dir)
+		if err != nil {
+			return written, fmt.Errorf("could not read directory %s: %v", m.dir, err)
+		}
+		// sort the file names
+		sort.Slice(fi, func(i int, j int) bool {
+			return fi[i].Name() < fi[j].Name()
+		})
+		for _, f := range fi {
+			if m.totalSize < m.maxSize {
+				break
+			}
+			size := f.Size()
+			filename := path.Join(m.dir, f.Name())
+			if err := os.Remove(filename); err != nil {
+				return written, fmt.Errorf("failed to remove %s: %v", filename, err)
+			}
+			m.totalSize -= size
+		}
+	}
+
+	return written, nil
+}
+
+func (m *ManagedFile) Read(p []byte) (int, error) {
+	if m.dirReader == nil {
+
+	}
+	return 0, nil
+}
 
 // DeviceManagerFile implementation of DeviceManager interface with a directory as the backing store
 type DeviceManagerFile struct {
@@ -50,9 +128,18 @@ type DeviceManagerFile struct {
 	cacheTimeout int
 	lastUpdate   time.Time
 	// thse are for caching only
-	onboardCerts map[string]map[string]bool
-	deviceCerts  map[string]uuid.UUID
-	devices      map[uuid.UUID]deviceStorage
+	onboardCerts          map[string]map[string]bool
+	deviceCerts           map[string]uuid.UUID
+	devices               map[uuid.UUID]deviceStorage
+	maxLogSize            int
+	maxInfoSize           int
+	maxMetricSize         int
+	currentLogFile        *os.File
+	currentInfoFile       *os.File
+	currentMetricFile     *os.File
+	currentLogFileSize    int
+	currentInfoFileSize   int
+	currentMetricFileSize int
 }
 
 // Name return name
@@ -65,8 +152,23 @@ func (d *DeviceManagerFile) Database() string {
 	return d.databasePath
 }
 
+// MaxLogSize return the default maximum log size in bytes for this device manager
+func (d *DeviceManagerFile) MaxLogSize() int {
+	return maxLogSizeFile
+}
+
+// MaxInfoSize return the default maximum info size in bytes for this device manager
+func (d *DeviceManagerFile) MaxInfoSize() int {
+	return maxInfoSizeFile
+}
+
+// MaxMetricSize return the maximum metrics size in bytes for this device manager
+func (d *DeviceManagerFile) MaxMetricSize() int {
+	return maxMetricSizeFile
+}
+
 // Init check if a URL is valid and initialize
-func (d *DeviceManagerFile) Init(s string) (bool, error) {
+func (d *DeviceManagerFile) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
 	fi, err := os.Stat(s)
 	if err == nil && !fi.IsDir() {
 		return false, fmt.Errorf("database path %s exists and is not a directory", s)
@@ -83,6 +185,19 @@ func (d *DeviceManagerFile) Init(s string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	if maxLogSize == 0 {
+		maxLogSize = maxLogSizeFile
+	}
+	if maxInfoSize == 0 {
+		maxInfoSize = maxInfoSizeFile
+	}
+	if maxMetricSize == 0 {
+		maxMetricSize = maxMetricSizeFile
+	}
+	d.maxLogSize = maxLogSize
+	d.maxInfoSize = maxInfoSize
+	d.maxMetricSize = maxMetricSize
 
 	return true, nil
 }
@@ -327,6 +442,60 @@ func (d *DeviceManagerFile) DeviceList() ([]*uuid.UUID, error) {
 	return pids, nil
 }
 
+// initDevice initialize all structures for one device
+func (d *DeviceManagerFile) initDevice(u uuid.UUID) error {
+	// create filesystem tree and subdirs for the new device
+	devicePath := d.getDevicePath(u)
+	err := os.MkdirAll(devicePath, 0755)
+	if err != nil {
+		return fmt.Errorf("error creating new device tree %s: %v", devicePath, err)
+	}
+
+	// create the necessary directories for data uploads
+	for _, p := range []string{logDir, metricsDir, infoDir} {
+		cur := path.Join(devicePath, p)
+		err = os.MkdirAll(cur, 0755)
+		if err != nil {
+			return fmt.Errorf("error creating new device sub-path %s: %v", cur, err)
+		}
+	}
+
+	// save new one to cache - just the serial and onboard; the rest is on disk
+	if d.deviceCerts == nil {
+		d.deviceCerts = map[string]uuid.UUID{}
+	}
+
+	if d.devices == nil {
+		d.devices = map[uuid.UUID]deviceStorage{}
+	}
+	if d.maxLogSize == 0 {
+		d.maxLogSize = maxLogSizeFile
+	}
+	if d.maxInfoSize == 0 {
+		d.maxInfoSize = maxInfoSizeFile
+	}
+	if d.maxMetricSize == 0 {
+		d.maxMetricSize = maxMetricSizeFile
+	}
+
+	d.devices[u] = deviceStorage{
+		logs: &ManagedFile{
+			dir:     path.Join(devicePath, logDir),
+			maxSize: int64(d.maxLogSize),
+		},
+		info: &ManagedFile{
+			dir:     path.Join(devicePath, infoDir),
+			maxSize: int64(d.maxInfoSize),
+		},
+		metrics: &ManagedFile{
+			dir:     path.Join(devicePath, metricsDir),
+			maxSize: int64(d.maxMetricSize),
+		},
+	}
+
+	return nil
+}
+
 // DeviceRegister register a new device cert
 func (d *DeviceManagerFile) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
@@ -350,11 +519,10 @@ func (d *DeviceManagerFile) DeviceRegister(cert, onboard *x509.Certificate, seri
 	}
 
 	// create filesystem tree and subdirs for the new device
-	devicePath := d.getDevicePath(unew)
-	err = os.MkdirAll(devicePath, 0755)
-	if err != nil {
-		return nil, fmt.Errorf("error creating new device tree %s: %v", devicePath, err)
+	if err := d.initDevice(unew); err != nil {
+		return nil, fmt.Errorf("error initializing device: %v", err)
 	}
+	devicePath := d.getDevicePath(unew)
 
 	// save the device certificate
 	certPath := path.Join(devicePath, DeviceCertFilename)
@@ -384,21 +552,13 @@ func (d *DeviceManagerFile) DeviceRegister(cert, onboard *x509.Certificate, seri
 		return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
 	}
 
-	// create the necessary directories for data uploads
-	for _, p := range []string{logDir, metricsDir, infoDir} {
-		cur := path.Join(devicePath, p)
-		err = os.MkdirAll(cur, 0755)
-		if err != nil {
-			return nil, fmt.Errorf("error creating new device sub-path %s: %v", cur, err)
-		}
-	}
-
 	// save new one to cache - just the serial and onboard; the rest is on disk
 	d.deviceCerts[string(cert.Raw)] = unew
-	d.devices[unew] = deviceStorage{
-		onboard: onboard,
-		serial:  serial,
-	}
+
+	// this already was initialized in initDevice()
+	ds := d.devices[unew]
+	ds.serial = serial
+	ds.onboard = onboard
 
 	return &unew, nil
 }
@@ -465,17 +625,8 @@ func (d *DeviceManagerFile) WriteInfo(m *info.ZInfoMsg) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevId)
 	}
-	var fileToSave = fmt.Sprintf("%d:%09d", time.Now().Unix(), time.Now().Nanosecond())
-	if m.AtTimeStamp != nil {
-		fileToSave = fmt.Sprintf("%d:%09d", m.AtTimeStamp.Seconds, m.AtTimeStamp.Nanos)
-	} else {
-		log.Printf("Failed to parse m.AtTimeStamp, use time.Now()")
-	}
-	err = d.writeProtobufToJSONFile(u, infoDir, fileToSave, m)
-	if err != nil {
-		return fmt.Errorf("failed to write info to file: %v", err)
-	}
-	return nil
+	dev := d.devices[u]
+	return dev.addInfo(m)
 }
 
 // WriteLogs write a message of logs
@@ -493,11 +644,8 @@ func (d *DeviceManagerFile) WriteLogs(m *logs.LogBundle) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
 	}
-	err = d.writeProtobufToJSONFile(u, logDir, fmt.Sprintf("%d:%09d", m.Timestamp.Seconds, m.Timestamp.Nanos), m)
-	if err != nil {
-		return fmt.Errorf("failed to write logs to file: %v", err)
-	}
-	return nil
+	dev := d.devices[u]
+	return dev.addLog(m)
 }
 
 // WriteMetrics write a metrics message
@@ -515,11 +663,8 @@ func (d *DeviceManagerFile) WriteMetrics(m *metrics.ZMetricMsg) error {
 	if !d.deviceExists(u) {
 		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
 	}
-	err = d.writeProtobufToJSONFile(u, metricsDir, fmt.Sprintf("%d:%09d", m.AtTimeStamp.Seconds, m.AtTimeStamp.Nanos), m)
-	if err != nil {
-		return fmt.Errorf("failed to write metrics to file: %v", err)
-	}
-	return nil
+	dev := d.devices[u]
+	return dev.addMetrics(m)
 }
 
 // GetConfig retrieve the config for a particular device
@@ -629,9 +774,9 @@ func (d *DeviceManagerFile) refreshCache() error {
 	}
 
 	// create new vars to hold while we load
-	onboardCerts := make(map[string]map[string]bool)
-	deviceCerts := make(map[string]uuid.UUID)
-	devices := make(map[uuid.UUID]deviceStorage)
+	d.onboardCerts = make(map[string]map[string]bool)
+	d.deviceCerts = make(map[string]uuid.UUID)
+	d.devices = make(map[uuid.UUID]deviceStorage)
 
 	// scan the onboard path for all files which end in ".pem" and load them
 	onboardPath := path.Join(d.databasePath, onboardDir)
@@ -665,7 +810,7 @@ func (d *DeviceManagerFile) refreshCache() error {
 			return fmt.Errorf("unable to convert data from file %s to onboard certificate: %v", f, err)
 		}
 		certStr := string(cert.Raw)
-		onboardCerts[certStr] = make(map[string]bool)
+		d.onboardCerts[certStr] = make(map[string]bool)
 
 		// get the serial list
 		f = path.Join(onboardPath, name, onboardCertSerials)
@@ -681,11 +826,9 @@ func (d *DeviceManagerFile) refreshCache() error {
 		}
 		// convert the []byte to string, split and save
 		for _, serial := range strings.Fields(string(b)) {
-			onboardCerts[certStr][serial] = true
+			d.onboardCerts[certStr][serial] = true
 		}
 	}
-	// replace the existing onboard certificates
-	d.onboardCerts = onboardCerts
 
 	// scan the device path for each dir which is the UUID
 	//   and in each one, if a cert exists with the appropriate name, load it
@@ -727,8 +870,10 @@ func (d *DeviceManagerFile) refreshCache() error {
 			return fmt.Errorf("unable to convert data from file %s to device certificate: %v", f, err)
 		}
 		certStr := string(cert.Raw)
-		deviceCerts[certStr] = u
-		devices[u] = deviceStorage{}
+		d.deviceCerts[certStr] = u
+		if err := d.initDevice(u); err != nil {
+			return fmt.Errorf("unable to initialize device structure for device %s: %v", u, err)
+		}
 
 		// load the device onboarding certificate and serial
 		f = path.Join(devicePath, DeviceOnboardFilename)
@@ -752,9 +897,9 @@ func (d *DeviceManagerFile) refreshCache() error {
 		if err != nil {
 			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", name, err)
 		}
-		devItem := devices[u]
+		devItem := d.devices[u]
 		devItem.onboard = cert
-		devices[u] = devItem
+		d.devices[u] = devItem
 		// and the serial
 		f = path.Join(devicePath, deviceSerialFilename)
 		_, err = os.Stat(f)
@@ -767,14 +912,10 @@ func (d *DeviceManagerFile) refreshCache() error {
 		if err != nil {
 			return fmt.Errorf("unable to read device serial file %s: %v", f, err)
 		}
-		devItem = devices[u]
+		devItem = d.devices[u]
 		devItem.serial = string(b)
-		devices[u] = devItem
+		d.devices[u] = devItem
 	}
-	// replace the existing device certificates
-	d.deviceCerts = deviceCerts
-	// replace the existing device cache
-	d.devices = devices
 
 	// mark the time we updated
 	d.lastUpdate = now
@@ -803,6 +944,12 @@ func (d *DeviceManagerFile) getOnboardPath(cn string) string {
 	return path.Join(d.databasePath, onboardDir, cn)
 }
 
+func openTimestampFile(filename string) (*os.File, error) {
+	// open a new one
+	fullPath := path.Join(filename, time.Now().Format("2006-01-02T15:04:05"))
+	return os.Create(fullPath)
+}
+
 // writeProtobufToJSONFile write a protobuf to a named file in the given directory
 func (d *DeviceManagerFile) writeProtobufToJSONFile(u uuid.UUID, dir, filename string, msg proto.Message) error {
 	// if dir == "", then path.Join() automatically ignores it
@@ -825,6 +972,9 @@ func (d *DeviceManagerFile) writeProtobufToJSONFile(u uuid.UUID, dir, filename s
 func (d *DeviceManagerFile) deviceExists(u uuid.UUID) bool {
 	_, err := os.Stat(d.getDevicePath(u))
 	if err != nil {
+		return false
+	}
+	if _, ok := d.devices[u]; !ok {
 		return false
 	}
 	return true
@@ -886,9 +1036,8 @@ func (d *DeviceManagerFile) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 	if !d.deviceExists(u) {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
-	deviceLogsDir := path.Join(d.getDevicePath(u), logDir)
 	dr := &DirReader{
-		Path:     deviceLogsDir,
+		Path:     d.devices[u].logs.(*ManagedFile).dir,
 		LineFeed: true,
 	}
 	return dr, nil
@@ -900,9 +1049,8 @@ func (d *DeviceManagerFile) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	if !d.deviceExists(u) {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
-	deviceInfoDir := path.Join(d.getDevicePath(u), infoDir)
 	dr := &DirReader{
-		Path:     deviceInfoDir,
+		Path:     d.devices[u].info.(*ManagedFile).dir,
 		LineFeed: true,
 	}
 	return dr, nil

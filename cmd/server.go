@@ -6,6 +6,7 @@ package cmd
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -29,6 +30,10 @@ var (
 	hostIP         string
 	clientCertPath string
 	certRefresh    int
+	maxLogSize     int
+	maxInfoSize    int
+	maxMetricSize  int
+	deviceManagers = driver.GetDeviceManagers()
 )
 
 var serverCmd = &cobra.Command{
@@ -39,9 +44,9 @@ var serverCmd = &cobra.Command{
 		// create a handler based on where our device database is
 		// in the future, we may support other device manager types
 		var mgr driver.DeviceManager
-		for _, m := range driver.GetDeviceManagers() {
+		for _, m := range deviceManagers {
 			name := m.Name()
-			valid, err := m.Init(databaseURL)
+			valid, err := m.Init(databaseURL, maxLogSize, maxInfoSize, maxMetricSize)
 			if err != nil {
 				log.Fatalf("error initializing the %s device manager: %v", name, err)
 			}
@@ -109,6 +114,15 @@ var serverCmd = &cobra.Command{
 }
 
 func serverInit() {
+	// get the default max log sizes
+	defaultLogSizes := []string{}
+	defaultInfoSizes := []string{}
+	defaultMetricSizes := []string{}
+	for _, m := range deviceManagers {
+		defaultLogSizes = append(defaultLogSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxLogSize()))
+		defaultInfoSizes = append(defaultInfoSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxInfoSize()))
+		defaultMetricSizes = append(defaultMetricSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxMetricSize()))
+	}
 	serverCmd.Flags().StringVar(&port, "port", defaultPort, "port on which to listen")
 	serverCmd.Flags().StringVar(&hostIP, "ip", defaultIP, "IP address on which to listen")
 	serverCmd.Flags().StringVar(&serverCert, "server-cert", path.Join(defaultDatabaseURL, serverCertFilename), "path to server certificate")
@@ -116,4 +130,7 @@ func serverInit() {
 	serverCmd.Flags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where we will store and find device information, including onboarding certificates, device certificates, config, logs and metrics. See the readme for more details.")
 	serverCmd.Flags().StringVar(&configDir, "conf-dir", defaultConfigDir, "path to directory where running server will output runtime configuration files that can be fed into EVE")
 	serverCmd.Flags().IntVar(&certRefresh, "cert-refresh", defaultCertRefresh, "how often, in seconds, to refresh the onboarding and device certs from the filesystem; 0 means not to cache at all.")
+	serverCmd.Flags().IntVar(&maxLogSize, "max-log-size", 0, fmt.Sprintf("the maximum size of the logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultLogSizes))
+	serverCmd.Flags().IntVar(&maxInfoSize, "max-info-size", 0, fmt.Sprintf("the maximum size of the info before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultInfoSizes))
+	serverCmd.Flags().IntVar(&maxMetricSize, "max-metric-size", 0, fmt.Sprintf("the maximum size of the metrics before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultMetricSizes))
 }
