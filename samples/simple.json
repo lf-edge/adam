@@ -8,11 +8,15 @@
     "configItems": [
         {
             "key": "timer.port.testbetterinterval",
-            "value": "600"
+            "value": "60"
         },
 	{
+	    "key": "timer.config.interval",
+	    "value": "5"
+	},
+	{
 	    "key": "debug.enable.ssh",
-	    "value": "EVE_SSH_KEY"
+	    "value": "@EVE_SSH_KEY@"
 	}
     ],
     "networks": [
