@@ -4,6 +4,48 @@ Welcome to Adam! Adam is the reference implementation of an [LF-Edge](https://ww
 
 Adam is a reference implementation. Thus, while it has all of the TLS encryption and authentication requirements of [the official API](https://github.com/lf-edge/eve/blob/master/api/API.md), it has not been built or tested to withstand penetration attacks, DDoS, or any other major security requirements, and it has not been built with massive scale in mind. For those, please refer to various vendor cloud controller offerings, such as [Zededa zedcloud](https://www.zededa.com/technology/).
 
+
+## Building Adam
+
+Building Adam is straightforward:
+
+1. Clone this repo
+2. Ensure you have installed either go >= 1.11, or docker
+3. Build
+
+There are several options for building:
+
+* `make image` will run the entire build in a docker container and give you a docker image. No local binaries will be created.
+* `make build` will create the binary `bin/adam-<os>-<arch>` for your OS and architecture. You can override either by `make OS=<os>` and/or `make ARCH=<arch>`, e.g. `make OS=linux ARCH=arm64`. The build itself will happen with in a docker image or using your locally installed `go`; see below.
+* `make image-local` will take the locally built binary and create an image with it.
+
+These options allow you to do a one-step image build with no dependencies (`make image`), build a binary for your local usage (`make build`) using either your locally installed go or in a docker container, and make an image that uses your local binary (`make image-local`). The latter is often for quick reproducible builds.
+
+All `Makefile` commands that execute `go` have the option to run locally or in docker. By default, they run in docker. If you prefer to run using a locally installed go, pass `BUILD=local` to any command, e.g.
+
+```
+make vet BUILD=local
+make build BUILD=local
+```
+
+## Server TLS (Required)
+
+Adam _requires_ TLS to communicate with EVE devices, which means a server key and certificate. If one is not available, it will fail startup. You can generate one using:
+
+```
+adam generate server --cn <hostname.domainmane> --hosts <hostname or ip> --server
+```
+e.g. to generate certificates for localhost:
+```
+adam generate server --cn localhost.localdomain --hosts 127.0.0.1 --server
+```
+--cn -  SSL Certificate Common Name. It is typically composed of Host + Domain Name and will look like _yoursite.com_
+
+--hosts  - List of IP's or hostnames, separated by "," Will look like _127.0.0.1,192.168.0.1_
+
+Run `adam generate server --help` for options.
+
+
 ## Running Adam
 
 To run Adam, you need a built Adam binary. Adam distributes both as a single binary available on all major platforms - Linux, macOS, Windows - as well as an OCI compliant container image.
@@ -60,38 +102,7 @@ Finally, you can embed Adam container into an EVE root filesystem creating an EV
      net: host
 ```
 
-## Building Adam
 
-Building Adam is straightforward:
-
-1. Clone this repo
-2. Ensure you have installed either go >= 1.11, or docker
-3. Build
-
-There are several options for building:
-
-* `make image` will run the entire build in a docker container and give you a docker image. No local binaries will be created.
-* `make build` will create the binary `bin/adam-<os>-<arch>` for your OS and architecture. You can override either by `make OS=<os>` and/or `make ARCH=<arch>`, e.g. `make OS=linux ARCH=arm64`. The build itself will happen with in a docker image or using your locally installed `go`; see below.
-* `make image-local` will take the locally built binary and create an image with it.
-
-These options allow you to do a one-step image build with no dependencies (`make image`), build a binary for your local usage (`make build`) using either your locally installed go or in a docker container, and make an image that uses your local binary (`make image-local`). The latter is often for quick reproducible builds.
-
-All `Makefile` commands that execute `go` have the option to run locally or in docker. By default, they run in docker. If you prefer to run using a locally installed go, pass `BUILD=local` to any command, e.g.
-
-```
-make vet BUILD=local
-make build BUILD=local
-```
-
-## Server TLS
-
-Adam _requires_ TLS to communicate with EVE devices, which means a server key and certificate. If one is not available, it will fail startup. You can generate one using:
-
-```
-adam generate server
-```
-
-Run `adam generate server --help` for options. By default, it stores the server key and certificate in the same location as the default when running `adam server`.
 
 ## Registering Devices
 
