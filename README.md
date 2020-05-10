@@ -35,7 +35,7 @@ Adam _requires_ TLS to communicate with EVE devices, which means a server key an
 ```
 adam generate server --cn <hostname.domainmane> --hosts <hostname or ip> --server
 ```
-e.g. to run Adam on localhost:
+e.g. to generate certificates for localhost:
 ```
 adam generate server --cn localhost.localdomain --hosts 127.0.0.1 --server
 ```
