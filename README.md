@@ -39,8 +39,9 @@ e.g. to run Adam on localhost:
 ```
 adam generate server --cn localhost.localdomain --hosts 127.0.0.1 --server
 ```
---cn -  SSL Certificate Common Name. It is typically composed of Host + Domain Name and will look like yoursite.com
---hosts  - List of IP's or hostnames, separated by "," Will look like 127.0.0.1,192.168.0.1
+--cn -  SSL Certificate Common Name. It is typically composed of Host + Domain Name and will look like _yoursite.com_
+
+--hosts  - List of IP's or hostnames, separated by "," Will look like _127.0.0.1,192.168.0.1_
 
 Run `adam generate server --help` for options.
 
