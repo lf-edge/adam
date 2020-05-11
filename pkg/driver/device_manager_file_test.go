@@ -19,7 +19,7 @@ import (
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 func TestDeviceManagerFile(t *testing.T) {
@@ -517,10 +517,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			}
 			sectionPath := path.Join(d.getDevicePath(u), sectionName)
 			if tt.deviceExists {
-				err = os.MkdirAll(sectionPath, 0755)
-				if err != nil {
-					t.Fatalf("Unable to make dir %s: %v", sectionPath, err)
-				}
+				d.initDevice(u)
 			}
 			err = cmd(ts, u.String(), tt.validMsg, tt.validUUID, d)
 			switch {
@@ -528,13 +525,12 @@ func TestDeviceManagerFile(t *testing.T) {
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
 			case err == nil && tt.err == nil:
 				// check if the correct file exists
-				filePath := path.Join(sectionPath, fmt.Sprintf("%d", ts))
-				_, err := os.Stat(filePath)
+				fi, err := ioutil.ReadDir(sectionPath)
 				switch {
-				case err != nil && os.IsNotExist(err):
-					t.Errorf("%d: missing file at %s", i, filePath)
 				case err != nil:
-					t.Errorf("%d: unexpected error reading file at %s: %v", i, filePath, err)
+					t.Errorf("missing directory: %s", sectionPath)
+				case len(fi) != 1:
+					t.Errorf("incorrect number of files, actual %d, expected %d", len(fi), 1)
 				}
 			}
 		}

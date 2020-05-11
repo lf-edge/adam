@@ -17,6 +17,13 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+const (
+	KB = 1024
+	MB = 1024 * KB
+	GB = 1024 * MB
+	TB = 1024 * GB
+)
+
 func computeConfigElementSha(h hash.Hash, msg interface{}) {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -29,10 +36,16 @@ func computeConfigElementSha(h hash.Hash, msg interface{}) {
 type DeviceManager interface {
 	// Name return unique representative name for this type of device manager, e.g. "file", "memory", "mongo", etc.
 	Name() string
+	// MaxLogSize return the default maximum log size in bytes for this device manager
+	MaxLogSize() int
+	// MaxInfoSize return the default maximum info size in bytes for this device manager
+	MaxInfoSize() int
+	// MaxMetricSize return the default maximum metric size in bytes for this device manager
+	MaxMetricSize() int
 	// Database safe-to-print (without credentials) path to database
 	Database() string
 	// Init initialize the datastore. If the given database URL is invalid for this type of manager, return false. Return error for actual failures
-	Init(string) (bool, error)
+	Init(string, int, int, int) (bool, error)
 	// SetCacheTimeout set how long to keep onboard and device certificates in cache before rereading from a backing store. Value of 0 means
 	//   not to cache
 	SetCacheTimeout(int)
