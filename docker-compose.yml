@@ -10,5 +10,6 @@ services:
       - "8080:8080"
     volumes:
       - ./run:/adam/run
-
-
+    command:
+      - server
+      - --self-cert
