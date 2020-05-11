@@ -6,7 +6,34 @@ Adam is a reference implementation. Thus, while it has all of the TLS encryption
 
 ## Running Adam
 
-To run Adam, you need a built Adam binary. Adam distributes both as a single binary available on all major platforms - Linux, macOS, Windows - as well as an OCI compliant container image.
+To run Adam, you need a built Adam binary. Adam distributes in two modes:
+
+* a single binary available on all major platforms: Linux, macOS, Windows. These are not yet available short of building it yourself (see below), but will be on the releases page when ready, at https://github.com/lf-edge/adam/releases/
+* an OCI compliant container image available on Docker hub at https://hub.docker.com/r/lfedge/adam
+
+The default command for the container is `adam`, so all `adam` commands can be run as either of the following:
+```
+$ adam <cmd>
+$ docker run <cmd>
+```
+
+## Pre-Requisites
+
+In addition to adam itself - as a local binary or docker container - you need the following:
+
+* A database directory, for the configs, data, and certificates. By default, this is under `./run/adam/` from the current directory, but is configurable; see the options.
+* Server key and certificate for adam itself. By default this is `./run/adam/server-key.pem` and `./run/adam/server.pem`, but is configurable; see the options.
+
+You can get the certificate and key _before_ running `adam` as a server in one of several ways:
+
+* pre-generate them yourself, using your favourite command: openssl, cfssl, etc.
+* run `adam generate`
+* run `adam server --auto-cert`, which will start up and generate the key and certificate, if it does not exist
+
+Note that the last option is limited, in that you cannot specify the hostnames and/or IP addresses for which the certificate is valid. It will automatically generate for `127.0.0.1,localhost,localhost.localdomain`. For anything
+more advanced, please use one of the other options.
+
+## Options
 
 The `adam` command has multiple options. The primary one is:
 
@@ -118,7 +145,7 @@ Adam has an onboarding directory where it maintains acceptable onboarding certif
 * `cert.pem` - the actual onboarding certificate.
 * `serials.txt` - a list of acceptable serials to use with this certificate, one per line. The wildcard `*` means _any_ serial will be accepted.
 
-You _can_ modify these files directly; it is not, however, recommended. 
+You _can_ modify these files directly; it is not, however, recommended.
 
 Instead, use Adam's command-line `admin` options to work with the files:
 
@@ -142,4 +169,3 @@ Once you have generated an onboarding certificate, copy the certificate and key 
 ## More Documentation
 
 More documentation is available in the [docs/](./docs) directory.
-
