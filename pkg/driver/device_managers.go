@@ -10,6 +10,7 @@ package driver
 func GetDeviceManagers() []DeviceManager {
 	return []DeviceManager{
 		&DeviceManagerMemory{},
-		&DeviceManagerFile{},
+		&DeviceManagerRedis{},
+		&DeviceManagerFile{}, // this needs to be the last catch-all one
 	}
 }
