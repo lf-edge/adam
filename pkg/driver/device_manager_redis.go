@@ -31,9 +31,9 @@ const (
 	// everything else is kept in Redis hashes with the following mapping:
 	onboardCertsHash = "ONBOARD_CERTS" // CN -> string (certificate PEM)
 	onboardSerialsHash = "ONBOARD_SERIALS" // CN -> []string (list of serial #s)
-	deviceCertsHash = "DEVICE_CERTS"  // UUID -> string (certificate PEM)
 	deviceSerialsHash = "DEVICE_SERIALS" // UUID -> string (single serial #)
 	deviceOnboardCertsHash = "DEVICE_ONBOARD_CERTS" // UUID -> string (certificate PEM)
+	deviceCertsHash = "DEVICE_CERTS"  // UUID -> string (certificate PEM)
 	deviceConfigsHash = "DEVICE_CONFIGS" // UUID -> json (EVE config json representation)
 
 	// Logs, info and metrics are managed by Redis streams named after device UUID as in:
@@ -656,30 +656,56 @@ func (d *DeviceManagerRedis) refreshCache() error {
 		certStr := string(cert.Raw)
 		deviceCerts[certStr] = u
 		devices[u] = deviceStorage{}
+	}
+	// replace the existing device certificates
+	d.deviceCerts = deviceCerts
 
-        b, err := d.client.HGet(deviceOnboardCertsHash, k).Result()
+	// scan the device onboarding certs
+	docerts, err := d.client.HGetAll(deviceOnboardCertsHash).Result()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve device certificates from %s %v", deviceCertsHash, err)
+	}
+
+	// check each directory to see if it is a valid device directory
+	for k, b := range docerts {
+		// convert the path name to a UUID
+		u, err := uuid.FromString(k)
 		if err != nil {
-			return fmt.Errorf("unable to read device onboard certificate for %s: %v", k, err)
+			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", u, err)
 		}
-		// convert into a certificate
-		certPem, _ = pem.Decode([]byte(b))
-		cert, err = x509.ParseCertificate(certPem.Bytes)
+
+		certPem, _ := pem.Decode([]byte(b))
+		cert, err := x509.ParseCertificate(certPem.Bytes)
 		if err != nil {
 			return fmt.Errorf("unable to convert data from file %s to device onboard certificate: %v", b, err)
+		}
+		if _, present := devices[u]; !present {
+			devices[u] = deviceStorage{}
 		}
 		devItem := devices[u]
 		devItem.onboard = cert
 		devices[u] = devItem
+	}
 
-		if b, err = d.client.HGet(deviceSerialsHash, k).Result(); err != nil {
-			continue
+	// scan the device onboarding certs
+	dserials, err := d.client.HGetAll(deviceSerialsHash).Result()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve device certificates from %s %v", deviceCertsHash, err)
+	}
+
+	for k, s := range dserials {
+		// convert the path name to a UUID
+		u, err := uuid.FromString(k)
+		if err != nil {
+			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", u, err)
 		}
-		devItem = devices[u]
-		devItem.serial = b
+		if _, present := devices[u]; !present {
+			devices[u] = deviceStorage{}
+		}
+		devItem := devices[u]
+		devItem.serial = s
 		devices[u] = devItem
 	}
-	// replace the existing device certificates
-	d.deviceCerts = deviceCerts
 	// replace the existing device cache
 	d.devices = devices
 
@@ -811,5 +837,5 @@ func (d *DeviceManagerRedis) writeProtobufToStream(stream string, msg proto.Mess
 }
 
 func (d *DeviceManagerRedis) mkStreamEntry(body []byte) map[string]interface{} {
-	return map[string]interface{}{"object": string(body)}
+	return map[string]interface{}{"version": "1", "object": string(body)}
 }

@@ -214,6 +214,11 @@ func TestStreamsRedis(t *testing.T) {
 	l, err := lr.Read(buffer)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 96, l)
+
+	r.transactionDrop([][]string{
+		{deviceInfoSteram + u.String()},
+		{deviceLogsStream + u.String()},
+		{deviceMetricsStream + u.String()}})
 }
 
 func generateCert(t *testing.T, cn, host string) *x509.Certificate {
