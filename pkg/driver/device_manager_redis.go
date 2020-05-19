@@ -4,11 +4,13 @@
 package driver
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"github.com/golang/protobuf/jsonpb"
 	"io"
 	"net/url"
 	"strconv"
@@ -818,7 +820,9 @@ func (d *DeviceManagerRedis) writeCert(cert []byte, hash string, uuid string, fo
 }
 
 func (d *DeviceManagerRedis) writeProtobufToStream(stream string, msg proto.Message) error {
-	b, err := msgpack.Marshal(&msg)
+	var buf bytes.Buffer
+	mler := jsonpb.Marshaler{}
+	err := mler.Marshal(&buf, msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal protobuf message %v: %v", msg, err)
 	}
@@ -827,7 +831,7 @@ func (d *DeviceManagerRedis) writeProtobufToStream(stream string, msg proto.Mess
 	_, err = d.client.XAdd(&redis.XAddArgs{
 		Stream: stream,
 		ID: "*",
-		Values: d.mkStreamEntry(b),
+		Values: d.mkStreamEntry(buf.Bytes()),
 	}).Result()
 
 	if err != nil {
