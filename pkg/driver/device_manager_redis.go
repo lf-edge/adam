@@ -37,15 +37,15 @@ const (
 	deviceConfigsHash = "DEVICE_CONFIGS" // UUID -> json (EVE config json representation)
 
 	// Logs, info and metrics are managed by Redis streams named after device UUID as in:
-	//    LOGS_<UUID>
-	//    INFO_<UUID>
-	//    METRICS_<UUID>
+	//    LOGS_EVE_<UUID>
+	//    INFO_EVE_<UUID>
+	//    METRICS_EVE_<UUID>
 	// with each stream element having a single key pair:
 	//   "object" -> msgpack serialized object
 	// see MkStreamEntry() for details
-	deviceLogsStream = "LOGS_"
-	deviceInfoSteram = "INFO_"
-	deviceMetricsStream = "METRICS_"
+	deviceLogsStream = "LOGS_EVE_"
+	deviceInfoSteram = "INFO_EVE_"
+	deviceMetricsStream = "METRICS_EVE_"
 )
 
 // DeviceManagerRedis implementation of DeviceManager interface with a Redis DB as the backing store
@@ -248,15 +248,21 @@ func (d *DeviceManagerRedis) DeviceRemove(u *uuid.UUID) error {
 
 // DeviceClear remove all devices
 func (d *DeviceManagerRedis) DeviceClear() error {
-	err := d.transactionDrop([][]string{
-		{deviceMetricsStream + "*"},
-		{deviceLogsStream + "*"},
-		{deviceInfoSteram + "*"},
+	streams := [][]string{
 		{deviceConfigsHash},
 		{deviceSerialsHash},
 		{deviceCertsHash},
-		{deviceOnboardCertsHash},
-	})
+		{deviceOnboardCertsHash}}
+
+	for u, _ := range d.devices {
+		streams = append(streams,
+			[]string{deviceMetricsStream + u.String()},
+			[]string{deviceLogsStream + u.String()},
+			[]string{deviceInfoSteram + u.String()})
+
+	}
+
+	err := d.transactionDrop(streams)
 
 	if err != nil {
 		return fmt.Errorf("unable to remove all devices %v", err)
@@ -344,7 +350,10 @@ func (d *DeviceManagerRedis) DeviceRegister(cert, onboard *x509.Certificate, ser
 		}
 	}
 	if serial != "" {
-		if _, err := d.client.HSet(deviceSerialsHash, unew.String(), serial).Result(); err != nil {
+		if _, err = d.client.HSet(deviceSerialsHash, unew.String(), serial).Result(); err == nil {
+			_, err = d.client.Save().Result()
+		}
+		if err != nil {
 			return nil, fmt.Errorf("error saving device serial for %v: %v", unew, err)
 		}
 	}
@@ -396,7 +405,10 @@ func (d *DeviceManagerRedis) OnboardRegister(cert *x509.Certificate, serial []st
 		return fmt.Errorf("failed to serialize serials %v: %v", serial, err)
 	}
 
-	if _, err := d.client.HSet(onboardSerialsHash, cn, v).Result(); err != nil {
+	if _, err = d.client.HSet(onboardSerialsHash, cn, v).Result(); err == nil {
+		_, err = d.client.Save().Result()
+	}
+	if err != nil {
 		return fmt.Errorf("failed to save serials %v: %v", serial, err)
 	}
 
@@ -482,7 +494,10 @@ func (d *DeviceManagerRedis) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, erro
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshall config %v", err)
 		}
-		if b, err := d.client.HSet(deviceConfigsHash, u.String(), string(v)).Result(); !b || err != nil {
+		if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(v)).Result(); err == nil {
+			_, err = d.client.Save().Result()
+		}
+		if err != nil {
 			return nil, fmt.Errorf("failed to save config for %s: %v", u.String(), err)
 		}
 	} else {
@@ -544,7 +559,10 @@ func (d *DeviceManagerRedis) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) err
 	if err != nil {
 		return fmt.Errorf("failed to marshall config %v", err)
 	}
-	if _, err := d.client.HSet(deviceConfigsHash, u.String(), string(v)).Result(); err != nil {
+	if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(v)).Result(); err == nil {
+		_, err = d.client.Save().Result()
+	}
+	if err != nil {
 		return fmt.Errorf("failed to save config for %s: %v", u.String(), err)
 	}
 	return nil
@@ -677,7 +695,10 @@ func (d *DeviceManagerRedis) writeProtobufToJSONMsgPack(u uuid.UUID, hash string
 		return fmt.Errorf("can't marshal proto message %v", err)
 	}
 
-	if _, err := d.client.HSet(hash, u.String(), s).Result(); err != nil {
+	if _, err = d.client.HSet(hash, u.String(), s).Result(); err == nil {
+		_, err = d.client.Save().Result()
+	}
+	if err != nil {
 		return fmt.Errorf("can't save proto message for %s in %s: %v", u.String(), hash, err)
 	}
 	return nil
@@ -761,6 +782,9 @@ func (d *DeviceManagerRedis) writeCert(cert []byte, hash string, uuid string, fo
 	}
 	certPem := ax.PemEncodeCert(cert)
 	if b, err := d.client.HSet(hash, uuid, certPem).Result(); err != nil || (!b && !force) {
+		return fmt.Errorf("failed to write certificate for %s: %v", uuid, err)
+	}
+	if _, err := d.client.Save().Result(); err != nil {
 		return fmt.Errorf("failed to write certificate for %s: %v", uuid, err)
 	}
 

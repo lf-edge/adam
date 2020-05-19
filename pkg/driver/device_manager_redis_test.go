@@ -75,12 +75,12 @@ func TestOnboardRedis(t *testing.T) {
 
 	cns, err := r.OnboardList()
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []string{"foo", "bar", "baz"}, cns)
+	assert.ElementsMatch(t, []string{"foo", "bar", "baz"}, cns)
 
 	assert.Equal(t, nil, r.OnboardRemove("bar"))
 	cns, err = r.OnboardList()
 	assert.Equal(t, nil, err)
-	assert.Equal(t, []string{"foo", "baz"}, cns)
+	assert.ElementsMatch(t, []string{"foo", "baz"}, cns)
 
 	assert.Equal(t, nil, r.OnboardClear())
 	cns, err = r.OnboardList()
