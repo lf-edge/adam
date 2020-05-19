@@ -130,10 +130,10 @@ func (d *DeviceManagerRedis) OnboardCheck(cert *x509.Certificate, serial string)
 	if cert == nil {
 		return fmt.Errorf("invalid nil certificate")
 	}
-	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 
 	if err := d.checkValidOnboardSerial(cert, serial); err != nil {
@@ -169,10 +169,10 @@ func (d *DeviceManagerRedis) OnboardGet(cn string) (*x509.Certificate, []string,
 
 // OnboardList list all of the known Common Names for onboard
 func (d *DeviceManagerRedis) OnboardList() ([]string, error) {
-	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	cns := make([]string, 0)
 	for certStr := range d.onboardCerts {
@@ -211,10 +211,10 @@ func (d *DeviceManagerRedis) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID
 	if cert == nil {
 		return nil, fmt.Errorf("invalid nil certificate")
 	}
-	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	certStr := string(cert.Raw)
 	if u, ok := d.deviceCerts[certStr]; ok {
@@ -298,10 +298,10 @@ func (d *DeviceManagerRedis) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.C
 
 // DeviceList list all of the known UUIDs for devices
 func (d *DeviceManagerRedis) DeviceList() ([]*uuid.UUID, error) {
-	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	ids := make([]uuid.UUID, 0, len(d.devices))
 	for u := range d.devices {
@@ -316,10 +316,10 @@ func (d *DeviceManagerRedis) DeviceList() ([]*uuid.UUID, error) {
 
 // DeviceRegister register a new device cert
 func (d *DeviceManagerRedis) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
-	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	// check if it already exists - this also checks for nil cert
 	u, err := d.DeviceCheckCert(cert)
@@ -543,10 +543,10 @@ func (d *DeviceManagerRedis) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) err
 		return fmt.Errorf("mismatched UUID")
 	}
 
-	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	// look up the device by uuid
 	_, ok := d.devices[u]
@@ -639,12 +639,12 @@ func (d *DeviceManagerRedis) refreshCache() error {
 		return fmt.Errorf("failed to retrieve device certificates from %s %v", deviceCertsHash, err)
 	}
 
-	// check each directory to see if it is a valid device directory
+	// check each Redis hash to see if it is valid
 	for k, c := range dcerts {
 		// convert the path name to a UUID
 		u, err := uuid.FromString(k)
 		if err != nil {
-			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", u, err)
+			return fmt.Errorf("unable to convert device uuid from Redis hash name %s: %v", u, err)
 		}
 
 		// load the device certificate
@@ -666,12 +666,12 @@ func (d *DeviceManagerRedis) refreshCache() error {
 		return fmt.Errorf("failed to retrieve device certificates from %s %v", deviceCertsHash, err)
 	}
 
-	// check each directory to see if it is a valid device directory
+	// check each Redis hash to see if it is valid
 	for k, b := range docerts {
 		// convert the path name to a UUID
 		u, err := uuid.FromString(k)
 		if err != nil {
-			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", u, err)
+			return fmt.Errorf("unable to convert device uuid from Redis hash name %s: %v", u, err)
 		}
 
 		certPem, _ := pem.Decode([]byte(b))
@@ -697,7 +697,7 @@ func (d *DeviceManagerRedis) refreshCache() error {
 		// convert the path name to a UUID
 		u, err := uuid.FromString(k)
 		if err != nil {
-			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", u, err)
+			return fmt.Errorf("unable to convert device uuid from Redis hash name %s: %v", u, err)
 		}
 		if _, present := devices[u]; !present {
 			devices[u] = deviceStorage{}
@@ -714,7 +714,7 @@ func (d *DeviceManagerRedis) refreshCache() error {
 	return nil
 }
 
-// writeProtobufToJSONMsgPack write a protobuf to a named file in the given directory
+// writeProtobufToJSONMsgPack write a protobuf to a named hash in Redis
 func (d *DeviceManagerRedis) writeProtobufToJSONMsgPack(u uuid.UUID, hash string, msg proto.Message) error {
 	s, err := msgpack.Marshal(&msg)
 	if err != nil {
