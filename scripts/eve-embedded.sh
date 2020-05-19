@@ -10,13 +10,14 @@
 set -x
 
 PORT=6000
-DB=/persist/adam
+STORE=${STORE:-/persist/adam}
+DB=${DB:-redis://}
 
 SERVER=localhost:$PORT
 SERVER_URL=https://$SERVER
 
 bootstrap() {
-   ADAM_CMD="adam admin --server $SERVER_URL --server-ca $DB/server.pem"
+   ADAM_CMD="adam admin --server $SERVER_URL --server-ca $STORE/server.pem"
    # first make sure to register ourselves, skipping onboarding step
    #   adam admin onboard add  --path /config/onboard.cert.pem --serial '*'
    while true; do
@@ -38,9 +39,9 @@ bootstrap() {
 }
 
 # if this is the first run on this /persist -- generate everything
-if [ ! -d $DB ]; then
-   adam generate --db-url $DB --server --hosts 127.0.0.1,localhost --cn localhost
+if [ ! -d "$STORE" ]; then
+   adam generate --db-url "$STORE" --server --hosts 127.0.0.1,localhost --cn localhost
    bootstrap &
 fi
 
-adam server --port $PORT --db-url $DB --conf-dir /config --server-cert $DB/server.pem --server-key $DB/server-key.pem
+adam server --port $PORT --db-url $DB --conf-dir /config --server-cert "$STORE/server.pem" --server-key "$STORE/server-key.pem"
