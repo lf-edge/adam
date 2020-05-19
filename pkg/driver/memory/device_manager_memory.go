@@ -1,7 +1,7 @@
 // Copyright (c) 2019 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package memory
 
 import (
 	"crypto/sha256"
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
@@ -18,111 +19,49 @@ import (
 )
 
 const (
+	MB                  = common.MB
 	maxLogSizeMemory    = 10 * MB
 	maxInfoSizeMemory   = 10 * MB
 	maxMetricSizeMemory = 10 * MB
 )
 
-type ByteSlice struct {
-	// we do this as a slice of byte slice, rather than a single byte slice,
-	// because we need to track breaks, so we can delete from the beginning
-	data         [][]byte
-	dataCache    []byte
-	currentRead  int
-	readComplete bool
-	maxSize      int
-	size         int
-}
-
-func (bs ByteSlice) Get(index int) ([]byte, error) {
-	if len(bs.data) < index+1 {
-		return nil, fmt.Errorf("array out of bounds: %d", index)
-	}
-	return bs.data[index], nil
-}
-func (bs ByteSlice) Read(p []byte) (int, error) {
-	if bs.readComplete {
-		return 0, io.EOF
-	}
-	// start with the current read
-	if len(bs.dataCache) == 0 {
-		if len(bs.data) == 0 || bs.currentRead >= len(bs.data) {
-			bs.readComplete = true
-			return 0, io.EOF
-		}
-		// include the linefeed
-		bs.dataCache = append(bs.data[bs.currentRead], 0x0a)
-		bs.currentRead++
-	}
-	// read the data from the msg cache
-	copied := copy(p, bs.dataCache)
-	// truncate the dataCache
-	if copied >= len(bs.dataCache) {
-		bs.dataCache = bs.dataCache[:0]
-	} else {
-		bs.dataCache = bs.dataCache[copied:]
-	}
-	// we do not worried about returning less than they requested; as long as we
-	// do not return an io.EOF, they will come back for more
-	return copied, nil
-}
-
-func (bs *ByteSlice) Write(b []byte) (int, error) {
-	// write it to the current one
-	bs.data = append(bs.data, b[:])
-	bs.size += len(b)
-	for {
-		if bs.size <= bs.maxSize {
-			break
-		}
-		if len(bs.data) == 0 {
-			break
-		}
-		bs.size -= len(bs.data[0])
-		bs.data = bs.data[1:]
-		// this will mess up the current reader, so we need to update it
-		bs.currentRead--
-	}
-	return len(b), nil
-}
-
-// DeviceManagerMemory implementation of DeviceManager with an ephemeral memory backing store
-type DeviceManagerMemory struct {
+// DeviceManager implementation of DeviceManager with an ephemeral memory backing store
+type DeviceManager struct {
 	onboardCerts  map[string]map[string]bool
 	deviceCerts   map[string]uuid.UUID
-	devices       map[uuid.UUID]deviceStorage
+	devices       map[uuid.UUID]common.DeviceStorage
 	maxLogSize    int
 	maxInfoSize   int
 	maxMetricSize int
 }
 
 // Name return name
-func (d *DeviceManagerMemory) Name() string {
+func (d *DeviceManager) Name() string {
 	return "memory"
 }
 
 // Database return database path
-func (d *DeviceManagerMemory) Database() string {
+func (d *DeviceManager) Database() string {
 	return "memory"
 }
 
 // MaxLogSize return the default maximum log size in bytes for this device manager
-func (d *DeviceManagerMemory) MaxLogSize() int {
+func (d *DeviceManager) MaxLogSize() int {
 	return maxLogSizeMemory
 }
 
 // MaxInfoSize return the maximum info size in bytes for this device manager
-func (d *DeviceManagerMemory) MaxInfoSize() int {
+func (d *DeviceManager) MaxInfoSize() int {
 	return maxInfoSizeMemory
 }
 
 // MaxMetricSize return the maximum metrics size in bytes for this device manager
-func (d *DeviceManagerMemory) MaxMetricSize() int {
+func (d *DeviceManager) MaxMetricSize() int {
 	return maxMetricSizeMemory
 }
 
 // Init initialize, valid only with a blank URL
-func (d *DeviceManagerMemory) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
+func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
 	if s != "" {
 		return false, nil
 	}
@@ -142,11 +81,11 @@ func (d *DeviceManagerMemory) Init(s string, maxLogSize, maxInfoSize, maxMetricS
 }
 
 // SetCacheTimeout set the timeout for refreshing the cache, unused in memory
-func (d *DeviceManagerMemory) SetCacheTimeout(timeout int) {
+func (d *DeviceManager) SetCacheTimeout(timeout int) {
 }
 
 // OnboardCheck see if a particular certificate plus serial combinaton is valid
-func (d *DeviceManagerMemory) OnboardCheck(cert *x509.Certificate, serial string) error {
+func (d *DeviceManager) OnboardCheck(cert *x509.Certificate, serial string) error {
 	if cert == nil {
 		return fmt.Errorf("invalid nil certificate")
 	}
@@ -154,13 +93,13 @@ func (d *DeviceManagerMemory) OnboardCheck(cert *x509.Certificate, serial string
 		return err
 	}
 	if d.getOnboardSerialDevice(cert, serial) != nil {
-		return &UsedSerialError{err: fmt.Sprintf("serial already used for onboarding certificate: %s", serial)}
+		return &common.UsedSerialError{Err: fmt.Sprintf("serial already used for onboarding certificate: %s", serial)}
 	}
 	return nil
 }
 
 // OnboardRemove remove an onboard certificate based on Common Name
-func (d *DeviceManagerMemory) OnboardRemove(cn string) error {
+func (d *DeviceManager) OnboardRemove(cn string) error {
 	cert, _, err := d.OnboardGet(cn)
 	if err != nil {
 		return err
@@ -170,13 +109,13 @@ func (d *DeviceManagerMemory) OnboardRemove(cn string) error {
 }
 
 // OnboardClear remove all onboarding certs
-func (d *DeviceManagerMemory) OnboardClear() error {
+func (d *DeviceManager) OnboardClear() error {
 	d.onboardCerts = map[string]map[string]bool{}
 	return nil
 }
 
 // OnboardGet get the onboard certificate and serials based on Common Name
-func (d *DeviceManagerMemory) OnboardGet(cn string) (*x509.Certificate, []string, error) {
+func (d *DeviceManager) OnboardGet(cn string) (*x509.Certificate, []string, error) {
 	if cn == "" {
 		return nil, nil, fmt.Errorf("empty cn")
 	}
@@ -194,11 +133,11 @@ func (d *DeviceManagerMemory) OnboardGet(cn string) (*x509.Certificate, []string
 			return cert, serialSlice, nil
 		}
 	}
-	return nil, nil, &NotFoundError{err: fmt.Sprintf("onboard cn not found: %s", cn)}
+	return nil, nil, &common.NotFoundError{Err: fmt.Sprintf("onboard cn not found: %s", cn)}
 }
 
 // OnboardList list all of the known Common Names for onboard
-func (d *DeviceManagerMemory) OnboardList() ([]string, error) {
+func (d *DeviceManager) OnboardList() ([]string, error) {
 	cns := make([]string, 0, len(d.onboardCerts))
 	for certStr := range d.onboardCerts {
 		certRaw := []byte(certStr)
@@ -212,7 +151,7 @@ func (d *DeviceManagerMemory) OnboardList() ([]string, error) {
 }
 
 // DeviceCheckCert see if a particular certificate is a valid registered device certificate
-func (d *DeviceManagerMemory) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, error) {
+func (d *DeviceManager) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("invalid nil certificate")
 	}
@@ -224,7 +163,7 @@ func (d *DeviceManagerMemory) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUI
 }
 
 // DeviceRemove remove a device
-func (d *DeviceManagerMemory) DeviceRemove(u *uuid.UUID) error {
+func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 	cert, _, _, err := d.DeviceGet(u)
 	if err != nil {
 		return err
@@ -237,25 +176,25 @@ func (d *DeviceManagerMemory) DeviceRemove(u *uuid.UUID) error {
 }
 
 // DeviceClear remove all devices
-func (d *DeviceManagerMemory) DeviceClear() error {
+func (d *DeviceManager) DeviceClear() error {
 	d.deviceCerts = make(map[string]uuid.UUID)
-	d.devices = make(map[uuid.UUID]deviceStorage)
+	d.devices = make(map[uuid.UUID]common.DeviceStorage)
 	return nil
 }
 
 // DeviceGet get an individual device by UUID
-func (d *DeviceManagerMemory) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
+func (d *DeviceManager) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
 	if u == nil {
 		return nil, nil, "", fmt.Errorf("empty UUID")
 	}
 	if _, ok := d.devices[*u]; ok {
-		return d.devices[*u].cert, d.devices[*u].onboard, d.devices[*u].serial, nil
+		return d.devices[*u].Cert, d.devices[*u].Onboard, d.devices[*u].Serial, nil
 	}
-	return nil, nil, "", &NotFoundError{err: fmt.Sprintf("device uuid not found: %s", u.String())}
+	return nil, nil, "", &common.NotFoundError{Err: fmt.Sprintf("device uuid not found: %s", u.String())}
 }
 
 // DeviceList list all of the known UUIDs for devices
-func (d *DeviceManagerMemory) DeviceList() ([]*uuid.UUID, error) {
+func (d *DeviceManager) DeviceList() ([]*uuid.UUID, error) {
 	ids := make([]uuid.UUID, 0, len(d.devices))
 	for u := range d.devices {
 		ids = append(ids, u)
@@ -268,7 +207,7 @@ func (d *DeviceManagerMemory) DeviceList() ([]*uuid.UUID, error) {
 }
 
 // DeviceRegister register a new device cert
-func (d *DeviceManagerMemory) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
+func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
 	// first check if it already exists - this also checks for nil cert
 	u, err := d.DeviceCheckCert(cert)
 	if err != nil {
@@ -287,19 +226,19 @@ func (d *DeviceManagerMemory) DeviceRegister(cert, onboard *x509.Certificate, se
 	d.deviceCerts[string(cert.Raw)] = unew
 	// create a structure for this device
 	if d.devices == nil {
-		d.devices = make(map[uuid.UUID]deviceStorage)
+		d.devices = make(map[uuid.UUID]common.DeviceStorage)
 	}
-	d.devices[unew] = deviceStorage{
-		onboard: onboard,
-		serial:  serial,
-		config:  createBaseConfig(unew),
-		logs: &ByteSlice{
+	d.devices[unew] = common.DeviceStorage{
+		Onboard: onboard,
+		Serial:  serial,
+		Config:  common.CreateBaseConfig(unew),
+		Logs: &ByteSlice{
 			maxSize: d.maxLogSize,
 		},
-		info: &ByteSlice{
+		Info: &ByteSlice{
 			maxSize: d.maxInfoSize,
 		},
-		metrics: &ByteSlice{
+		Metrics: &ByteSlice{
 			maxSize: d.maxMetricSize,
 		},
 	}
@@ -307,7 +246,7 @@ func (d *DeviceManagerMemory) DeviceRegister(cert, onboard *x509.Certificate, se
 }
 
 // OnboardRegister register a new onboard certificate and its serials or update an existing one
-func (d *DeviceManagerMemory) OnboardRegister(cert *x509.Certificate, serial []string) error {
+func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string) error {
 	if cert == nil {
 		return fmt.Errorf("empty nil certificate")
 	}
@@ -325,7 +264,7 @@ func (d *DeviceManagerMemory) OnboardRegister(cert *x509.Certificate, serial []s
 }
 
 // WriteInfo write an info message
-func (d *DeviceManagerMemory) WriteInfo(m *info.ZInfoMsg) error {
+func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -341,13 +280,13 @@ func (d *DeviceManagerMemory) WriteInfo(m *info.ZInfoMsg) error {
 		return fmt.Errorf("unregistered device UUID %s", m.DevId)
 	}
 	// append the messages
-	dev.addInfo(m)
+	dev.AddInfo(m)
 	d.devices[u] = dev
 	return nil
 }
 
 // WriteLogs write a message of logs
-func (d *DeviceManagerMemory) WriteLogs(m *logs.LogBundle) error {
+func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -364,13 +303,13 @@ func (d *DeviceManagerMemory) WriteLogs(m *logs.LogBundle) error {
 	}
 	// append the messages
 	// each slice in dev.logs is allowed up to `memoryLogSlicePart` of the total maxSize
-	dev.addLog(m)
+	dev.AddLog(m)
 	d.devices[u] = dev
 	return nil
 }
 
 // WriteMetrics write a metrics message
-func (d *DeviceManagerMemory) WriteMetrics(m *metrics.ZMetricMsg) error {
+func (d *DeviceManager) WriteMetrics(m *metrics.ZMetricMsg) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -386,23 +325,23 @@ func (d *DeviceManagerMemory) WriteMetrics(m *metrics.ZMetricMsg) error {
 		return fmt.Errorf("unregistered device UUID %s", m.DevID)
 	}
 	// append the messages
-	dev.addMetrics(m)
+	dev.AddMetrics(m)
 	d.devices[u] = dev
 	return nil
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *DeviceManagerMemory) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
+func (d *DeviceManager) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	return dev.config, nil
+	return dev.Config, nil
 }
 
 // GetConfigResponse retrieve the config for a particular device
-func (d *DeviceManagerMemory) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
+func (d *DeviceManager) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
@@ -412,16 +351,16 @@ func (d *DeviceManagerMemory) GetConfigResponse(u uuid.UUID) (*config.ConfigResp
 	response := &config.ConfigResponse{}
 
 	h := sha256.New()
-	computeConfigElementSha(h, dev.config)
+	common.ComputeConfigElementSha(h, dev.Config)
 	configHash := h.Sum(nil)
 
-	response.Config = dev.config
+	response.Config = dev.Config
 	response.ConfigHash = base64.URLEncoding.EncodeToString(configHash)
 	return response, nil
 }
 
 // SetConfig set the config for a particular device
-func (d *DeviceManagerMemory) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
+func (d *DeviceManager) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
@@ -434,13 +373,13 @@ func (d *DeviceManagerMemory) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) er
 	if m.Id == nil || m.Id.Uuid != u.String() {
 		return fmt.Errorf("mismatched UUID")
 	}
-	dev.config = m
+	dev.Config = m
 	return nil
 }
 
 // checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
 // does **not** check if it has been used
-func (d *DeviceManagerMemory) checkValidOnboardSerial(cert *x509.Certificate, serial string) error {
+func (d *DeviceManager) checkValidOnboardSerial(cert *x509.Certificate, serial string) error {
 	certStr := string(cert.Raw)
 	if c, ok := d.onboardCerts[certStr]; ok {
 		// accept the specific serial or the wildcard
@@ -450,17 +389,17 @@ func (d *DeviceManagerMemory) checkValidOnboardSerial(cert *x509.Certificate, se
 		if _, ok := c["*"]; ok {
 			return nil
 		}
-		return &InvalidSerialError{err: fmt.Sprintf("unknown serial: %s", serial)}
+		return &common.InvalidSerialError{Err: fmt.Sprintf("unknown serial: %s", serial)}
 	}
-	return &InvalidCertError{err: "unknown onboarding certificate"}
+	return &common.InvalidCertError{Err: "unknown onboarding certificate"}
 }
 
 // getOnboardSerialDevice see if a particular certificate+serial combinaton has been used and get its device uuid
-func (d *DeviceManagerMemory) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
+func (d *DeviceManager) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
 	certStr := string(cert.Raw)
 	for uid, dev := range d.devices {
-		dCertStr := string(dev.onboard.Raw)
-		if dCertStr == certStr && serial == dev.serial {
+		dCertStr := string(dev.Onboard.Raw)
+		if dCertStr == certStr && serial == dev.Serial {
 			return &uid
 		}
 	}
@@ -468,21 +407,21 @@ func (d *DeviceManagerMemory) getOnboardSerialDevice(cert *x509.Certificate, ser
 }
 
 // GetLogsReader get the logs for a given uuid
-func (d *DeviceManagerMemory) GetLogsReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	return dev.logs, nil
+	return dev.Logs, nil
 }
 
 // GetInfoReader get the info for a given uuid
-func (d *DeviceManagerMemory) GetInfoReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	return dev.info, nil
+	return dev.Info, nil
 }

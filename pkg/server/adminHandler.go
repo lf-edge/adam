@@ -18,6 +18,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
+	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/config"
 	uuid "github.com/satori/go.uuid"
@@ -86,7 +87,7 @@ func (h *adminHandler) onboardList(w http.ResponseWriter, r *http.Request) {
 func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
 	cn := mux.Vars(r)["cn"]
 	cert, serials, err := h.manager.OnboardGet(cn)
-	_, isNotFound := err.(*driver.NotFoundError)
+	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -108,7 +109,7 @@ func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
 func (h *adminHandler) onboardRemove(w http.ResponseWriter, r *http.Request) {
 	cn := mux.Vars(r)["cn"]
 	err := h.manager.OnboardRemove(cn)
-	_, isNotFound := err.(*driver.NotFoundError)
+	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -187,7 +188,7 @@ func (h *adminHandler) deviceGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceCert, onboardCert, serial, err := h.manager.DeviceGet(&uid)
-	_, isNotFound := err.(*driver.NotFoundError)
+	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -220,7 +221,7 @@ func (h *adminHandler) deviceRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = h.manager.DeviceRemove(&uid)
-	_, isNotFound := err.(*driver.NotFoundError)
+	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -246,7 +247,7 @@ func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceConfig, err := h.manager.GetConfig(uid)
-	_, isNotFound := err.(*driver.NotFoundError)
+	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -283,7 +284,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	// check for UUID and/or version mismatch
 	var existingId *config.UUIDandVersion
 	existingConfig, err := h.manager.GetConfig(uid)
-	_, isNotFound := err.(*driver.NotFoundError)
+	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, fmt.Sprintf("device not found %s", u), http.StatusNotFound)
@@ -330,7 +331,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.manager.SetConfig(uid, &deviceConfig)
-	_, isNotFound = err.(*driver.NotFoundError)
+	_, isNotFound = err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
@@ -393,7 +394,7 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 		}
 	} else {
 		reader, err := readerFunc(uid)
-		_, isNotFound := err.(*driver.NotFoundError)
+		_, isNotFound := err.(*common.NotFoundError)
 		switch {
 		case err != nil && isNotFound:
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)

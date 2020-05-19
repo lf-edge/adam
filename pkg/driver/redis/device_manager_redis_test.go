@@ -1,53 +1,28 @@
 // Copyright (c) 2020 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package redis
 
 import (
 	"crypto/x509"
+	"testing"
+
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
-func TestURLs(t *testing.T) {
-	for _, url := range []string {"redis://localhost:123/0", "redis://username:password@localhost/1", "redis://"} {
-		t.Run("redis-url", func(t *testing.T) {
-			var mgr DeviceManager
-			for _, mgr = range GetDeviceManagers() {
-				if ok, _ := mgr.Init(url, 0, 0, 0); ok {
-					break
-				}
-			}
-
-			assert.Equal(t, "redis", mgr.Name())
-		})
-	}
-
-	for _, url := range []string {"", "foo/bar/baz", "http://google.com", "/etc/hosts", "redis://a.b:1/2/3/4"} {
-		t.Run("non-redis-url", func(t *testing.T) {
-			var mgr DeviceManager
-			for _, mgr = range GetDeviceManagers() {
-				if ok, _ := mgr.Init(url, 0, 0,0 ); ok {
-					break
-				}
-			}
-
-			assert.NotEqual(t, "redis", mgr.Name())
-		})
-	}
-
-    redisDriver := DeviceManagerRedis{}
-    redisDriver.Init("redis://localhost:12345/12", 0, 0, 0 )
-    assert.Equal(t, "localhost:12345", redisDriver.Database())
+func TestInit(t *testing.T) {
+	redisDriver := DeviceManager{}
+	redisDriver.Init("redis://localhost:12345/12", 0, 0, 0)
+	assert.Equal(t, "localhost:12345", redisDriver.Database())
 }
 
 func TestOnboardRedis(t *testing.T) {
-	r := DeviceManagerRedis{}
+	r := DeviceManager{}
 	r.Init("redis://localhost:6379/0", 0, 0, 0)
 
 	if r.client.FlushAll().Err() != nil {
@@ -89,7 +64,7 @@ func TestOnboardRedis(t *testing.T) {
 }
 
 func TestDeviceRedis(t *testing.T) {
-	r := DeviceManagerRedis{}
+	r := DeviceManager{}
 	r.Init("redis://localhost:6379/0", 0, 0, 0)
 
 	if r.client.FlushAll().Err() != nil {
@@ -140,7 +115,7 @@ func TestDeviceRedis(t *testing.T) {
 }
 
 func TestConfigRedis(t *testing.T) {
-	r := DeviceManagerRedis{}
+	r := DeviceManager{}
 	r.Init("redis://localhost:6379/0", 0, 0, 0)
 
 	if r.client.FlushAll().Err() != nil {
@@ -175,7 +150,7 @@ func TestConfigRedis(t *testing.T) {
 }
 
 func TestStreamsRedis(t *testing.T) {
-	r := DeviceManagerRedis{}
+	r := DeviceManager{}
 	r.Init("redis://localhost:6379/0", 0, 0, 0)
 
 	if r.client.FlushAll().Err() != nil {
@@ -189,7 +164,7 @@ func TestStreamsRedis(t *testing.T) {
 
 	var log logs.LogBundle
 	var info info.ZInfoMsg
-    var metric metrics.ZMetricMsg
+	var metric metrics.ZMetricMsg
 	buffer := make([]byte, 1024)
 
 	log.DevID = u.String()

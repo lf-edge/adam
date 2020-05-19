@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package redis
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/golang/protobuf/proto"
+	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
@@ -31,12 +32,12 @@ import (
 const (
 	// Our current schema for Redis database is that aside from logs, info and metrics
 	// everything else is kept in Redis hashes with the following mapping:
-	onboardCertsHash = "ONBOARD_CERTS" // CN -> string (certificate PEM)
-	onboardSerialsHash = "ONBOARD_SERIALS" // CN -> []string (list of serial #s)
-	deviceSerialsHash = "DEVICE_SERIALS" // UUID -> string (single serial #)
+	onboardCertsHash       = "ONBOARD_CERTS"        // CN -> string (certificate PEM)
+	onboardSerialsHash     = "ONBOARD_SERIALS"      // CN -> []string (list of serial #s)
+	deviceSerialsHash      = "DEVICE_SERIALS"       // UUID -> string (single serial #)
 	deviceOnboardCertsHash = "DEVICE_ONBOARD_CERTS" // UUID -> string (certificate PEM)
-	deviceCertsHash = "DEVICE_CERTS"  // UUID -> string (certificate PEM)
-	deviceConfigsHash = "DEVICE_CONFIGS" // UUID -> json (EVE config json representation)
+	deviceCertsHash        = "DEVICE_CERTS"         // UUID -> string (certificate PEM)
+	deviceConfigsHash      = "DEVICE_CONFIGS"       // UUID -> json (EVE config json representation)
 
 	// Logs, info and metrics are managed by Redis streams named after device UUID as in:
 	//    LOGS_EVE_<UUID>
@@ -45,13 +46,18 @@ const (
 	// with each stream element having a single key pair:
 	//   "object" -> msgpack serialized object
 	// see MkStreamEntry() for details
-	deviceLogsStream = "LOGS_EVE_"
-	deviceInfoSteram = "INFO_EVE_"
+	deviceLogsStream    = "LOGS_EVE_"
+	deviceInfoSteram    = "INFO_EVE_"
 	deviceMetricsStream = "METRICS_EVE_"
+
+	MB                 = common.MB
+	maxLogSizeRedis    = 100 * MB
+	maxInfoSizeRedis   = 100 * MB
+	maxMetricSizeRedis = 100 * MB
 )
 
-// DeviceManagerRedis implementation of DeviceManager interface with a Redis DB as the backing store
-type DeviceManagerRedis struct {
+// DeviceManager implementation of DeviceManager interface with a Redis DB as the backing store
+type DeviceManager struct {
 	client       *redis.Client
 	databaseNet  string
 	databaseURL  string
@@ -61,36 +67,36 @@ type DeviceManagerRedis struct {
 	// these are for caching only
 	onboardCerts map[string]map[string]bool
 	deviceCerts  map[string]uuid.UUID
-	devices      map[uuid.UUID]deviceStorage
+	devices      map[uuid.UUID]common.DeviceStorage
 }
 
 // Name return name
-func (d *DeviceManagerRedis) Name() string {
+func (d *DeviceManager) Name() string {
 	return "redis"
 }
 
 // Database return database hostname and port
-func (d *DeviceManagerRedis) Database() string {
+func (d *DeviceManager) Database() string {
 	return d.databaseURL
 }
 
 // MaxLogSize return the default maximum log size in bytes for this device manager
-func (d *DeviceManagerRedis) MaxLogSize() int {
-	return maxLogSizeFile
+func (d *DeviceManager) MaxLogSize() int {
+	return maxLogSizeRedis
 }
 
 // MaxInfoSize return the default maximum info size in bytes for this device manager
-func (d *DeviceManagerRedis) MaxInfoSize() int {
-	return maxInfoSizeFile
+func (d *DeviceManager) MaxInfoSize() int {
+	return maxInfoSizeRedis
 }
 
 // MaxMetricSize return the maximum metrics size in bytes for this device manager
-func (d *DeviceManagerRedis) MaxMetricSize() int {
-	return maxMetricSizeFile
+func (d *DeviceManager) MaxMetricSize() int {
+	return maxMetricSizeRedis
 }
 
 // Init check if a URL is valid and initialize
-func (d *DeviceManagerRedis) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
+func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
 	URL, err := url.Parse(s)
 	if err != nil || URL.Scheme != "redis" {
 		return false, err
@@ -122,12 +128,12 @@ func (d *DeviceManagerRedis) Init(s string, maxLogSize, maxInfoSize, maxMetricSi
 }
 
 // SetCacheTimeout set the timeout for refreshing the cache, unused in memory
-func (d *DeviceManagerRedis) SetCacheTimeout(timeout int) {
+func (d *DeviceManager) SetCacheTimeout(timeout int) {
 	d.cacheTimeout = timeout
 }
 
 // OnboardCheck see if a particular certificate and serial combination is valid
-func (d *DeviceManagerRedis) OnboardCheck(cert *x509.Certificate, serial string) error {
+func (d *DeviceManager) OnboardCheck(cert *x509.Certificate, serial string) error {
 	// do not accept a nil certificate
 	if cert == nil {
 		return fmt.Errorf("invalid nil certificate")
@@ -142,13 +148,13 @@ func (d *DeviceManagerRedis) OnboardCheck(cert *x509.Certificate, serial string)
 		return err
 	}
 	if d.getOnboardSerialDevice(cert, serial) != nil {
-		return &UsedSerialError{err: fmt.Sprintf("serial already used for onboarding certificate: %s", serial)}
+		return &common.UsedSerialError{Err: fmt.Sprintf("serial already used for onboarding certificate: %s", serial)}
 	}
 	return nil
 }
 
 // OnboardGet get the onboard cert and its serials based on Common Name
-func (d *DeviceManagerRedis) OnboardGet(cn string) (*x509.Certificate, []string, error) {
+func (d *DeviceManager) OnboardGet(cn string) (*x509.Certificate, []string, error) {
 	if cn == "" {
 		return nil, nil, fmt.Errorf("empty cn")
 	}
@@ -162,7 +168,7 @@ func (d *DeviceManagerRedis) OnboardGet(cn string) (*x509.Certificate, []string,
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading onboard serials for %s: %v", cn, err)
 	}
-    var serials []string
+	var serials []string
 	if err = msgpack.Unmarshal([]byte(s), &serials); err != nil {
 		return nil, nil, fmt.Errorf("error decoding onboard serials for %s %v (%s)", cn, err, s)
 	}
@@ -170,7 +176,7 @@ func (d *DeviceManagerRedis) OnboardGet(cn string) (*x509.Certificate, []string,
 }
 
 // OnboardList list all of the known Common Names for onboard
-func (d *DeviceManagerRedis) OnboardList() ([]string, error) {
+func (d *DeviceManager) OnboardList() ([]string, error) {
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
@@ -189,9 +195,9 @@ func (d *DeviceManagerRedis) OnboardList() ([]string, error) {
 }
 
 // OnboardRemove remove an onboard certificate based on Common Name
-func (d *DeviceManagerRedis) OnboardRemove(cn string) (result error) {
+func (d *DeviceManager) OnboardRemove(cn string) (result error) {
 	result = d.transactionDrop([][]string{{onboardSerialsHash, cn},
-		                                  {onboardCertsHash, cn}})
+		{onboardCertsHash, cn}})
 	if result == nil {
 		result = d.refreshCache()
 	}
@@ -199,7 +205,7 @@ func (d *DeviceManagerRedis) OnboardRemove(cn string) (result error) {
 }
 
 // OnboardClear remove all onboarding certs
-func (d *DeviceManagerRedis) OnboardClear() error {
+func (d *DeviceManager) OnboardClear() error {
 	if err := d.transactionDrop([][]string{{onboardCertsHash}, {onboardSerialsHash}}); err != nil {
 		return fmt.Errorf("unable to remove the onboarding certificates/serials: %v", err)
 	}
@@ -209,7 +215,7 @@ func (d *DeviceManagerRedis) OnboardClear() error {
 }
 
 // DeviceCheckCert see if a particular certificate is a valid registered device certificate
-func (d *DeviceManagerRedis) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, error) {
+func (d *DeviceManager) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("invalid nil certificate")
 	}
@@ -226,7 +232,7 @@ func (d *DeviceManagerRedis) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID
 }
 
 // DeviceRemove remove a device
-func (d *DeviceManagerRedis) DeviceRemove(u *uuid.UUID) error {
+func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 	k := u.String()
 	err := d.transactionDrop([][]string{
 		{deviceCertsHash, k},
@@ -249,7 +255,7 @@ func (d *DeviceManagerRedis) DeviceRemove(u *uuid.UUID) error {
 }
 
 // DeviceClear remove all devices
-func (d *DeviceManagerRedis) DeviceClear() error {
+func (d *DeviceManager) DeviceClear() error {
 	streams := [][]string{
 		{deviceConfigsHash},
 		{deviceSerialsHash},
@@ -271,12 +277,12 @@ func (d *DeviceManagerRedis) DeviceClear() error {
 	}
 
 	d.deviceCerts = map[string]uuid.UUID{}
-	d.devices = map[uuid.UUID]deviceStorage{}
+	d.devices = map[uuid.UUID]common.DeviceStorage{}
 	return nil
 }
 
 // DeviceGet get an individual device by UUID
-func (d *DeviceManagerRedis) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
+func (d *DeviceManager) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certificate, string, error) {
 	if u == nil {
 		return nil, nil, "", fmt.Errorf("empty UUID")
 	}
@@ -299,7 +305,7 @@ func (d *DeviceManagerRedis) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.C
 }
 
 // DeviceList list all of the known UUIDs for devices
-func (d *DeviceManagerRedis) DeviceList() ([]*uuid.UUID, error) {
+func (d *DeviceManager) DeviceList() ([]*uuid.UUID, error) {
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
@@ -317,7 +323,7 @@ func (d *DeviceManagerRedis) DeviceList() ([]*uuid.UUID, error) {
 }
 
 // DeviceRegister register a new device cert
-func (d *DeviceManagerRedis) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
+func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
@@ -361,7 +367,7 @@ func (d *DeviceManagerRedis) DeviceRegister(cert, onboard *x509.Certificate, ser
 	}
 
 	// save the base configuration
-	err = d.writeProtobufToJSONMsgPack(unew, deviceConfigsHash, createBaseConfig(unew))
+	err = d.writeProtobufToJSONMsgPack(unew, deviceConfigsHash, common.CreateBaseConfig(unew))
 	if err != nil {
 		return nil, fmt.Errorf("error saving device config for %v: %v", unew, err)
 	}
@@ -370,10 +376,10 @@ func (d *DeviceManagerRedis) DeviceRegister(cert, onboard *x509.Certificate, ser
 	for _, p := range []string{deviceInfoSteram, deviceMetricsStream, deviceLogsStream} {
 		stream := p + unew.String()
 		_, err := d.client.XAdd(&redis.XAddArgs{
-			Stream: stream,
+			Stream:       stream,
 			MaxLenApprox: 10000,
-			ID: "*",
-			Values: d.mkStreamEntry([]byte("")),
+			ID:           "*",
+			Values:       d.mkStreamEntry([]byte("")),
 		}).Result()
 		if err != nil {
 			return nil, fmt.Errorf("error creating stream %s: %v", stream, err)
@@ -382,21 +388,21 @@ func (d *DeviceManagerRedis) DeviceRegister(cert, onboard *x509.Certificate, ser
 
 	// save new one to cache - just the serial and onboard; the rest is on disk
 	d.deviceCerts[string(cert.Raw)] = unew
-	d.devices[unew] = deviceStorage{
-		onboard: onboard,
-		serial:  serial,
+	d.devices[unew] = common.DeviceStorage{
+		Onboard: onboard,
+		Serial:  serial,
 	}
 
 	return &unew, nil
 }
 
 // OnboardRegister register an onboard cert and update its serials
-func (d *DeviceManagerRedis) OnboardRegister(cert *x509.Certificate, serial []string) error {
+func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string) error {
 	if cert == nil {
 		return fmt.Errorf("empty nil certificate")
 	}
 	certStr := string(cert.Raw)
-	cn := getOnboardCertName(cert.Subject.CommonName)
+	cn := common.GetOnboardCertName(cert.Subject.CommonName)
 
 	if err := d.writeCert(cert.Raw, onboardCertsHash, cn, true); err != nil {
 		return err
@@ -428,7 +434,7 @@ func (d *DeviceManagerRedis) OnboardRegister(cert *x509.Certificate, serial []st
 }
 
 // WriteInfo write an info message
-func (d *DeviceManagerRedis) WriteInfo(m *info.ZInfoMsg) error {
+func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -439,7 +445,7 @@ func (d *DeviceManagerRedis) WriteInfo(m *info.ZInfoMsg) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevId, err)
 	}
 	// check that the device actually exists
-	err = d.writeProtobufToStream(deviceInfoSteram + u.String(), m)
+	err = d.writeProtobufToStream(deviceInfoSteram+u.String(), m)
 	if err != nil {
 		return fmt.Errorf("failed to write info to a stream: %v", err)
 	}
@@ -447,7 +453,7 @@ func (d *DeviceManagerRedis) WriteInfo(m *info.ZInfoMsg) error {
 }
 
 // WriteLogs write a message of logs
-func (d *DeviceManagerRedis) WriteLogs(m *logs.LogBundle) error {
+func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -458,7 +464,7 @@ func (d *DeviceManagerRedis) WriteLogs(m *logs.LogBundle) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
 	}
 	// check that the device actually exists
-	err = d.writeProtobufToStream(deviceLogsStream + u.String(), m)
+	err = d.writeProtobufToStream(deviceLogsStream+u.String(), m)
 	if err != nil {
 		return fmt.Errorf("failed to write info to a stream: %v", err)
 	}
@@ -466,7 +472,7 @@ func (d *DeviceManagerRedis) WriteLogs(m *logs.LogBundle) error {
 }
 
 // WriteMetrics write a metrics message
-func (d *DeviceManagerRedis) WriteMetrics(m *metrics.ZMetricMsg) error {
+func (d *DeviceManager) WriteMetrics(m *metrics.ZMetricMsg) error {
 	// make sure it is not nil
 	if m == nil {
 		return fmt.Errorf("invalid nil message")
@@ -477,7 +483,7 @@ func (d *DeviceManagerRedis) WriteMetrics(m *metrics.ZMetricMsg) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
 	}
 	// check that the device actually exists
-	err = d.writeProtobufToStream(deviceMetricsStream + u.String(), m)
+	err = d.writeProtobufToStream(deviceMetricsStream+u.String(), m)
 	if err != nil {
 		return fmt.Errorf("failed to write info to a stream: %v", err)
 	}
@@ -485,13 +491,13 @@ func (d *DeviceManagerRedis) WriteMetrics(m *metrics.ZMetricMsg) error {
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *DeviceManagerRedis) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
+func (d *DeviceManager) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
 	// hold our config
 	msg := &config.EdgeDevConfig{}
 	b, err := d.client.HGet(deviceConfigsHash, u.String()).Result()
 	if err != nil {
 		// if config doesn't exist - create an empty one
-		msg = createBaseConfig(u)
+		msg = common.CreateBaseConfig(u)
 		v, err := msgpack.Marshal(&msg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshall config %v", err)
@@ -513,7 +519,7 @@ func (d *DeviceManagerRedis) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, erro
 }
 
 // GetConfigResponse retrieve the config for a particular device
-func (d *DeviceManagerRedis) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
+func (d *DeviceManager) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
 	// hold our config
 	msg := &config.EdgeDevConfig{}
 
@@ -525,7 +531,7 @@ func (d *DeviceManagerRedis) GetConfigResponse(u uuid.UUID) (*config.ConfigRespo
 	response := &config.ConfigResponse{}
 
 	h := sha256.New()
-	computeConfigElementSha(h, msg)
+	common.ComputeConfigElementSha(h, msg)
 	configHash := h.Sum(nil)
 
 	response.Config = msg
@@ -535,7 +541,7 @@ func (d *DeviceManagerRedis) GetConfigResponse(u uuid.UUID) (*config.ConfigRespo
 }
 
 // SetConfig set the config for a particular device
-func (d *DeviceManagerRedis) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
+func (d *DeviceManager) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
 	// pre-flight checks to bail early
 	if m == nil {
 		return fmt.Errorf("empty configuration")
@@ -571,7 +577,7 @@ func (d *DeviceManagerRedis) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) err
 }
 
 // GetLogsReader get the logs for a given uuid
-func (d *DeviceManagerRedis) GetLogsReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 	dr := &RedisStreamReader{
 		Client:   d.client,
 		Stream:   deviceLogsStream + u.String(),
@@ -581,7 +587,7 @@ func (d *DeviceManagerRedis) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 }
 
 // GetInfoReader get the info for a given uuid
-func (d *DeviceManagerRedis) GetInfoReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	dr := &RedisStreamReader{
 		Client:   d.client,
 		Stream:   deviceInfoSteram + u.String(),
@@ -591,7 +597,7 @@ func (d *DeviceManagerRedis) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 }
 
 // refreshCache refresh cache from disk
-func (d *DeviceManagerRedis) refreshCache() error {
+func (d *DeviceManager) refreshCache() error {
 	// is it time to update the cache again?
 	now := time.Now()
 	if now.Sub(d.lastUpdate).Seconds() < float64(d.cacheTimeout) {
@@ -601,7 +607,7 @@ func (d *DeviceManagerRedis) refreshCache() error {
 	// create new vars to hold while we load
 	onboardCerts := make(map[string]map[string]bool)
 	deviceCerts := make(map[string]uuid.UUID)
-	devices := make(map[uuid.UUID]deviceStorage)
+	devices := make(map[uuid.UUID]common.DeviceStorage)
 
 	// scan the onboarding certs
 	ocerts, err := d.client.HGetAll(onboardCertsHash).Result()
@@ -657,7 +663,7 @@ func (d *DeviceManagerRedis) refreshCache() error {
 		}
 		certStr := string(cert.Raw)
 		deviceCerts[certStr] = u
-		devices[u] = deviceStorage{}
+		devices[u] = common.DeviceStorage{}
 	}
 	// replace the existing device certificates
 	d.deviceCerts = deviceCerts
@@ -682,10 +688,10 @@ func (d *DeviceManagerRedis) refreshCache() error {
 			return fmt.Errorf("unable to convert data from file %s to device onboard certificate: %v", b, err)
 		}
 		if _, present := devices[u]; !present {
-			devices[u] = deviceStorage{}
+			devices[u] = common.DeviceStorage{}
 		}
 		devItem := devices[u]
-		devItem.onboard = cert
+		devItem.Onboard = cert
 		devices[u] = devItem
 	}
 
@@ -702,10 +708,10 @@ func (d *DeviceManagerRedis) refreshCache() error {
 			return fmt.Errorf("unable to convert device uuid from Redis hash name %s: %v", u, err)
 		}
 		if _, present := devices[u]; !present {
-			devices[u] = deviceStorage{}
+			devices[u] = common.DeviceStorage{}
 		}
 		devItem := devices[u]
-		devItem.serial = s
+		devItem.Serial = s
 		devices[u] = devItem
 	}
 	// replace the existing device cache
@@ -717,7 +723,7 @@ func (d *DeviceManagerRedis) refreshCache() error {
 }
 
 // writeProtobufToJSONMsgPack write a protobuf to a named hash in Redis
-func (d *DeviceManagerRedis) writeProtobufToJSONMsgPack(u uuid.UUID, hash string, msg proto.Message) error {
+func (d *DeviceManager) writeProtobufToJSONMsgPack(u uuid.UUID, hash string, msg proto.Message) error {
 	s, err := msgpack.Marshal(&msg)
 	if err != nil {
 		return fmt.Errorf("can't marshal proto message %v", err)
@@ -734,7 +740,7 @@ func (d *DeviceManagerRedis) writeProtobufToJSONMsgPack(u uuid.UUID, hash string
 
 // checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
 // does **not** check if it has been used
-func (d *DeviceManagerRedis) checkValidOnboardSerial(cert *x509.Certificate, serial string) error {
+func (d *DeviceManager) checkValidOnboardSerial(cert *x509.Certificate, serial string) error {
 	certStr := string(cert.Raw)
 	if c, ok := d.onboardCerts[certStr]; ok {
 		// accept the specific serial or the wildcard
@@ -744,24 +750,24 @@ func (d *DeviceManagerRedis) checkValidOnboardSerial(cert *x509.Certificate, ser
 		if _, ok := c["*"]; ok {
 			return nil
 		}
-		return &InvalidSerialError{err: fmt.Sprintf("unknown serial: %s", serial)}
+		return &common.InvalidSerialError{Err: fmt.Sprintf("unknown serial: %s", serial)}
 	}
-	return &InvalidCertError{err: "unknown onboarding certificate"}
+	return &common.InvalidCertError{Err: "unknown onboarding certificate"}
 }
 
 // getOnboardSerialDevice see if a particular certificate+serial combinaton has been used and get its device uuid
-func (d *DeviceManagerRedis) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
+func (d *DeviceManager) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
 	certStr := string(cert.Raw)
 	for uid, dev := range d.devices {
-		dCertStr := string(dev.onboard.Raw)
-		if dCertStr == certStr && serial == dev.serial {
+		dCertStr := string(dev.Onboard.Raw)
+		if dCertStr == certStr && serial == dev.Serial {
 			return &uid
 		}
 	}
 	return nil
 }
 
-func (d *DeviceManagerRedis) transactionDrop(keys [][]string) (result error) {
+func (d *DeviceManager) transactionDrop(keys [][]string) (result error) {
 	// transactionality of this function is currently a lie: later on we
 	// will turn it into one, but for now lets just hope that we never
 	// get into an inconsistent state between all these objects that need
@@ -785,7 +791,7 @@ func (d *DeviceManagerRedis) transactionDrop(keys [][]string) (result error) {
 	return
 }
 
-func (d *DeviceManagerRedis) readCert(hash string, key string) (*x509.Certificate, error) {
+func (d *DeviceManager) readCert(hash string, key string) (*x509.Certificate, error) {
 	v, err := d.client.HGet(hash, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("error reading certificate for %s from hash %s: %v", key, hash, err)
@@ -799,7 +805,7 @@ func (d *DeviceManagerRedis) readCert(hash string, key string) (*x509.Certificat
 }
 
 // WriteCert write cert bytes to a path, after pem encoding them. Do not overwrite unless force is true.
-func (d *DeviceManagerRedis) writeCert(cert []byte, hash string, uuid string, force bool) error {
+func (d *DeviceManager) writeCert(cert []byte, hash string, uuid string, force bool) error {
 	// make sure we have the paths we need, and that they are not already taken, unless we were told to force
 	if hash == "" {
 		return fmt.Errorf("certPath must not be empty")
@@ -819,7 +825,7 @@ func (d *DeviceManagerRedis) writeCert(cert []byte, hash string, uuid string, fo
 	return nil
 }
 
-func (d *DeviceManagerRedis) writeProtobufToStream(stream string, msg proto.Message) error {
+func (d *DeviceManager) writeProtobufToStream(stream string, msg proto.Message) error {
 	var buf bytes.Buffer
 	mler := jsonpb.Marshaler{}
 	err := mler.Marshal(&buf, msg)
@@ -840,6 +846,6 @@ func (d *DeviceManagerRedis) writeProtobufToStream(stream string, msg proto.Mess
 	return nil
 }
 
-func (d *DeviceManagerRedis) mkStreamEntry(body []byte) map[string]interface{} {
+func (d *DeviceManager) mkStreamEntry(body []byte) map[string]interface{} {
 	return map[string]interface{}{"version": "1", "object": string(body)}
 }

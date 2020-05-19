@@ -1,7 +1,7 @@
 // Copyright (c) 2019 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package memory
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/jsonpb"
+	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
@@ -18,8 +19,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-func TestDeviceManagerMemory(t *testing.T) {
-	fillOnboard := func(dm *DeviceManagerMemory) []string {
+func TestDeviceManager(t *testing.T) {
+	fillOnboard := func(dm *DeviceManager) []string {
 		dm.onboardCerts = map[string]map[string]bool{}
 		cns := []string{"abcd", "efgh", "jklm"}
 		for _, cn := range cns {
@@ -37,9 +38,9 @@ func TestDeviceManagerMemory(t *testing.T) {
 		return cns
 	}
 
-	fillDevice := func(dm *DeviceManagerMemory) []*uuid.UUID {
+	fillDevice := func(dm *DeviceManager) []*uuid.UUID {
 		dm.deviceCerts = map[string]uuid.UUID{}
-		dm.devices = map[uuid.UUID]deviceStorage{}
+		dm.devices = map[uuid.UUID]common.DeviceStorage{}
 		uids := []uuid.UUID{}
 		for i := 0; i < 3; i++ {
 			u, _ := uuid.NewV4()
@@ -53,7 +54,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			}
 			certStr := string(cert.Raw)
 			dm.deviceCerts[certStr] = u
-			dm.devices[u] = deviceStorage{}
+			dm.devices[u] = common.DeviceStorage{}
 			uids = append(uids, u)
 		}
 		puids := make([]*uuid.UUID, 0, len(uids))
@@ -64,7 +65,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 	}
 
 	t.Run("TestSetCacheTimeout", func(t *testing.T) {
-		d := DeviceManagerMemory{}
+		d := DeviceManager{}
 		d.SetCacheTimeout(10)
 	})
 
@@ -80,16 +81,16 @@ func TestDeviceManagerMemory(t *testing.T) {
 			err          error
 		}{
 			{false, false, false, false, fmt.Errorf("invalid nil certificate")},
-			{true, false, false, false, &InvalidCertError{"unknown onboarding certificate"}},
-			{true, false, true, false, &InvalidCertError{"unknown onboarding certificate"}},
-			{true, true, false, false, &InvalidSerialError{"unknown serial"}},
-			{true, true, true, true, &UsedSerialError{"serial already used"}},
+			{true, false, false, false, &common.InvalidCertError{Err: "unknown onboarding certificate"}},
+			{true, false, true, false, &common.InvalidCertError{Err: "unknown onboarding certificate"}},
+			{true, true, false, false, &common.InvalidSerialError{Err: "unknown serial"}},
+			{true, true, true, true, &common.UsedSerialError{Err: "serial already used"}},
 			{true, true, true, false, nil},
 		}
 
 		for i, tt := range tests {
 			// the item we will test
-			dm := DeviceManagerMemory{}
+			dm := DeviceManager{}
 
 			// hold the cert and serial
 			var (
@@ -120,11 +121,11 @@ func TestDeviceManagerMemory(t *testing.T) {
 			}
 			// is it used?
 			if tt.validCert && tt.used {
-				dm.devices = map[uuid.UUID]deviceStorage{}
+				dm.devices = map[uuid.UUID]common.DeviceStorage{}
 				u, _ := uuid.NewV4()
-				dm.devices[u] = deviceStorage{
-					onboard: cert,
-					serial:  serial,
+				dm.devices[u] = common.DeviceStorage{
+					Onboard: cert,
+					Serial:  serial,
 				}
 			}
 			err := dm.OnboardCheck(cert, serial)
@@ -147,7 +148,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 
 		for i, tt := range tests {
 			// the item we will test
-			dm := DeviceManagerMemory{}
+			dm := DeviceManager{}
 
 			// hold the cert and serial
 			var (
@@ -179,7 +180,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 
 	t.Run("TestOnboardClear", func(t *testing.T) {
 		// the item we will test
-		dm := DeviceManagerMemory{}
+		dm := DeviceManager{}
 		fillOnboard(&dm)
 
 		// if valid, create the certificate
@@ -206,7 +207,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			{"abcdefg", []string{"123", "456"}, true, nil},
 		}
 		for i, tt := range tests {
-			d := DeviceManagerMemory{
+			d := DeviceManager{
 				onboardCerts: map[string]map[string]bool{},
 			}
 			var (
@@ -228,7 +229,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && !equalStringSlice(serial, tt.serials):
+			case err == nil && !common.EqualStringSlice(serial, tt.serials):
 				t.Errorf("%d: mismatched serials, actual '%v', expected '%v'", i, serial, tt.serials)
 			case err == nil && bytes.Compare(validCert.Raw, cert.Raw) != 0:
 				t.Errorf("%d: mismatched certs", i)
@@ -237,7 +238,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 	})
 
 	t.Run("TestOnboardList", func(t *testing.T) {
-		dm := DeviceManagerMemory{}
+		dm := DeviceManager{}
 		cns := fillOnboard(&dm)
 
 		// if valid, create the certificate
@@ -245,7 +246,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
-		case !equalStringSlice(cns, got):
+		case !common.EqualStringSlice(cns, got):
 			t.Errorf("mismatched CNs, actual '%v', expected '%v'", got, cns)
 		}
 	})
@@ -268,7 +269,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 
 		for i, tt := range tests {
 			// the item we will test
-			dm := DeviceManagerMemory{}
+			dm := DeviceManager{}
 
 			// hold the device cert
 			var (
@@ -312,7 +313,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			{true, true, nil},
 		}
 		for i, tt := range tests {
-			dm := DeviceManagerMemory{}
+			dm := DeviceManager{}
 			uids := fillDevice(&dm)
 
 			// populate the UUID we will pass
@@ -338,7 +339,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 	})
 
 	t.Run("TestDeviceClear", func(t *testing.T) {
-		dm := DeviceManagerMemory{}
+		dm := DeviceManager{}
 		fillDevice(&dm)
 
 		err := dm.DeviceClear()
@@ -363,7 +364,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			{true, true, nil},
 		}
 		for i, tt := range tests {
-			dm := DeviceManagerMemory{}
+			dm := DeviceManager{}
 			uids := fillDevice(&dm)
 
 			// populate the UUID we will pass
@@ -379,14 +380,14 @@ func TestDeviceManagerMemory(t *testing.T) {
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && dm.devices[*u].cert != cert:
+			case err == nil && dm.devices[*u].Cert != cert:
 				t.Errorf("%d: mismatched cert", i)
 			}
 		}
 	})
 
 	t.Run("TestDeviceList", func(t *testing.T) {
-		dm := DeviceManagerMemory{}
+		dm := DeviceManager{}
 		uids := fillDevice(&dm)
 
 		// if valid, create the certificate
@@ -394,14 +395,14 @@ func TestDeviceManagerMemory(t *testing.T) {
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
-		case !equalUUIDSlice(uids, got):
+		case !common.EqualUUIDSlice(uids, got):
 			t.Errorf("mismatched UUIDs, actual '%v', expected '%v'", got, uids)
 		}
 	})
 
 	t.Run("TestWriteInfo", func(t *testing.T) {
 		u, _ := uuid.NewV4()
-		d := DeviceManagerMemory{}
+		d := DeviceManager{}
 		tests := []struct {
 			validMsg     bool
 			validUUID    bool
@@ -422,10 +423,10 @@ func TestDeviceManagerMemory(t *testing.T) {
 				msg.DevId = u.String()
 			}
 			// fresh each time
-			d.devices = map[uuid.UUID]deviceStorage{}
+			d.devices = map[uuid.UUID]common.DeviceStorage{}
 			if tt.deviceExists {
-				d.devices[u] = deviceStorage{
-					info: &ByteSlice{
+				d.devices[u] = common.DeviceStorage{
+					Info: &ByteSlice{
 						maxSize: 500000,
 					},
 				}
@@ -448,7 +449,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			)
 
 			if tt.deviceExists {
-				actual, geterr = d.devices[u].info.Get(0)
+				actual, geterr = d.devices[u].Info.Get(0)
 			}
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
@@ -461,7 +462,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 
 	t.Run("TestWriteLogs", func(t *testing.T) {
 		u, _ := uuid.NewV4()
-		d := DeviceManagerMemory{}
+		d := DeviceManager{}
 		tests := []struct {
 			validMsg     bool
 			validUUID    bool
@@ -482,10 +483,10 @@ func TestDeviceManagerMemory(t *testing.T) {
 				msg.DevID = u.String()
 			}
 			// fresh each time
-			d.devices = map[uuid.UUID]deviceStorage{}
+			d.devices = map[uuid.UUID]common.DeviceStorage{}
 			if tt.deviceExists {
-				d.devices[u] = deviceStorage{
-					logs: &ByteSlice{
+				d.devices[u] = common.DeviceStorage{
+					Logs: &ByteSlice{
 						maxSize: 500000,
 					},
 				}
@@ -506,21 +507,21 @@ func TestDeviceManagerMemory(t *testing.T) {
 				geterr error
 			)
 			if tt.deviceExists {
-				actual, geterr = d.devices[u].logs.Get(0)
+				actual, geterr = d.devices[u].Logs.Get(0)
 			}
 
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
 			case err == nil && (geterr != nil || !bytes.Equal(actual, buf.Bytes())):
-				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].logs, msg)
+				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].Logs, msg)
 			}
 		}
 	})
 
 	t.Run("TestWriteMetrics", func(t *testing.T) {
 		u, _ := uuid.NewV4()
-		d := DeviceManagerMemory{}
+		d := DeviceManager{}
 		tests := []struct {
 			validMsg     bool
 			validUUID    bool
@@ -541,10 +542,10 @@ func TestDeviceManagerMemory(t *testing.T) {
 				msg.DevID = u.String()
 			}
 			// fresh each time
-			d.devices = map[uuid.UUID]deviceStorage{}
+			d.devices = map[uuid.UUID]common.DeviceStorage{}
 			if tt.deviceExists {
-				d.devices[u] = deviceStorage{
-					metrics: &ByteSlice{
+				d.devices[u] = common.DeviceStorage{
+					Metrics: &ByteSlice{
 						maxSize: 500000,
 					},
 				}
@@ -564,21 +565,21 @@ func TestDeviceManagerMemory(t *testing.T) {
 				geterr error
 			)
 			if tt.deviceExists {
-				actual, geterr = d.devices[u].metrics.Get(0)
+				actual, geterr = d.devices[u].Metrics.Get(0)
 			}
 
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
 			case err == nil && (geterr != nil || !bytes.Equal(actual, buf.Bytes())):
-				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].metrics, msg)
+				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].Metrics, msg)
 			}
 		}
 	})
 
 	t.Run("TestDeviceRegister", func(t *testing.T) {
 		u, _ := uuid.NewV4()
-		d := DeviceManagerMemory{}
+		d := DeviceManager{}
 		serial := "abcdefgh"
 		certB, _, err := ax.Generate("onboard", "")
 		if err != nil {
@@ -629,11 +630,11 @@ func TestDeviceManagerMemory(t *testing.T) {
 				t.Errorf("%d: received nil uuid when expected valid one", i)
 			case !tt.validU && u != nil:
 				t.Errorf("%d: received valid uuid when expected nil", i)
-			case tt.validU && tt.err == nil && d.devices[*u].serial != serial:
-				t.Errorf("%d: mismatched serial stored, actual %s expected %s", i, d.devices[*u].serial, serial)
-			case tt.validU && tt.err == nil && d.devices[*u].onboard != onboard:
+			case tt.validU && tt.err == nil && d.devices[*u].Serial != serial:
+				t.Errorf("%d: mismatched serial stored, actual %s expected %s", i, d.devices[*u].Serial, serial)
+			case tt.validU && tt.err == nil && d.devices[*u].Onboard != onboard:
 				t.Errorf("%d: mismatched onboard certificate stored, actual then expected", i)
-				t.Errorf("\t%#v", d.devices[*u].onboard)
+				t.Errorf("\t%#v", d.devices[*u].Onboard)
 				t.Errorf("\t%#v", onboard)
 			}
 		}
@@ -661,7 +662,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			)
 
 			// reset with each test
-			d := DeviceManagerMemory{
+			d := DeviceManager{
 				onboardCerts: map[string]map[string]bool{},
 			}
 
@@ -686,7 +687,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 			case err == nil && d.onboardCerts[certStr] == nil:
 				t.Errorf("%d: onboardCerts are nil", i)
 			default:
-				err := compareStringSliceMap(tt.serial, d.onboardCerts[certStr])
+				err := common.CompareStringSliceMap(tt.serial, d.onboardCerts[certStr])
 				if err != nil {
 					t.Errorf("%d: mismatched serials", i)
 					t.Errorf("%v", err)
