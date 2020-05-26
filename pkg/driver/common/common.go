@@ -1,7 +1,7 @@
 // Copyright (c) 2019 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package common
 
 import (
 	"bytes"
@@ -17,55 +17,60 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+const (
+	KB = 1024
+	MB = 1024 * KB
+)
+
 type BigData interface {
 	Get(index int) ([]byte, error)
 	Read(p []byte) (int, error)
 	Write(b []byte) (int, error)
 }
 
-type deviceStorage struct {
-	cert       *x509.Certificate
-	info       BigData
-	metrics    BigData
-	logs       BigData
-	currentLog int
-	config     *config.EdgeDevConfig
-	serial     string
-	onboard    *x509.Certificate
+type DeviceStorage struct {
+	Cert       *x509.Certificate
+	Info       BigData
+	Metrics    BigData
+	Logs       BigData
+	CurrentLog int
+	Config     *config.EdgeDevConfig
+	Serial     string
+	Onboard    *x509.Certificate
 }
 
-func (d *deviceStorage) addLog(m *logs.LogBundle) error {
+func (d *DeviceStorage) AddLog(m *logs.LogBundle) error {
 	// convert the message to bytes
 	buf := bytes.NewBuffer([]byte{})
 	mler := jsonpb.Marshaler{}
 	if err := mler.Marshal(buf, m); err != nil {
 		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
 	}
-	_, err := d.logs.Write(buf.Bytes())
+	_, err := d.Logs.Write(buf.Bytes())
 	return err
 }
-func (d *deviceStorage) addInfo(m *info.ZInfoMsg) error {
+func (d *DeviceStorage) AddInfo(m *info.ZInfoMsg) error {
 	// convert the message to bytes
 	buf := bytes.NewBuffer([]byte{})
 	mler := jsonpb.Marshaler{}
 	if err := mler.Marshal(buf, m); err != nil {
 		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
 	}
-	_, err := d.info.Write(buf.Bytes())
+	_, err := d.Info.Write(buf.Bytes())
 	return err
 }
-func (d *deviceStorage) addMetrics(m *metrics.ZMetricMsg) error {
+func (d *DeviceStorage) AddMetrics(m *metrics.ZMetricMsg) error {
 	// convert the message to bytes
 	buf := bytes.NewBuffer([]byte{})
 	mler := jsonpb.Marshaler{}
 	if err := mler.Marshal(buf, m); err != nil {
 		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
 	}
-	_, err := d.metrics.Write(buf.Bytes())
+	_, err := d.Metrics.Write(buf.Bytes())
 	return err
 }
 
-func createBaseConfig(u uuid.UUID) *config.EdgeDevConfig {
+func CreateBaseConfig(u uuid.UUID) *config.EdgeDevConfig {
 	return &config.EdgeDevConfig{
 		Id: &config.UUIDandVersion{
 			Uuid:    u.String(),

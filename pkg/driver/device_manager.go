@@ -5,10 +5,7 @@ package driver
 
 import (
 	"crypto/x509"
-	"encoding/json"
-	"hash"
 	"io"
-	"log"
 
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
@@ -23,14 +20,6 @@ const (
 	GB = 1024 * MB
 	TB = 1024 * GB
 )
-
-func computeConfigElementSha(h hash.Hash, msg interface{}) {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		log.Fatalf("computeConfigItemSha: json.Marshal: %s\n", err)
-	}
-	h.Write(data)
-}
 
 // DeviceManager interface representing any kind of device manager with any kind of backing store
 type DeviceManager interface {
@@ -89,40 +78,4 @@ type DeviceManager interface {
 	GetLogsReader(u uuid.UUID) (io.Reader, error)
 	// GetInfoReader get the info for a given uuid
 	GetInfoReader(u uuid.UUID) (io.Reader, error)
-}
-
-// NotFoundError error representing that an item was not found
-type NotFoundError struct {
-	err string
-}
-
-func (n *NotFoundError) Error() string {
-	return n.err
-}
-
-// InvalidCertError error representing that a certificate is not valid
-type InvalidCertError struct {
-	err string
-}
-
-func (n *InvalidCertError) Error() string {
-	return n.err
-}
-
-// InvalidSerialError error representing that a serial is not valid
-type InvalidSerialError struct {
-	err string
-}
-
-func (n *InvalidSerialError) Error() string {
-	return n.err
-}
-
-// UsedSerialError error representing that a serial was used already
-type UsedSerialError struct {
-	err string
-}
-
-func (n *UsedSerialError) Error() string {
-	return n.err
 }

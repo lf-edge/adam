@@ -1,4 +1,4 @@
-package driver_test
+package file_test
 
 import (
 	"bytes"
@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lf-edge/adam/pkg/driver"
+	"github.com/lf-edge/adam/pkg/driver/file"
 )
 
 // DirReader reads the contents of all files in a directory, sorted by whatever the OS does
 func TestDirReader(t *testing.T) {
 	t.Run("no path", func(t *testing.T) {
-		dr := &driver.DirReader{}
+		dr := &file.DirReader{}
 		b := make([]byte, 40)
 		n, err := dr.Read(b)
 		if n != 0 {
@@ -26,7 +26,7 @@ func TestDirReader(t *testing.T) {
 		}
 	})
 	t.Run("invalid path", func(t *testing.T) {
-		dr := &driver.DirReader{
+		dr := &file.DirReader{
 			Path: "/this/is/a/asasas/that/does/not/exist",
 		}
 		b := make([]byte, 40)
@@ -44,7 +44,7 @@ func TestDirReader(t *testing.T) {
 			t.Fatalf("failure to create temporary directory: %v", err)
 		}
 		defer os.RemoveAll(dir)
-		dr := &driver.DirReader{
+		dr := &file.DirReader{
 			Path: dir,
 		}
 		b := make([]byte, 40)
@@ -67,7 +67,7 @@ func TestDirReader(t *testing.T) {
 			t.Fatalf("failure to write temporary file: %v", err)
 		}
 		defer os.RemoveAll(dir)
-		dr := &driver.DirReader{
+		dr := &file.DirReader{
 			Path: dir,
 		}
 		b := make([]byte, 40)
@@ -105,7 +105,7 @@ func TestDirReader(t *testing.T) {
 
 		// test a single read, and converting it to a reader
 		t.Run("single read", func(t *testing.T) {
-			dr := &driver.DirReader{
+			dr := &file.DirReader{
 				Path: dir,
 			}
 			b := make([]byte, 40)
@@ -121,7 +121,7 @@ func TestDirReader(t *testing.T) {
 			}
 		})
 		t.Run("full read", func(t *testing.T) {
-			dr := &driver.DirReader{
+			dr := &file.DirReader{
 				Path: dir,
 			}
 			b := make([]byte, 0)
@@ -160,7 +160,7 @@ func TestDirReader(t *testing.T) {
 
 		// test a single read, and converting it to a reader
 		t.Run("single read", func(t *testing.T) {
-			dr := &driver.DirReader{
+			dr := &file.DirReader{
 				Path: dir,
 			}
 			b := make([]byte, 40)
@@ -176,7 +176,7 @@ func TestDirReader(t *testing.T) {
 			}
 		})
 		t.Run("full read", func(t *testing.T) {
-			dr := &driver.DirReader{
+			dr := &file.DirReader{
 				Path: dir,
 			}
 			b := make([]byte, 0)

@@ -1,14 +1,15 @@
 // Copyright (c) 2020 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package redis
 
 import (
 	"encoding/json"
 	"errors"
+	"time"
+
 	"github.com/go-redis/redis"
 	"github.com/vmihailenco/msgpack/v4"
-	"time"
 )
 
 // RedisStreamReader reads msgpack messages from Redis streams and turns then into JSON strings
@@ -18,7 +19,7 @@ type RedisStreamReader struct {
 	// Name of a stream
 	Stream string
 	// LineFeed whether to put a linefeed "\n" (0x0a) after each file
-	LineFeed    bool
+	LineFeed bool
 
 	// unconsumed data from the last message from the previous read
 	data []byte
@@ -52,9 +53,9 @@ func (d *RedisStreamReader) Read(p []byte) (n int, err error) {
 		}
 
 		records, err := d.Client.XRead(&redis.XReadArgs{
-			Streams: []string {d.Stream, d.offset},
-			Block: time.Millisecond, // do a non-blocking read
-			Count: 1,
+			Streams: []string{d.Stream, d.offset},
+			Block:   time.Millisecond, // do a non-blocking read
+			Count:   1,
 		}).Result()
 		// it is weird that the library would return "redis: nil" for a non-blocking read
 		if (err != nil && err.Error() != "redis: nil") || len(records) > 1 {
@@ -70,7 +71,7 @@ func (d *RedisStreamReader) Read(p []byte) (n int, err error) {
 			}
 
 			// maybe there's a clever way to go straight from msgpack -> JSON?
-            var data interface{}
+			var data interface{}
 			err = msgpack.Unmarshal([]byte(s), &data)
 			if err != nil {
 				return 0, errors.New("failed to read from stream")

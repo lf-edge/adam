@@ -1,7 +1,7 @@
 // Copyright (c) 2019 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package file
 
 import (
 	"bytes"
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
@@ -22,14 +23,14 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-func TestDeviceManagerFile(t *testing.T) {
-	fillOnboard := func(dm *DeviceManagerFile) []string {
+func TestDeviceManager(t *testing.T) {
+	fillOnboard := func(dm *DeviceManager) []string {
 		dm.onboardCerts = map[string]map[string]bool{}
 		cns := []string{"abcd", "efgh", "jklm"}
 		for _, cn := range cns {
 			serials := make([]string, 0, 3)
 			for i := 0; i < 3; i++ {
-				serials = append(serials, randomString(8))
+				serials = append(serials, common.RandomString(8))
 			}
 			certB, _, err := ax.Generate(cn, "")
 			if err != nil {
@@ -59,9 +60,9 @@ func TestDeviceManagerFile(t *testing.T) {
 		return cns
 	}
 
-	fillDevice := func(dm *DeviceManagerFile) []*uuid.UUID {
+	fillDevice := func(dm *DeviceManager) []*uuid.UUID {
 		dm.deviceCerts = map[string]uuid.UUID{}
-		dm.devices = map[uuid.UUID]deviceStorage{}
+		dm.devices = map[uuid.UUID]common.DeviceStorage{}
 		uids := []uuid.UUID{}
 		for i := 0; i < 3; i++ {
 			u, _ := uuid.NewV4()
@@ -84,8 +85,8 @@ func TestDeviceManagerFile(t *testing.T) {
 				t.Fatalf("error writing device certificate: %v", err)
 			}
 			dm.deviceCerts[certStr] = u
-			dm.devices[u] = deviceStorage{
-				cert: cert,
+			dm.devices[u] = common.DeviceStorage{
+				Cert: cert,
 			}
 			uids = append(uids, u)
 		}
@@ -109,7 +110,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.RemoveAll(dir)
-		d := DeviceManagerFile{
+		d := DeviceManager{
 			databasePath: dir,
 		}
 		d.SetCacheTimeout(timeout)
@@ -177,12 +178,12 @@ func TestDeviceManagerFile(t *testing.T) {
 			t.Errorf("device cert missing")
 		case d.devices == nil:
 			t.Errorf("devices are nil")
-		case d.devices != nil && d.devices[u].onboard == nil:
+		case d.devices != nil && d.devices[u].Onboard == nil:
 			t.Errorf("device missing onboard certificate")
-		case d.devices != nil && d.devices[u].onboard != nil && string(d.devices[u].onboard.Raw) != onboardCertStr:
+		case d.devices != nil && d.devices[u].Onboard != nil && string(d.devices[u].Onboard.Raw) != onboardCertStr:
 			t.Errorf("mismatched device onboard certificate")
-		case d.devices != nil && d.devices[u].serial != serial:
-			t.Errorf("device mismatched serial, actual %s expected %s", d.devices[u].serial, serial)
+		case d.devices != nil && d.devices[u].Serial != serial:
+			t.Errorf("device mismatched serial, actual %s expected %s", d.devices[u].Serial, serial)
 		}
 	})
 
@@ -210,7 +211,7 @@ func TestDeviceManagerFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(dir)
-			d := DeviceManagerFile{
+			d := DeviceManager{
 				databasePath: dir,
 			}
 			var validCert *x509.Certificate
@@ -237,7 +238,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && !equalStringSlice(serial, tt.serials):
+			case err == nil && !common.EqualStringSlice(serial, tt.serials):
 				t.Errorf("%d: mismatched serials, actual '%v', expected '%v'", i, serial, tt.serials)
 			case err == nil && bytes.Compare(validCert.Raw, cert.Raw) != 0:
 				t.Errorf("%d: mismatched certs", i)
@@ -252,7 +253,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.RemoveAll(dir)
-		dm := DeviceManagerFile{
+		dm := DeviceManager{
 			databasePath: dir,
 		}
 		cns := fillOnboard(&dm)
@@ -262,7 +263,7 @@ func TestDeviceManagerFile(t *testing.T) {
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
-		case !equalStringSlice(cns, got):
+		case !common.EqualStringSlice(cns, got):
 			t.Errorf("mismatched CNs, actual '%v', expected '%v'", got, cns)
 		}
 	})
@@ -285,7 +286,7 @@ func TestDeviceManagerFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(dir)
-			dm := DeviceManagerFile{
+			dm := DeviceManager{
 				databasePath: dir,
 			}
 
@@ -299,12 +300,12 @@ func TestDeviceManagerFile(t *testing.T) {
 			// if valid, create the certificate
 			switch {
 			case tt.valid && !tt.exists:
-				cn = randomString(10)
+				cn = common.RandomString(10)
 			case tt.exists:
 				cn = cns[0]
 			}
 			err = dm.OnboardRemove(cn)
-			if mismatchedErrors(err, tt.err) {
+			if common.MismatchedErrors(err, tt.err) {
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
 			} else if _, ok := dm.onboardCerts[certStr]; ok {
 				t.Errorf("%d: cert still exists after OnboardRemove", i)
@@ -321,7 +322,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.RemoveAll(dir)
-		dm := DeviceManagerFile{
+		dm := DeviceManager{
 			databasePath: dir,
 		}
 
@@ -360,7 +361,7 @@ func TestDeviceManagerFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(dir)
-			dm := DeviceManagerFile{
+			dm := DeviceManager{
 				databasePath: dir,
 			}
 
@@ -401,7 +402,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.RemoveAll(dir)
-		dm := DeviceManagerFile{
+		dm := DeviceManager{
 			databasePath: dir,
 		}
 
@@ -436,7 +437,7 @@ func TestDeviceManagerFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(dir)
-			dm := DeviceManagerFile{
+			dm := DeviceManager{
 				databasePath: dir,
 			}
 
@@ -475,7 +476,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer os.RemoveAll(dir)
-		dm := DeviceManagerFile{
+		dm := DeviceManager{
 			databasePath: dir,
 		}
 
@@ -486,12 +487,12 @@ func TestDeviceManagerFile(t *testing.T) {
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
-		case !equalUUIDSlice(uids, got):
+		case !common.EqualUUIDSlice(uids, got):
 			t.Errorf("mismatched UUIDs, actual '%v', expected '%v'", got, uids)
 		}
 	})
 
-	writeTester := func(t *testing.T, sectionName string, cmd func(int64, string, bool, bool, DeviceManagerFile) error) {
+	writeTester := func(t *testing.T, sectionName string, cmd func(int64, string, bool, bool, DeviceManager) error) {
 		u, _ := uuid.NewV4()
 		tests := []struct {
 			validMsg     bool
@@ -512,7 +513,7 @@ func TestDeviceManagerFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(dir)
-			d := DeviceManagerFile{
+			d := DeviceManager{
 				databasePath: dir,
 			}
 			sectionPath := path.Join(d.getDevicePath(u), sectionName)
@@ -536,7 +537,7 @@ func TestDeviceManagerFile(t *testing.T) {
 		}
 	}
 	t.Run("TestWriteInfo", func(t *testing.T) {
-		writeTester(t, "info", func(ts int64, u string, validMsg, validUUID bool, d DeviceManagerFile) error {
+		writeTester(t, "info", func(ts int64, u string, validMsg, validUUID bool, d DeviceManager) error {
 			var msg *info.ZInfoMsg
 			if validMsg {
 				msg = &info.ZInfoMsg{
@@ -553,7 +554,7 @@ func TestDeviceManagerFile(t *testing.T) {
 	})
 
 	t.Run("TestWriteLogs", func(t *testing.T) {
-		writeTester(t, "logs", func(ts int64, u string, validMsg, validUUID bool, d DeviceManagerFile) error {
+		writeTester(t, "logs", func(ts int64, u string, validMsg, validUUID bool, d DeviceManager) error {
 			var msg *logs.LogBundle
 			if validMsg {
 				msg = &logs.LogBundle{
@@ -570,7 +571,7 @@ func TestDeviceManagerFile(t *testing.T) {
 	})
 
 	t.Run("TestWriteMetrics", func(t *testing.T) {
-		writeTester(t, "metrics", func(ts int64, u string, validMsg, validUUID bool, d DeviceManagerFile) error {
+		writeTester(t, "metrics", func(ts int64, u string, validMsg, validUUID bool, d DeviceManager) error {
 			var msg *metrics.ZMetricMsg
 			if validMsg {
 				msg = &metrics.ZMetricMsg{
@@ -620,7 +621,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			}
 			defer os.RemoveAll(dir)
 			devicePath := path.Join(dir, "device")
-			d := DeviceManagerFile{
+			d := DeviceManager{
 				databasePath: dir,
 			}
 
@@ -692,7 +693,7 @@ func TestDeviceManagerFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer os.RemoveAll(dir)
-			d := DeviceManagerFile{
+			d := DeviceManager{
 				databasePath: dir,
 			}
 
@@ -723,7 +724,7 @@ func TestDeviceManagerFile(t *testing.T) {
 			case err == nil && d.onboardCerts[certStr] == nil:
 				t.Errorf("%d: onboardCerts are nil", i)
 			default:
-				err := compareStringSliceMap(tt.serial, d.onboardCerts[certStr])
+				err := common.CompareStringSliceMap(tt.serial, d.onboardCerts[certStr])
 				if err != nil {
 					t.Errorf("%d: mismatched serials", i)
 					t.Errorf("%v", err)

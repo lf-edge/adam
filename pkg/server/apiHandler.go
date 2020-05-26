@@ -14,6 +14,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver"
+	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
@@ -46,9 +47,9 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 	serial := msg.Serial
 	err = h.manager.OnboardCheck(onboardCert, serial)
 	if err != nil {
-		_, invalidCert := err.(*driver.InvalidCertError)
-		_, invalidSerial := err.(*driver.InvalidSerialError)
-		_, usedSerial := err.(*driver.UsedSerialError)
+		_, invalidCert := err.(*common.InvalidCertError)
+		_, invalidSerial := err.(*common.InvalidSerialError)
+		_, usedSerial := err.(*common.UsedSerialError)
 		switch {
 		case invalidCert, invalidSerial:
 			log.Printf("failed authentication %v", err)
