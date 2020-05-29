@@ -134,7 +134,7 @@ An EVE device has to know the following before it can communicate with any contr
 
 additionally you may need to supply an entry mapping controller's host name to a routable IP address (in the /etc/hosts format)
 
-When Adam server runs, it outputs all the required configuration in a folder specified by the `conf-dir` option (run/adam/config by default)
+When Adam server runs, it outputs all the required configuration in a folder specified by the `conf-dir` option (run/config by default)
 
 ### Onboarding
 
