@@ -28,10 +28,8 @@ You can get the certificate and key _before_ running `adam` as a server in one o
 
 * pre-generate them yourself, using your favourite command: openssl, cfssl, etc.
 * run `adam generate`
-* run `adam server --auto-cert`, which will start up and generate the key and certificate, if it does not exist
+* run `adam server --auto-cert`, which will start up and generate the key and certificate, if it does not exist. You can specify CommonName of the certificate by setting the value of `--cert-cn` flag and hostnames and/or IP addresses by setting the value of `--cert-hosts` flag.
 
-Note that the last option is limited, in that you cannot specify the hostnames and/or IP addresses for which the certificate is valid. It will automatically generate for `127.0.0.1,localhost,localhost.localdomain`. For anything
-more advanced, please use one of the other options.
 
 ## Options
 

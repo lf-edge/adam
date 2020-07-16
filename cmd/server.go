@@ -27,6 +27,8 @@ const (
 var (
 	serverCert     string
 	serverKey      string
+	certCN         string
+	certHosts      string
 	port           string
 	hostIP         string
 	clientCertPath string
@@ -70,6 +72,9 @@ var serverCmd = &cobra.Command{
 
 		// if we were asked to autoCert, then we do it
 		if autoCert {
+			if certCN == certHosts && certCN == "" {
+				log.Fatalf("must specify at least one hostname/IP or CN")
+			}
 			// get the directory
 			certDir := path.Dir(serverCert)
 			keyDir := path.Dir(serverKey)
@@ -82,9 +87,7 @@ var serverCmd = &cobra.Command{
 			if err := os.MkdirAll(keyDir, 0755); err != nil {
 				log.Fatalf("failed to make key directory %s: %v", keyDir, err)
 			}
-			// generate the certificates, using silly defaults
-			cn, hosts := "localhost", "127.0.0.1,localhost,localhost.localdomain"
-			if err := ax509.GenerateAndWrite(cn, hosts, serverCert, serverKey, certForce); err != nil {
+			if err := ax509.GenerateAndWrite(certCN, certHosts, serverCert, serverKey, certForce); err != nil {
 				log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", serverKey, serverCert)
 			} else {
 				log.Printf("saved new server certificate to %s", serverCert)
@@ -156,6 +159,8 @@ func serverInit() {
 	serverCmd.Flags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where we will store and find device information, including onboarding certificates, device certificates, config, logs and metrics. See the readme for more details.")
 	serverCmd.Flags().StringVar(&configDir, "conf-dir", defaultConfigDir, "path to directory where running server will output runtime configuration files that can be fed into EVE")
 	serverCmd.Flags().BoolVar(&autoCert, "auto-cert", false, "whether to automatically generate certs, if they do not exist; if they do exist, this will be ignored")
+	serverCmd.Flags().StringVar(&certCN, "cert-cn", "localhost", "CN for automatically generating of certs, if they do not exist; if they do exist, this will be ignored")
+	serverCmd.Flags().StringVar(&certHosts, "cert-hosts", "127.0.0.1,localhost,localhost.localdomain", "hosts for automatically generating of certs, if they do not exist; if they do exist, this will be ignored")
 	serverCmd.Flags().IntVar(&certRefresh, "cert-refresh", defaultCertRefresh, "how often, in seconds, to refresh the onboarding and device certs from the filesystem; 0 means not to cache at all.")
 	serverCmd.Flags().IntVar(&maxLogSize, "max-log-size", 0, fmt.Sprintf("the maximum size of the logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultLogSizes))
 	serverCmd.Flags().IntVar(&maxInfoSize, "max-info-size", 0, fmt.Sprintf("the maximum size of the info before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultInfoSizes))
