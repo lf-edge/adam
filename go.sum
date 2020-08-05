@@ -38,11 +38,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/lf-edge/eve v0.0.0-20200706222630-b0fc0b143f0b h1:jU7HT3ypleGuOblnwf1v6bpWnSgznapkn7PYTW8jLlk=
-github.com/lf-edge/eve/api/go v0.0.0-20200501140635-98b6ff42a3a3 h1:LFDZb8T6cvq29q+64NQ8OpvXRzfF46jBZnyhD4o1Gps=
-github.com/lf-edge/eve/api/go v0.0.0-20200501140635-98b6ff42a3a3/go.mod h1:DuAv0PyTTzmd3n25iHJ/Hx2SrbON4hf3I0oXfnUH4d8=
-github.com/lf-edge/eve/api/go v0.0.0-20200706222630-b0fc0b143f0b h1:PByLeeLfFj1jTarQxduH6IGo+NbBrvoEwRxhfh6CNlM=
-github.com/lf-edge/eve/api/go v0.0.0-20200706222630-b0fc0b143f0b/go.mod h1:DuAv0PyTTzmd3n25iHJ/Hx2SrbON4hf3I0oXfnUH4d8=
+github.com/lf-edge/eve/api/go v0.0.0-20200805060635-507771c7f963 h1:CA+l2dG+902gaFsfAKZOXFvydoa3T//q8OgkeT5k1Lg=
+github.com/lf-edge/eve/api/go v0.0.0-20200805060635-507771c7f963/go.mod h1:DuAv0PyTTzmd3n25iHJ/Hx2SrbON4hf3I0oXfnUH4d8=
 github.com/magiconair/properties v1.8.0 h1:LLgXmsheXeRoUOBOjtwPQCWIYqM/LU1ayDtDePerRcY=
 github.com/magiconair/properties v1.8.0/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
 github.com/mitchellh/go-homedir v1.1.0/go.mod h1:SfyaCUpYCn1Vlf4IUYiD9fPX4A5wJrkLzIz1N1q0pr0=
