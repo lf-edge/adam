@@ -112,6 +112,7 @@ func (s *Server) Start() {
 	ed.HandleFunc("/flowlog", api.flowLog).Methods("POST")
 	ed.HandleFunc("/apps/instances/id/{uuid}/logs", api.appLogs).Methods("POST")
 	ed.HandleFunc("/apps/instanceid/id/{uuid}/newlogs", api.newAppLogs).Methods("POST")
+	ed.HandleFunc("/uuid", api.uuid).Methods("POST")
 
 	if hasApiV2 {
 		apiv2 := &apiHandlerv2{
@@ -144,6 +145,7 @@ func (s *Server) Start() {
 		edv2.HandleFunc("/id/{uuid}/flowlog", apiv2.flowlog).Methods("POST")
 		edv2.HandleFunc("/id/{uuid}/apps/instances/id/{appuuid}/logs", apiv2.appLogs).Methods("POST")
 		edv2.HandleFunc("/id/{uuid}/apps/instanceid/{appuuid}/newlogs", apiv2.newAppLogs).Methods("POST")
+		edv2.HandleFunc("/uuid", apiv2.uuid).Methods("POST")
 	}
 
 	// admin endpoint - custom, used to manage adam

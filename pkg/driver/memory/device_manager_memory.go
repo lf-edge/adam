@@ -9,7 +9,9 @@ import (
 	"io"
 
 	"github.com/lf-edge/adam/pkg/driver/common"
+	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -508,4 +510,15 @@ func (d *DeviceManager) WriteFlowMessage(u uuid.UUID, b []byte) error {
 	d.devices[u] = dev
 	// append the messages
 	return dev.AddFlowRecord(b)
+}
+
+// GetUUID get UuidResponse for device by uuid
+func (d *DeviceManager) GetUUID(u uuid.UUID) ([]byte, error) {
+	// check that the device actually exists
+	_, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	ur := &eveuuid.UuidResponse{Uuid: u.String()}
+	return proto.Marshal(ur)
 }

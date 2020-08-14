@@ -18,9 +18,11 @@ import (
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/adam/pkg/util"
 	ax "github.com/lf-edge/adam/pkg/x509"
+	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestDeviceManager(t *testing.T) {
@@ -735,6 +737,55 @@ func TestDeviceManager(t *testing.T) {
 					t.Errorf("%d: mismatched serials", i)
 					t.Errorf("%v", err)
 				}
+			}
+		}
+	})
+
+	t.Run("TestGetUUID", func(t *testing.T) {
+		u, _ := uuid.NewV4()
+
+		tests := []struct {
+			deviceExists bool
+		}{
+			{false},
+			{true},
+		}
+		for _, tt := range tests {
+			// reset with each test
+			// make a temporary directory with which to work
+			dir, err := ioutil.TempDir("", "adam-test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			d := DeviceManager{
+				databasePath: dir,
+			}
+			uids := fillDevice(&d)
+			switch {
+			case tt.deviceExists:
+				u = *uids[0]
+			}
+			uuidResponse, err := d.GetUUID(u)
+			if tt.deviceExists {
+				if err != nil {
+					t.Errorf("Error: %v", err)
+				}
+				if len(uuidResponse) == 0 {
+					t.Error("Empty uuidResponse")
+				}
+				var ur eveuuid.UuidResponse
+				err := proto.Unmarshal(uuidResponse, &ur)
+				if err != nil {
+					t.Errorf("Unmarshal error: %v", err)
+				}
+				if ur.GetUuid() != u.String() {
+					t.Error("uuid mismatch in uuidResponse")
+				}
+				continue
+			}
+			if err == nil {
+				t.Errorf("empty error for non-exist device")
 			}
 		}
 	})
