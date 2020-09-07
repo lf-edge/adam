@@ -30,9 +30,10 @@ const (
 )
 
 type adminHandler struct {
-	manager     driver.DeviceManager
-	logChannel  chan proto.Message
-	infoChannel chan proto.Message
+	manager         driver.DeviceManager
+	logChannel      chan proto.Message
+	infoChannel     chan proto.Message
+	requestsChannel chan proto.Message
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
@@ -348,6 +349,10 @@ func (h *adminHandler) deviceLogsGet(w http.ResponseWriter, r *http.Request) {
 
 func (h *adminHandler) deviceInfoGet(w http.ResponseWriter, r *http.Request) {
 	h.deviceDataGet(w, r, h.infoChannel, h.manager.GetInfoReader)
+}
+
+func (h *adminHandler) deviceRequestsGet(w http.ResponseWriter, r *http.Request) {
+	h.deviceDataGet(w, r, h.requestsChannel, h.manager.GetRequestsReader)
 }
 
 func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <-chan proto.Message, readerFunc func(u uuid.UUID) (io.Reader, error)) {

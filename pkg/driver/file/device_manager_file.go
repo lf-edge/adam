@@ -43,10 +43,12 @@ const (
 	infoDir               = "info"
 	deviceDir             = "device"
 	onboardDir            = "onboard"
+	requestsDir           = "requests"
 	MB                    = common.MB
 	maxLogSizeFile        = 100 * MB
 	maxInfoSizeFile       = 100 * MB
 	maxMetricSizeFile     = 100 * MB
+	maxRequestsSizeFile   = 100 * MB
 	fileSplit             = 10
 )
 
@@ -129,18 +131,21 @@ type DeviceManager struct {
 	cacheTimeout int
 	lastUpdate   time.Time
 	// thse are for caching only
-	onboardCerts          map[string]map[string]bool
-	deviceCerts           map[string]uuid.UUID
-	devices               map[uuid.UUID]common.DeviceStorage
-	maxLogSize            int
-	maxInfoSize           int
-	maxMetricSize         int
-	currentLogFile        *os.File
-	currentInfoFile       *os.File
-	currentMetricFile     *os.File
-	currentLogFileSize    int
-	currentInfoFileSize   int
-	currentMetricFileSize int
+	onboardCerts            map[string]map[string]bool
+	deviceCerts             map[string]uuid.UUID
+	devices                 map[uuid.UUID]common.DeviceStorage
+	maxLogSize              int
+	maxInfoSize             int
+	maxMetricSize           int
+	maxRequestsSize         int
+	currentLogFile          *os.File
+	currentInfoFile         *os.File
+	currentMetricFile       *os.File
+	currentRequestsFile     *os.File
+	currentLogFileSize      int
+	currentInfoFileSize     int
+	currentMetricFileSize   int
+	currentRequestsFileSize int
 }
 
 // Name return name
@@ -168,8 +173,13 @@ func (d *DeviceManager) MaxMetricSize() int {
 	return maxMetricSizeFile
 }
 
+// MaxRequestsSize return the maximum request logs size in bytes for this device manager
+func (d *DeviceManager) MaxRequestsSize() int {
+	return maxRequestsSizeFile
+}
+
 // Init check if a URL is valid and initialize
-func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
+func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize, maxRequestsSize int) (bool, error) {
 	fi, err := os.Stat(s)
 	if err == nil && !fi.IsDir() {
 		return false, fmt.Errorf("database path %s exists and is not a directory", s)
@@ -196,9 +206,13 @@ func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize in
 	if maxMetricSize == 0 {
 		maxMetricSize = maxMetricSizeFile
 	}
+	if maxRequestsSize == 0 {
+		maxRequestsSize = maxRequestsSizeFile
+	}
 	d.maxLogSize = maxLogSize
 	d.maxInfoSize = maxInfoSize
 	d.maxMetricSize = maxMetricSize
+	d.maxRequestsSize = maxRequestsSize
 
 	return true, nil
 }
@@ -453,7 +467,7 @@ func (d *DeviceManager) initDevice(u uuid.UUID) error {
 	}
 
 	// create the necessary directories for data uploads
-	for _, p := range []string{logDir, metricsDir, infoDir} {
+	for _, p := range []string{logDir, metricsDir, infoDir, requestsDir} {
 		cur := path.Join(devicePath, p)
 		err = os.MkdirAll(cur, 0755)
 		if err != nil {
@@ -491,6 +505,10 @@ func (d *DeviceManager) initDevice(u uuid.UUID) error {
 		Metrics: &ManagedFile{
 			dir:     path.Join(devicePath, metricsDir),
 			maxSize: int64(d.maxMetricSize),
+		},
+		Requests: &ManagedFile{
+			dir:     path.Join(devicePath, requestsDir),
+			maxSize: int64(d.maxRequestsSize),
 		},
 	}
 
@@ -609,6 +627,19 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 	d.onboardCerts[certStr] = serialList
 
 	return nil
+}
+
+// WriteRequest record a request
+func (d *DeviceManager) WriteRequest(req common.ApiRequest) error {
+	var emptyUUID uuid.UUID
+	if uuid.Equal(req.UUID, emptyUUID) {
+		return fmt.Errorf("no device given")
+	}
+	if dev, ok := d.devices[req.UUID]; ok {
+		dev.AddRequest(&req)
+		return nil
+	}
+	return fmt.Errorf("device not found: %s", req.UUID)
 }
 
 // WriteInfo write an info message
@@ -1047,6 +1078,19 @@ func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	}
 	dr := &DirReader{
 		Path:     d.devices[u].Info.(*ManagedFile).dir,
+		LineFeed: true,
+	}
+	return dr, nil
+}
+
+// GetRequestsReader get the requests for a given uuid
+func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
+	// check that the device actually exists
+	if !d.deviceExists(u) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	dr := &DirReader{
+		Path:     d.devices[u].Requests.(*ManagedFile).dir,
 		LineFeed: true,
 	}
 	return dr, nil

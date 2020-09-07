@@ -281,6 +281,34 @@ var deviceInfoCmd = &cobra.Command{
 	},
 }
 
+var deviceRequestsCmd = &cobra.Command{
+	Use:   "requests",
+	Short: "view request logs",
+	Long:  `View logs from a specific device, either those already in storage or streaming new`,
+	Run: func(cmd *cobra.Command, args []string) {
+		u, err := resolveURL(serverURL, path.Join("/admin/device", devUUID, "requests"))
+		if err != nil {
+			log.Fatalf("error constructing URL: %v", err)
+		}
+		req, err := http.NewRequest("GET", u, nil)
+		var client *http.Client
+		if follow {
+			req.Header.Add(server.StreamHeader, server.StreamValue)
+			client = getStreamingClient()
+		} else {
+			client = getClient()
+		}
+
+		response, err := client.Do(req)
+		if err != nil {
+			log.Fatalf("error reading URL %s: %v", u, err)
+		}
+		if _, err := io.Copy(os.Stdout, response.Body); err != nil {
+			log.Fatalf("error writing output: %v", err)
+		}
+	},
+}
+
 func deviceInit() {
 	// deviceList
 	deviceCmd.AddCommand(deviceListCmd)
@@ -318,4 +346,9 @@ func deviceInit() {
 	deviceInfoCmd.Flags().StringVar(&devUUID, "uuid", "", "uuid of device to get info messages")
 	deviceInfoCmd.MarkFlagRequired("uuid")
 	deviceInfoCmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow new info messages instead of viewing existing logs")
+	// deviceRequestsCmd
+	deviceCmd.AddCommand(deviceRequestsCmd)
+	deviceRequestsCmd.Flags().StringVar(&devUUID, "uuid", "", "uuid of device to get request logs")
+	deviceRequestsCmd.MarkFlagRequired("uuid")
+	deviceRequestsCmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow new request logs instead of viewing existing")
 }

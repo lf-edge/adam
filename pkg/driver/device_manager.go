@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"io"
 
+	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
@@ -31,10 +32,12 @@ type DeviceManager interface {
 	MaxInfoSize() int
 	// MaxMetricSize return the default maximum metric size in bytes for this device manager
 	MaxMetricSize() int
+	// MaxRequestsSize return the default maximum request logs size in bytes for this device manager
+	MaxRequestsSize() int
 	// Database safe-to-print (without credentials) path to database
 	Database() string
 	// Init initialize the datastore. If the given database URL is invalid for this type of manager, return false. Return error for actual failures
-	Init(string, int, int, int) (bool, error)
+	Init(string, int, int, int, int) (bool, error)
 	// SetCacheTimeout set how long to keep onboard and device certificates in cache before rereading from a backing store. Value of 0 means
 	//   not to cache
 	SetCacheTimeout(int)
@@ -68,6 +71,8 @@ type DeviceManager interface {
 	WriteLogs(*logs.LogBundle) error
 	// WriteMetrics write a MetricMsg
 	WriteMetrics(*metrics.ZMetricMsg) error
+	// WriteRequest record a request that was made, including the remote IP, x-forwarded-for header, and path
+	WriteRequest(common.ApiRequest) error
 	// GetConfig get the config for a given uuid
 	GetConfig(uuid.UUID) (*config.EdgeDevConfig, error)
 	// SetConfig set the config for a given uuid
@@ -78,4 +83,6 @@ type DeviceManager interface {
 	GetLogsReader(u uuid.UUID) (io.Reader, error)
 	// GetInfoReader get the info for a given uuid
 	GetInfoReader(u uuid.UUID) (io.Reader, error)
+	// GetRequestsReader get the request logs for a given uuid
+	GetRequestsReader(u uuid.UUID) (io.Reader, error)
 }

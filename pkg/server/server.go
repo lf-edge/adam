@@ -94,6 +94,7 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device/{uuid}/config", admin.deviceConfigSet).Methods("PUT")
 	ad.HandleFunc("/device/{uuid}/logs", admin.deviceLogsGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/info", admin.deviceInfoGet).Methods("GET")
+	ad.HandleFunc("/device/{uuid}/requests", admin.deviceRequestsGet).Methods("GET")
 	ad.HandleFunc("/device", admin.deviceAdd).Methods("POST")
 	ad.HandleFunc("/device", admin.deviceClear).Methods("DELETE")
 	ad.HandleFunc("/device/{uuid}", admin.deviceRemove).Methods("DELETE")

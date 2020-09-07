@@ -19,20 +19,22 @@ import (
 )
 
 const (
-	MB                  = common.MB
-	maxLogSizeMemory    = 10 * MB
-	maxInfoSizeMemory   = 10 * MB
-	maxMetricSizeMemory = 10 * MB
+	MB                    = common.MB
+	maxLogSizeMemory      = 10 * MB
+	maxInfoSizeMemory     = 10 * MB
+	maxMetricSizeMemory   = 10 * MB
+	maxRequestsSizeMemory = 10 * MB
 )
 
 // DeviceManager implementation of DeviceManager with an ephemeral memory backing store
 type DeviceManager struct {
-	onboardCerts  map[string]map[string]bool
-	deviceCerts   map[string]uuid.UUID
-	devices       map[uuid.UUID]common.DeviceStorage
-	maxLogSize    int
-	maxInfoSize   int
-	maxMetricSize int
+	onboardCerts    map[string]map[string]bool
+	deviceCerts     map[string]uuid.UUID
+	devices         map[uuid.UUID]common.DeviceStorage
+	maxLogSize      int
+	maxInfoSize     int
+	maxMetricSize   int
+	maxRequestsSize int
 }
 
 // Name return name
@@ -60,8 +62,13 @@ func (d *DeviceManager) MaxMetricSize() int {
 	return maxMetricSizeMemory
 }
 
+// MaxRequestsSize return the maximum request logs size in bytes for this device manager
+func (d *DeviceManager) MaxRequestsSize() int {
+	return maxRequestsSizeMemory
+}
+
 // Init initialize, valid only with a blank URL
-func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
+func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize, maxRequestsSize int) (bool, error) {
 	if s != "" {
 		return false, nil
 	}
@@ -74,9 +81,13 @@ func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize in
 	if maxMetricSize == 0 {
 		maxMetricSize = maxMetricSizeMemory
 	}
+	if maxRequestsSize == 0 {
+		maxRequestsSize = maxRequestsSizeMemory
+	}
 	d.maxLogSize = maxLogSize
 	d.maxInfoSize = maxInfoSize
 	d.maxMetricSize = maxMetricSize
+	d.maxRequestsSize = maxRequestsSize
 	return true, nil
 }
 
@@ -263,6 +274,19 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 	return nil
 }
 
+// WriteRequest record a request
+func (d *DeviceManager) WriteRequest(req common.ApiRequest) error {
+	var emptyUUID uuid.UUID
+	if uuid.Equal(req.UUID, emptyUUID) {
+		return fmt.Errorf("no device given")
+	}
+	if dev, ok := d.devices[req.UUID]; ok {
+		dev.AddRequest(&req)
+		return nil
+	}
+	return fmt.Errorf("device not found: %s", req.UUID)
+}
+
 // WriteInfo write an info message
 func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
 	// make sure it is not nil
@@ -424,4 +448,14 @@ func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
 	return dev.Info, nil
+}
+
+// GetRequestsReader get the requests for a given uuid
+func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	return dev.Requests, nil
 }

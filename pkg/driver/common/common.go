@@ -6,7 +6,9 @@ package common
 import (
 	"bytes"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
@@ -28,11 +30,21 @@ type BigData interface {
 	Write(b []byte) (int, error)
 }
 
+type ApiRequest struct {
+	Timestamp time.Time `json:"timestamp"`
+	UUID      uuid.UUID `json:"uuid,omitempty"`
+	ClientIP  string    `json:"client-ip"`
+	Forwarded string    `json:"forwarded,omitempty"`
+	Method    string    `json:"method"`
+	URL       string    `json:"url"`
+}
+
 type DeviceStorage struct {
 	Cert       *x509.Certificate
 	Info       BigData
 	Metrics    BigData
 	Logs       BigData
+	Requests   BigData
 	CurrentLog int
 	Config     *config.EdgeDevConfig
 	Serial     string
@@ -67,6 +79,15 @@ func (d *DeviceStorage) AddMetrics(m *metrics.ZMetricMsg) error {
 		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
 	}
 	_, err := d.Metrics.Write(buf.Bytes())
+	return err
+}
+
+func (d *DeviceStorage) AddRequest(m *ApiRequest) error {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("failed to marshall request struct to json: %v", err)
+	}
+	_, err = d.Requests.Write(b)
 	return err
 }
 
