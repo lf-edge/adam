@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver"
@@ -19,12 +20,28 @@ import (
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
+	uuid "github.com/satori/go.uuid"
 )
 
 type apiHandler struct {
 	manager     driver.DeviceManager
 	logChannel  chan proto.Message
 	infoChannel chan proto.Message
+}
+
+func (h *apiHandler) recordClient(u *uuid.UUID, r *http.Request) {
+	var uuid uuid.UUID
+	if u != nil {
+		uuid = *u
+	}
+	h.manager.WriteRequest(common.ApiRequest{
+		Timestamp: time.Now(),
+		UUID:      uuid,
+		ClientIP:  r.RemoteAddr,
+		Forwarded: r.Header.Get("X-Forwarded-For"),
+		Method:    r.Method,
+		URL:       r.URL.String(),
+	})
 }
 
 func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
@@ -98,12 +115,13 @@ func (h *apiHandler) probe(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) ping(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	_, err := h.manager.DeviceCheckCert(cert)
+	u, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
+	h.recordClient(u, r)
 	// now just return a 200
 	w.WriteHeader(http.StatusOK)
 }
@@ -122,6 +140,7 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
+	h.recordClient(u, r)
 	config, err := h.manager.GetConfigResponse(*u)
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
@@ -161,6 +180,7 @@ func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
+	h.recordClient(u, r)
 	config, err := h.manager.GetConfig(*u)
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
@@ -179,12 +199,13 @@ func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	_, err := h.manager.DeviceCheckCert(cert)
+	u, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
+	h.recordClient(u, r)
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
@@ -214,12 +235,13 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	_, err := h.manager.DeviceCheckCert(cert)
+	u, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
+	h.recordClient(u, r)
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("error reading request body: %v", err)
@@ -245,12 +267,13 @@ func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 	// only uses the device cert
 	cert := getClientCert(r)
-	_, err := h.manager.DeviceCheckCert(cert)
+	u, err := h.manager.DeviceCheckCert(cert)
 	if err != nil {
 		log.Printf("error checking device cert: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
+	h.recordClient(u, r)
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)

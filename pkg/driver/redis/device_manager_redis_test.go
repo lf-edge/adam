@@ -17,13 +17,13 @@ import (
 
 func TestInit(t *testing.T) {
 	redisDriver := DeviceManager{}
-	redisDriver.Init("redis://localhost:12345/12", 0, 0, 0)
+	redisDriver.Init("redis://localhost:12345/12", 0, 0, 0, 0)
 	assert.Equal(t, "localhost:12345", redisDriver.Database())
 }
 
 func TestOnboardRedis(t *testing.T) {
 	r := DeviceManager{}
-	r.Init("redis://localhost:6379/0", 0, 0, 0)
+	r.Init("redis://localhost:6379/0", 0, 0, 0, 0)
 
 	if r.client.FlushAll().Err() != nil {
 		t.Skip("you need to run 'docker run redis' before running the rest of the tests")
@@ -65,7 +65,7 @@ func TestOnboardRedis(t *testing.T) {
 
 func TestDeviceRedis(t *testing.T) {
 	r := DeviceManager{}
-	r.Init("redis://localhost:6379/0", 0, 0, 0)
+	r.Init("redis://localhost:6379/0", 0, 0, 0, 0)
 
 	if r.client.FlushAll().Err() != nil {
 		t.Skip("you need to run 'docker run redis' before running the rest of the tests")
@@ -116,7 +116,7 @@ func TestDeviceRedis(t *testing.T) {
 
 func TestConfigRedis(t *testing.T) {
 	r := DeviceManager{}
-	r.Init("redis://localhost:6379/0", 0, 0, 0)
+	r.Init("redis://localhost:6379/0", 0, 0, 0, 0)
 
 	if r.client.FlushAll().Err() != nil {
 		t.Skip("you need to run 'docker run redis' before running the rest of the tests")
@@ -151,7 +151,7 @@ func TestConfigRedis(t *testing.T) {
 
 func TestStreamsRedis(t *testing.T) {
 	r := DeviceManager{}
-	r.Init("redis://localhost:6379/0", 0, 0, 0)
+	r.Init("redis://localhost:6379/0", 0, 0, 0, 0)
 
 	if r.client.FlushAll().Err() != nil {
 		t.Skip("you need to run 'docker run redis' before running the rest of the tests")
@@ -191,9 +191,11 @@ func TestStreamsRedis(t *testing.T) {
 	assert.Equal(t, 96, l)
 
 	r.transactionDrop([][]string{
-		{deviceInfoSteram + u.String()},
+		{deviceInfoStream + u.String()},
 		{deviceLogsStream + u.String()},
-		{deviceMetricsStream + u.String()}})
+		{deviceMetricsStream + u.String()},
+		{deviceRequestsStream + u.String()},
+	})
 }
 
 func generateCert(t *testing.T, cn, host string) *x509.Certificate {

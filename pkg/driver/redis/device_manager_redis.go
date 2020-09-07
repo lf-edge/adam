@@ -8,14 +8,16 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"github.com/golang/protobuf/jsonpb"
 	"io"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/golang/protobuf/jsonpb"
 
 	"github.com/go-redis/redis"
 	"github.com/golang/protobuf/proto"
@@ -46,14 +48,16 @@ const (
 	// with each stream element having a single key pair:
 	//   "object" -> msgpack serialized object
 	// see MkStreamEntry() for details
-	deviceLogsStream    = "LOGS_EVE_"
-	deviceInfoSteram    = "INFO_EVE_"
-	deviceMetricsStream = "METRICS_EVE_"
+	deviceLogsStream     = "LOGS_EVE_"
+	deviceInfoStream     = "INFO_EVE_"
+	deviceMetricsStream  = "METRICS_EVE_"
+	deviceRequestsStream = "REQUESTS_EVE_"
 
-	MB                 = common.MB
-	maxLogSizeRedis    = 100 * MB
-	maxInfoSizeRedis   = 100 * MB
-	maxMetricSizeRedis = 100 * MB
+	MB                   = common.MB
+	maxLogSizeRedis      = 100 * MB
+	maxInfoSizeRedis     = 100 * MB
+	maxMetricSizeRedis   = 100 * MB
+	maxRequestsSizeRedis = 100 * MB
 )
 
 // DeviceManager implementation of DeviceManager interface with a Redis DB as the backing store
@@ -95,8 +99,13 @@ func (d *DeviceManager) MaxMetricSize() int {
 	return maxMetricSizeRedis
 }
 
+// MaxRequestsSize return the maximum requests log size in bytes for this device manager
+func (d *DeviceManager) MaxRequestsSize() int {
+	return maxRequestsSizeRedis
+}
+
 // Init check if a URL is valid and initialize
-func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize int) (bool, error) {
+func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize, maxRequestsSize int) (bool, error) {
 	URL, err := url.Parse(s)
 	if err != nil || URL.Scheme != "redis" {
 		return false, err
@@ -239,9 +248,11 @@ func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 		{deviceConfigsHash, k},
 		{deviceOnboardCertsHash, k},
 		{deviceSerialsHash, k},
-		{deviceInfoSteram + k},
+		{deviceInfoStream + k},
 		{deviceLogsStream + k},
-		{deviceMetricsStream + k}})
+		{deviceMetricsStream + k},
+		{deviceRequestsStream + k},
+	})
 
 	if err != nil {
 		return fmt.Errorf("unable to remove the device %s %v", k, err)
@@ -266,7 +277,8 @@ func (d *DeviceManager) DeviceClear() error {
 		streams = append(streams,
 			[]string{deviceMetricsStream + u.String()},
 			[]string{deviceLogsStream + u.String()},
-			[]string{deviceInfoSteram + u.String()})
+			[]string{deviceInfoStream + u.String()},
+			[]string{deviceRequestsStream + u.String()})
 
 	}
 
@@ -373,7 +385,7 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 	}
 
 	// create the necessary Redis streams for this device
-	for _, p := range []string{deviceInfoSteram, deviceMetricsStream, deviceLogsStream} {
+	for _, p := range []string{deviceInfoStream, deviceMetricsStream, deviceLogsStream, deviceRequestsStream} {
 		stream := p + unew.String()
 		_, err := d.client.XAdd(&redis.XAddArgs{
 			Stream:       stream,
@@ -433,6 +445,22 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 	return nil
 }
 
+// WriteRequest record a request
+func (d *DeviceManager) WriteRequest(req common.ApiRequest) error {
+	var emptyUUID uuid.UUID
+	if uuid.Equal(req.UUID, emptyUUID) {
+		return fmt.Errorf("no device given")
+	}
+	if _, ok := d.devices[req.UUID]; !ok {
+		return fmt.Errorf("device not found: %s", req.UUID)
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("failed to marshall request struct to json: %v", err)
+	}
+	return d.writeBytesToStream(deviceRequestsStream+req.UUID.String(), b)
+}
+
 // WriteInfo write an info message
 func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
 	// make sure it is not nil
@@ -445,7 +473,7 @@ func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevId, err)
 	}
 	// check that the device actually exists
-	err = d.writeProtobufToStream(deviceInfoSteram+u.String(), m)
+	err = d.writeProtobufToStream(deviceInfoStream+u.String(), m)
 	if err != nil {
 		return fmt.Errorf("failed to write info to a stream: %v", err)
 	}
@@ -590,7 +618,17 @@ func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	dr := &RedisStreamReader{
 		Client:   d.client,
-		Stream:   deviceInfoSteram + u.String(),
+		Stream:   deviceInfoStream + u.String(),
+		LineFeed: true,
+	}
+	return dr, nil
+}
+
+// GetRequestsReader get the requests for a given uuid
+func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
+	dr := &RedisStreamReader{
+		Client:   d.client,
+		Stream:   deviceRequestsStream + u.String(),
 		LineFeed: true,
 	}
 	return dr, nil
@@ -836,12 +874,26 @@ func (d *DeviceManager) writeProtobufToStream(stream string, msg proto.Message) 
 	// XXX: lets see if this blocks
 	_, err = d.client.XAdd(&redis.XAddArgs{
 		Stream: stream,
-		ID: "*",
+		ID:     "*",
 		Values: d.mkStreamEntry(buf.Bytes()),
 	}).Result()
 
 	if err != nil {
 		return fmt.Errorf("failed to put protobuf message %v into a stream %s", msg, stream)
+	}
+	return nil
+}
+
+func (d *DeviceManager) writeBytesToStream(stream string, b []byte) error {
+	// XXX: lets see if this blocks
+	_, err := d.client.XAdd(&redis.XAddArgs{
+		Stream: stream,
+		ID:     "*",
+		Values: d.mkStreamEntry(b),
+	}).Result()
+
+	if err != nil {
+		return fmt.Errorf("failed to put bytes message %v into a stream %s", b, stream)
 	}
 	return nil
 }
