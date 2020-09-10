@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/lf-edge/eve/api/go/config"
@@ -26,7 +27,7 @@ const (
 
 type BigData interface {
 	Get(index int) ([]byte, error)
-	Read(p []byte) (int, error)
+	Reader() (io.Reader, error)
 	Write(b []byte) (int, error)
 }
 

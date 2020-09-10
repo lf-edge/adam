@@ -4,20 +4,18 @@
 package redis
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/golang/protobuf/jsonpb"
 
 	"github.com/go-redis/redis"
 	"github.com/golang/protobuf/proto"
@@ -59,6 +57,36 @@ const (
 	maxMetricSizeRedis   = 100 * MB
 	maxRequestsSizeRedis = 100 * MB
 )
+
+// ManagedStream stream of data interface
+type ManagedStream struct {
+	name   string
+	client *redis.Client
+}
+
+func (m *ManagedStream) Get(index int) ([]byte, error) {
+	return nil, errors.New("unsupported")
+}
+
+func (m *ManagedStream) Write(b []byte) (int, error) {
+	// XXX: lets see if this blocks
+	if _, err := m.client.XAdd(&redis.XAddArgs{
+		Stream: m.name,
+		ID:     "*",
+		Values: mkStreamEntry(b),
+	}).Result(); err != nil {
+		return 0, fmt.Errorf("failed to put message into a stream %s: %v", m.name, err)
+	}
+	return len(b), nil
+}
+
+func (m *ManagedStream) Reader() (io.Reader, error) {
+	return &RedisStreamReader{
+		Client:   m.client,
+		Stream:   m.name,
+		LineFeed: true,
+	}, nil
+}
 
 // DeviceManager implementation of DeviceManager interface with a Redis DB as the backing store
 type DeviceManager struct {
@@ -384,25 +412,35 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 		return nil, fmt.Errorf("error saving device config for %v: %v", unew, err)
 	}
 
-	// create the necessary Redis streams for this device
-	for _, p := range []string{deviceInfoStream, deviceMetricsStream, deviceLogsStream, deviceRequestsStream} {
-		stream := p + unew.String()
-		_, err := d.client.XAdd(&redis.XAddArgs{
-			Stream:       stream,
-			MaxLenApprox: 10000,
-			ID:           "*",
-			Values:       d.mkStreamEntry([]byte("")),
-		}).Result()
-		if err != nil {
-			return nil, fmt.Errorf("error creating stream %s: %v", stream, err)
-		}
-	}
-
 	// save new one to cache - just the serial and onboard; the rest is on disk
 	d.deviceCerts[string(cert.Raw)] = unew
 	d.devices[unew] = common.DeviceStorage{
 		Onboard: onboard,
 		Serial:  serial,
+		Logs: &ManagedStream{
+			name:   deviceLogsStream + unew.String(),
+			client: d.client,
+		},
+		Info: &ManagedStream{
+			name:   deviceInfoStream + unew.String(),
+			client: d.client,
+		},
+		Metrics: &ManagedStream{
+			name:   deviceMetricsStream + unew.String(),
+			client: d.client,
+		},
+		Requests: &ManagedStream{
+			name:   deviceRequestsStream + unew.String(),
+			client: d.client,
+		},
+	}
+	ds := d.devices[unew]
+
+	// create the necessary Redis streams for this device
+	for _, ms := range []common.BigData{ds.Logs, ds.Info, ds.Metrics, ds.Requests} {
+		if _, err := ms.Write([]byte("")); err != nil {
+			return nil, fmt.Errorf("error creating stream: %v", err)
+		}
 	}
 
 	return &unew, nil
@@ -451,14 +489,16 @@ func (d *DeviceManager) WriteRequest(req common.ApiRequest) error {
 	if uuid.Equal(req.UUID, emptyUUID) {
 		return fmt.Errorf("no device given")
 	}
-	if _, ok := d.devices[req.UUID]; !ok {
+	dev, ok := d.devices[req.UUID]
+	if !ok {
 		return fmt.Errorf("device not found: %s", req.UUID)
 	}
 	b, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshall request struct to json: %v", err)
 	}
-	return d.writeBytesToStream(deviceRequestsStream+req.UUID.String(), b)
+	_, err = dev.Requests.Write(b)
+	return err
 }
 
 // WriteInfo write an info message
@@ -473,11 +513,11 @@ func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevId, err)
 	}
 	// check that the device actually exists
-	err = d.writeProtobufToStream(deviceInfoStream+u.String(), m)
-	if err != nil {
-		return fmt.Errorf("failed to write info to a stream: %v", err)
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("device not found: %s", u)
 	}
-	return nil
+	return dev.AddInfo(m)
 }
 
 // WriteLogs write a message of logs
@@ -492,11 +532,11 @@ func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
 	}
 	// check that the device actually exists
-	err = d.writeProtobufToStream(deviceLogsStream+u.String(), m)
-	if err != nil {
-		return fmt.Errorf("failed to write info to a stream: %v", err)
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("device not found: %s", u)
 	}
-	return nil
+	return dev.AddLog(m)
 }
 
 // WriteMetrics write a metrics message
@@ -511,11 +551,11 @@ func (d *DeviceManager) WriteMetrics(m *metrics.ZMetricMsg) error {
 		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
 	}
 	// check that the device actually exists
-	err = d.writeProtobufToStream(deviceMetricsStream+u.String(), m)
-	if err != nil {
-		return fmt.Errorf("failed to write info to a stream: %v", err)
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("device not found: %s", u)
 	}
-	return nil
+	return dev.AddMetrics(m)
 }
 
 // GetConfig retrieve the config for a particular device
@@ -606,32 +646,32 @@ func (d *DeviceManager) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
 
 // GetLogsReader get the logs for a given uuid
 func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
-	dr := &RedisStreamReader{
-		Client:   d.client,
-		Stream:   deviceLogsStream + u.String(),
-		LineFeed: true,
+	// check that the device actually exists
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
-	return dr, nil
+	return dev.Logs.Reader()
 }
 
 // GetInfoReader get the info for a given uuid
 func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
-	dr := &RedisStreamReader{
-		Client:   d.client,
-		Stream:   deviceInfoStream + u.String(),
-		LineFeed: true,
+	// check that the device actually exists
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
-	return dr, nil
+	return dev.Info.Reader()
 }
 
 // GetRequestsReader get the requests for a given uuid
 func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
-	dr := &RedisStreamReader{
-		Client:   d.client,
-		Stream:   deviceRequestsStream + u.String(),
-		LineFeed: true,
+	// check that the device actually exists
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
-	return dr, nil
+	return dev.Requests.Reader()
 }
 
 // refreshCache refresh cache from disk
@@ -863,41 +903,6 @@ func (d *DeviceManager) writeCert(cert []byte, hash string, uuid string, force b
 	return nil
 }
 
-func (d *DeviceManager) writeProtobufToStream(stream string, msg proto.Message) error {
-	var buf bytes.Buffer
-	mler := jsonpb.Marshaler{}
-	err := mler.Marshal(&buf, msg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal protobuf message %v: %v", msg, err)
-	}
-
-	// XXX: lets see if this blocks
-	_, err = d.client.XAdd(&redis.XAddArgs{
-		Stream: stream,
-		ID:     "*",
-		Values: d.mkStreamEntry(buf.Bytes()),
-	}).Result()
-
-	if err != nil {
-		return fmt.Errorf("failed to put protobuf message %v into a stream %s", msg, stream)
-	}
-	return nil
-}
-
-func (d *DeviceManager) writeBytesToStream(stream string, b []byte) error {
-	// XXX: lets see if this blocks
-	_, err := d.client.XAdd(&redis.XAddArgs{
-		Stream: stream,
-		ID:     "*",
-		Values: d.mkStreamEntry(b),
-	}).Result()
-
-	if err != nil {
-		return fmt.Errorf("failed to put bytes message %v into a stream %s", b, stream)
-	}
-	return nil
-}
-
-func (d *DeviceManager) mkStreamEntry(body []byte) map[string]interface{} {
+func mkStreamEntry(body []byte) map[string]interface{} {
 	return map[string]interface{}{"version": "1", "object": string(body)}
 }
