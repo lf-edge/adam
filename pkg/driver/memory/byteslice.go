@@ -22,6 +22,30 @@ func (bs ByteSlice) Get(index int) ([]byte, error) {
 	}
 	return bs.data[index], nil
 }
+
+func (bs *ByteSlice) Write(b []byte) (int, error) {
+	// write it to the current one
+	bs.data = append(bs.data, b[:])
+	bs.size += len(b)
+	for {
+		if bs.size <= bs.maxSize {
+			break
+		}
+		if len(bs.data) == 0 {
+			break
+		}
+		bs.size -= len(bs.data[0])
+		bs.data = bs.data[1:]
+		// this will mess up the current reader, so we need to update it
+		bs.currentRead--
+	}
+	return len(b), nil
+}
+
+func (bs ByteSlice) Reader() (io.Reader, error) {
+	return bs, nil
+}
+
 func (bs ByteSlice) Read(p []byte) (int, error) {
 	if bs.readComplete {
 		return 0, io.EOF
@@ -47,23 +71,4 @@ func (bs ByteSlice) Read(p []byte) (int, error) {
 	// we do not worried about returning less than they requested; as long as we
 	// do not return an io.EOF, they will come back for more
 	return copied, nil
-}
-
-func (bs *ByteSlice) Write(b []byte) (int, error) {
-	// write it to the current one
-	bs.data = append(bs.data, b[:])
-	bs.size += len(b)
-	for {
-		if bs.size <= bs.maxSize {
-			break
-		}
-		if len(bs.data) == 0 {
-			break
-		}
-		bs.size -= len(bs.data[0])
-		bs.data = bs.data[1:]
-		// this will mess up the current reader, so we need to update it
-		bs.currentRead--
-	}
-	return len(b), nil
 }

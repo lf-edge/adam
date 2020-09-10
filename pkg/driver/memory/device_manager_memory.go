@@ -437,7 +437,7 @@ func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	return dev.Logs, nil
+	return dev.Logs.Reader()
 }
 
 // GetInfoReader get the info for a given uuid
@@ -447,7 +447,7 @@ func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	return dev.Info, nil
+	return dev.Info.Reader()
 }
 
 // GetRequestsReader get the requests for a given uuid
@@ -457,5 +457,5 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	return dev.Requests, nil
+	return dev.Requests.Reader()
 }

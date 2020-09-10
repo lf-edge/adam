@@ -118,11 +118,11 @@ func (m *ManagedFile) Write(b []byte) (int, error) {
 	return written, nil
 }
 
-func (m *ManagedFile) Read(p []byte) (int, error) {
-	if m.dirReader == nil {
-
-	}
-	return 0, nil
+func (m *ManagedFile) Reader() (io.Reader, error) {
+	return &DirReader{
+		Path:     m.dir,
+		LineFeed: true,
+	}, nil
 }
 
 // DeviceManager implementation of DeviceManager interface with a directory as the backing store
@@ -1063,11 +1063,7 @@ func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 	if !d.deviceExists(u) {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
-	dr := &DirReader{
-		Path:     d.devices[u].Logs.(*ManagedFile).dir,
-		LineFeed: true,
-	}
-	return dr, nil
+	return d.devices[u].Logs.Reader()
 }
 
 // GetInfoReader get the info for a given uuid
@@ -1076,11 +1072,7 @@ func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 	if !d.deviceExists(u) {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
-	dr := &DirReader{
-		Path:     d.devices[u].Info.(*ManagedFile).dir,
-		LineFeed: true,
-	}
-	return dr, nil
+	return d.devices[u].Info.Reader()
 }
 
 // GetRequestsReader get the requests for a given uuid
@@ -1089,9 +1081,5 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
 	if !d.deviceExists(u) {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
-	dr := &DirReader{
-		Path:     d.devices[u].Requests.(*ManagedFile).dir,
-		LineFeed: true,
-	}
-	return dr, nil
+	return d.devices[u].Requests.Reader()
 }
