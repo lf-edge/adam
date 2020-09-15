@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -414,26 +413,7 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 
 	// save new one to cache - just the serial and onboard; the rest is on disk
 	d.deviceCerts[string(cert.Raw)] = unew
-	d.devices[unew] = common.DeviceStorage{
-		Onboard: onboard,
-		Serial:  serial,
-		Logs: &ManagedStream{
-			name:   deviceLogsStream + unew.String(),
-			client: d.client,
-		},
-		Info: &ManagedStream{
-			name:   deviceInfoStream + unew.String(),
-			client: d.client,
-		},
-		Metrics: &ManagedStream{
-			name:   deviceMetricsStream + unew.String(),
-			client: d.client,
-		},
-		Requests: &ManagedStream{
-			name:   deviceRequestsStream + unew.String(),
-			client: d.client,
-		},
-	}
+	d.devices[unew] = d.initDevice(unew, onboard, serial)
 	ds := d.devices[unew]
 
 	// create the necessary Redis streams for this device
@@ -444,6 +424,30 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 	}
 
 	return &unew, nil
+}
+
+// initDevice initialize a device
+func (d *DeviceManager) initDevice(u uuid.UUID, onboard *x509.Certificate, serial string) common.DeviceStorage {
+	return common.DeviceStorage{
+		Onboard: onboard,
+		Serial:  serial,
+		Logs: &ManagedStream{
+			name:   deviceLogsStream + u.String(),
+			client: d.client,
+		},
+		Info: &ManagedStream{
+			name:   deviceInfoStream + u.String(),
+			client: d.client,
+		},
+		Metrics: &ManagedStream{
+			name:   deviceMetricsStream + u.String(),
+			client: d.client,
+		},
+		Requests: &ManagedStream{
+			name:   deviceRequestsStream + u.String(),
+			client: d.client,
+		},
+	}
 }
 
 // OnboardRegister register an onboard cert and update its serials
@@ -489,16 +493,11 @@ func (d *DeviceManager) WriteRequest(req common.ApiRequest) error {
 	if uuid.Equal(req.UUID, emptyUUID) {
 		return fmt.Errorf("no device given")
 	}
-	dev, ok := d.devices[req.UUID]
-	if !ok {
-		return fmt.Errorf("device not found: %s", req.UUID)
+	if dev, ok := d.devices[req.UUID]; ok {
+		dev.AddRequest(&req)
+		return nil
 	}
-	b, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("failed to marshall request struct to json: %v", err)
-	}
-	_, err = dev.Requests.Write(b)
-	return err
+	return fmt.Errorf("device not found: %s", req.UUID)
 }
 
 // WriteInfo write an info message
@@ -741,7 +740,7 @@ func (d *DeviceManager) refreshCache() error {
 		}
 		certStr := string(cert.Raw)
 		deviceCerts[certStr] = u
-		devices[u] = common.DeviceStorage{}
+		devices[u] = d.initDevice(u, cert, "") // start with no serial, as it will be added further down
 	}
 	// replace the existing device certificates
 	d.deviceCerts = deviceCerts
@@ -766,8 +765,9 @@ func (d *DeviceManager) refreshCache() error {
 			return fmt.Errorf("unable to convert data from file %s to device onboard certificate: %v", b, err)
 		}
 		if _, present := devices[u]; !present {
-			devices[u] = common.DeviceStorage{}
+			devices[u] = d.initDevice(u, nil, "") // start with a blank serial and no device cert
 		}
+		// because of the "cannot assign to struct field" golang issue
 		devItem := devices[u]
 		devItem.Onboard = cert
 		devices[u] = devItem
@@ -786,7 +786,7 @@ func (d *DeviceManager) refreshCache() error {
 			return fmt.Errorf("unable to convert device uuid from Redis hash name %s: %v", u, err)
 		}
 		if _, present := devices[u]; !present {
-			devices[u] = common.DeviceStorage{}
+			devices[u] = d.initDevice(u, nil, s)
 		}
 		devItem := devices[u]
 		devItem.Serial = s
