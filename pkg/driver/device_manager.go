@@ -34,10 +34,12 @@ type DeviceManager interface {
 	MaxMetricSize() int
 	// MaxRequestsSize return the default maximum request logs size in bytes for this device manager
 	MaxRequestsSize() int
+	// MaxAppLogsSize return the default maximum app logs size in bytes for this device manager
+	MaxAppLogsSize() int
 	// Database safe-to-print (without credentials) path to database
 	Database() string
 	// Init initialize the datastore. If the given database URL is invalid for this type of manager, return false. Return error for actual failures
-	Init(string, int, int, int, int) (bool, error)
+	Init(string, common.MaxSizes) (bool, error)
 	// SetCacheTimeout set how long to keep onboard and device certificates in cache before rereading from a backing store. Value of 0 means
 	//   not to cache
 	SetCacheTimeout(int)
@@ -69,6 +71,8 @@ type DeviceManager interface {
 	WriteInfo(*info.ZInfoMsg) error
 	// WriteLogs write a LogBundle message
 	WriteLogs(*logs.LogBundle) error
+	// WriteAppInstanceLogs write a AppInstanceLogBundle message for instanceID
+	WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, m *logs.AppInstanceLogBundle) error
 	// WriteMetrics write a MetricMsg
 	WriteMetrics(*metrics.ZMetricMsg) error
 	// WriteRequest record a request that was made, including the remote IP, x-forwarded-for header, and path

@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"github.com/gorilla/mux"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -293,6 +294,52 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 	err = h.manager.WriteLogs(msg)
 	if err != nil {
 		log.Printf("Failed to write logbundle message: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	// send back a 201
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
+	uid, err := uuid.FromString(mux.Vars(r)["uuid"])
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// only uses the device cert
+	cert := getClientCert(r)
+	u, err := h.manager.DeviceCheckCert(cert)
+	if u == nil {
+		log.Printf("unknown device cert")
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	if err != nil {
+		log.Printf("error checking device cert: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	h.recordClient(u, r)
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil || len(b) == 0 {
+		log.Printf("error reading request body: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	msg := &logs.AppInstanceLogBundle{}
+	if err := proto.Unmarshal(b, msg); err != nil {
+		log.Printf("Failed to parse appinstancelogbundle message: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	select {
+	case h.logChannel <- msg:
+	default:
+	}
+	err = h.manager.WriteAppInstanceLogs(uid, *u, msg)
+	if err != nil {
+		log.Printf("Failed to write appinstancelogbundle message: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

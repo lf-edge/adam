@@ -26,6 +26,15 @@ const (
 	MB = 1024 * KB
 )
 
+// MaxSizes defines maximum sizes of objects storage
+type MaxSizes struct{
+	MaxLogSize int
+	MaxInfoSize int
+	MaxMetricSize int
+	MaxRequestsSize int
+	MaxAppLogsSize int
+}
+
 type BigData interface {
 	Get(index int) ([]byte, error)
 	Reader() (io.Reader, error)
@@ -47,6 +56,7 @@ type DeviceStorage struct {
 	Metrics    BigData
 	Logs       BigData
 	Requests   BigData
+	AppLogs    map[uuid.UUID]BigData
 	CurrentLog int
 	Config     *config.EdgeDevConfig
 	Serial     string
@@ -65,6 +75,23 @@ func (d *DeviceStorage) AddLog(m *logs.LogBundle) error {
 		return errors.New("AddLog: Logs struct not yet initialized")
 	}
 	_, err := d.Logs.Write(buf.Bytes())
+	return err
+}
+func (d *DeviceStorage) AddAppLog(instanceID uuid.UUID, m *logs.AppInstanceLogBundle) error {
+	// convert the message to bytes
+	buf := bytes.NewBuffer([]byte{})
+	mler := jsonpb.Marshaler{}
+	if err := mler.Marshal(buf, m); err != nil {
+		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
+	}
+	// what if the device was not initialized yet?
+	if d.AppLogs == nil {
+		return fmt.Errorf("AddAppLog: AppLogs struct not yet initialized")
+	}
+	if _, ok := d.AppLogs[instanceID]; !ok {
+		return fmt.Errorf("AddAppLog: AppLogs for instance %s not yet initialized", instanceID)
+	}
+	_, err := d.AppLogs[instanceID].Write(buf.Bytes())
 	return err
 }
 func (d *DeviceStorage) AddInfo(m *info.ZInfoMsg) error {

@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/lf-edge/adam/pkg/driver/common"
 	"io/ioutil"
 	"log"
 	"os"
@@ -37,6 +38,7 @@ var (
 	maxInfoSize     int
 	maxMetricSize   int
 	maxRequestsSize int
+	maxAppLogsSize  int
 	autoCert        bool
 	deviceManagers  = driver.GetDeviceManagers()
 )
@@ -49,9 +51,16 @@ var serverCmd = &cobra.Command{
 		// create a handler based on where our device database is
 		// in the future, we may support other device manager types
 		var mgr driver.DeviceManager
+		maxSizes := common.MaxSizes{
+			MaxLogSize:      maxLogSize,
+			MaxInfoSize:     maxInfoSize,
+			MaxMetricSize:   maxMetricSize,
+			MaxRequestsSize: maxRequestsSize,
+			MaxAppLogsSize:  maxAppLogsSize,
+		}
 		for _, m := range deviceManagers {
 			name := m.Name()
-			valid, err := m.Init(databaseURL, maxLogSize, maxInfoSize, maxMetricSize, maxRequestsSize)
+			valid, err := m.Init(databaseURL, maxSizes)
 			if err != nil {
 				log.Fatalf("error initializing the %s device manager: %v", name, err)
 			}
@@ -149,11 +158,13 @@ func serverInit() {
 	defaultInfoSizes := []string{}
 	defaultMetricSizes := []string{}
 	defaultRequestsSizes := []string{}
+	defaultAppLogsSizes := []string{}
 	for _, m := range deviceManagers {
 		defaultLogSizes = append(defaultLogSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxLogSize()))
 		defaultInfoSizes = append(defaultInfoSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxInfoSize()))
 		defaultMetricSizes = append(defaultMetricSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxMetricSize()))
 		defaultRequestsSizes = append(defaultRequestsSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxRequestsSize()))
+		defaultAppLogsSizes = append(defaultAppLogsSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxAppLogsSize()))
 	}
 	serverCmd.Flags().StringVar(&port, "port", defaultPort, "port on which to listen")
 	serverCmd.Flags().StringVar(&hostIP, "ip", defaultIP, "IP address on which to listen")
@@ -169,4 +180,5 @@ func serverInit() {
 	serverCmd.Flags().IntVar(&maxInfoSize, "max-info-size", 0, fmt.Sprintf("the maximum size of the info before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultInfoSizes))
 	serverCmd.Flags().IntVar(&maxMetricSize, "max-metric-size", 0, fmt.Sprintf("the maximum size of the metrics before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultMetricSizes))
 	serverCmd.Flags().IntVar(&maxRequestsSize, "max-requests-size", 0, fmt.Sprintf("the maximum size of the request logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultRequestsSizes))
+	serverCmd.Flags().IntVar(&maxAppLogsSize, "max-app-logs-size", 0, fmt.Sprintf("the maximum size of the app logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultAppLogsSizes))
 }

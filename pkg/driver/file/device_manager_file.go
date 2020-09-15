@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -49,6 +50,7 @@ const (
 	maxInfoSizeFile       = 100 * MB
 	maxMetricSizeFile     = 100 * MB
 	maxRequestsSizeFile   = 100 * MB
+	maxAppLogsSizeFile    = 100 * MB
 	fileSplit             = 10
 )
 
@@ -138,6 +140,7 @@ type DeviceManager struct {
 	maxInfoSize             int
 	maxMetricSize           int
 	maxRequestsSize         int
+	maxAppLogsSize          int
 	currentLogFile          *os.File
 	currentInfoFile         *os.File
 	currentMetricFile       *os.File
@@ -178,8 +181,13 @@ func (d *DeviceManager) MaxRequestsSize() int {
 	return maxRequestsSizeFile
 }
 
+// MaxAppLogsSize return the maximum app logs size in bytes for this device manager
+func (d *DeviceManager) MaxAppLogsSize() int {
+	return maxAppLogsSizeFile
+}
+
 // Init check if a URL is valid and initialize
-func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize, maxRequestsSize int) (bool, error) {
+func (d *DeviceManager) Init(s string, sizes common.MaxSizes) (bool, error) {
 	fi, err := os.Stat(s)
 	if err == nil && !fi.IsDir() {
 		return false, fmt.Errorf("database path %s exists and is not a directory", s)
@@ -197,22 +205,31 @@ func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize, m
 		return false, err
 	}
 
-	if maxLogSize == 0 {
-		maxLogSize = maxLogSizeFile
+	if sizes.MaxLogSize == 0 {
+		d.maxLogSize = maxLogSizeFile
+	} else {
+		d.maxLogSize = sizes.MaxLogSize
 	}
-	if maxInfoSize == 0 {
-		maxInfoSize = maxInfoSizeFile
+	if sizes.MaxInfoSize == 0 {
+		d.maxInfoSize = maxInfoSizeFile
+	} else {
+		d.maxInfoSize = sizes.MaxInfoSize
 	}
-	if maxMetricSize == 0 {
-		maxMetricSize = maxMetricSizeFile
+	if sizes.MaxMetricSize == 0 {
+		d.maxMetricSize = maxMetricSizeFile
+	} else {
+		d.maxMetricSize = sizes.MaxMetricSize
 	}
-	if maxRequestsSize == 0 {
-		maxRequestsSize = maxRequestsSizeFile
+	if sizes.MaxRequestsSize == 0 {
+		d.maxRequestsSize = maxRequestsSizeFile
+	} else {
+		d.maxRequestsSize = sizes.MaxRequestsSize
 	}
-	d.maxLogSize = maxLogSize
-	d.maxInfoSize = maxInfoSize
-	d.maxMetricSize = maxMetricSize
-	d.maxRequestsSize = maxRequestsSize
+	if sizes.MaxAppLogsSize == 0 {
+		d.maxAppLogsSize = maxAppLogsSizeFile
+	} else {
+		d.maxAppLogsSize = sizes.MaxAppLogsSize
+	}
 
 	return true, nil
 }
@@ -510,6 +527,7 @@ func (d *DeviceManager) initDevice(u uuid.UUID) error {
 			dir:     path.Join(devicePath, requestsDir),
 			maxSize: int64(d.maxRequestsSize),
 		},
+		AppLogs: map[uuid.UUID]common.BigData{},
 	}
 
 	return nil
@@ -678,6 +696,39 @@ func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
 	}
 	dev := d.devices[u]
 	return dev.AddLog(m)
+}
+
+// appExists return if an app has been created
+func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
+	_, err := os.Stat(d.getAppPath(u, instanceID))
+	if err != nil {
+		return false
+	}
+	if _, ok := d.devices[u]; !ok {
+		return false
+	}
+	return true
+}
+
+// WriteAppInstanceLogs write a message of AppInstanceLogBundle
+func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, m *logs.AppInstanceLogBundle) error {
+	// make sure it is not nil
+	if m == nil {
+		return fmt.Errorf("invalid nil message")
+	}
+	// get the uuid
+	// check that the device actually exists
+	if !d.deviceExists(deviceID) {
+		return fmt.Errorf("unregistered device UUID: %s", deviceID)
+	}
+	if !d.appExists(deviceID, instanceID) {
+		d.devices[deviceID].AppLogs[instanceID] = &ManagedFile{
+			dir:     d.getAppPath(deviceID, instanceID),
+			maxSize: int64(d.maxAppLogsSize),
+		}
+	}
+	dev := d.devices[deviceID]
+	return dev.AddAppLog(instanceID, m)
 }
 
 // WriteMetrics write a metrics message
@@ -969,6 +1020,11 @@ func (d *DeviceManager) initializeDB() error {
 // getDevicePath get the path for a given device
 func (d *DeviceManager) getDevicePath(u uuid.UUID) string {
 	return GetDevicePath(d.databasePath, u)
+}
+
+// getDevicePath get the path for a given device
+func (d *DeviceManager) getAppPath(u, instanceID uuid.UUID) string {
+	return filepath.Join(GetDevicePath(d.databasePath, u), instanceID.String())
 }
 
 // getOnboardPath get the path for a given onboard
