@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -59,6 +60,10 @@ func (d *DeviceStorage) AddLog(m *logs.LogBundle) error {
 	if err := mler.Marshal(buf, m); err != nil {
 		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
 	}
+	// what if the device was not initialized yet?
+	if d.Logs == nil {
+		return errors.New("AddLog: Logs struct not yet initialized")
+	}
 	_, err := d.Logs.Write(buf.Bytes())
 	return err
 }
@@ -68,6 +73,10 @@ func (d *DeviceStorage) AddInfo(m *info.ZInfoMsg) error {
 	mler := jsonpb.Marshaler{}
 	if err := mler.Marshal(buf, m); err != nil {
 		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
+	}
+	// what if the device was not initialized yet?
+	if d.Info == nil {
+		return errors.New("AddInfo: Info struct not yet initialized")
 	}
 	_, err := d.Info.Write(buf.Bytes())
 	return err
@@ -79,6 +88,10 @@ func (d *DeviceStorage) AddMetrics(m *metrics.ZMetricMsg) error {
 	if err := mler.Marshal(buf, m); err != nil {
 		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
 	}
+	// what if the device was not initialized yet?
+	if d.Metrics == nil {
+		return errors.New("AddMetrics: Metrics struct not yet initialized")
+	}
 	_, err := d.Metrics.Write(buf.Bytes())
 	return err
 }
@@ -87,6 +100,10 @@ func (d *DeviceStorage) AddRequest(m *ApiRequest) error {
 	b, err := json.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("failed to marshall request struct to json: %v", err)
+	}
+	// what if the device was not initialized yet?
+	if d.Requests == nil {
+		return errors.New("AddRequest: Requests struct not yet initialized")
 	}
 	_, err = d.Requests.Write(b)
 	return err
