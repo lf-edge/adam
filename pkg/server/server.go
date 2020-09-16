@@ -74,6 +74,7 @@ func (s *Server) Start() {
 	ed.HandleFunc("/info", api.info).Methods("POST")
 	ed.HandleFunc("/metrics", api.metrics).Methods("POST")
 	ed.HandleFunc("/logs", api.logs).Methods("POST")
+	ed.HandleFunc("/apps/instances/id/{uuid}/logs", api.appLogs).Methods("POST")
 
 	// admin endpoint - custom, used to manage adam
 	admin := &adminHandler{

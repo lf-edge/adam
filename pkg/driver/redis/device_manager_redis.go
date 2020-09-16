@@ -49,12 +49,14 @@ const (
 	deviceInfoStream     = "INFO_EVE_"
 	deviceMetricsStream  = "METRICS_EVE_"
 	deviceRequestsStream = "REQUESTS_EVE_"
+	deviceAppLogsStream  = "APPS_EVE_"
 
 	MB                   = common.MB
 	maxLogSizeRedis      = 100 * MB
 	maxInfoSizeRedis     = 100 * MB
 	maxMetricSizeRedis   = 100 * MB
 	maxRequestsSizeRedis = 100 * MB
+	maxAppLogsSizeRedis  = 100 * MB
 )
 
 // ManagedStream stream of data interface
@@ -131,8 +133,13 @@ func (d *DeviceManager) MaxRequestsSize() int {
 	return maxRequestsSizeRedis
 }
 
+// MaxAppLogsSize return the maximum app logs size in bytes for this device manager
+func (d *DeviceManager) MaxAppLogsSize() int {
+	return maxAppLogsSizeRedis
+}
+
 // Init check if a URL is valid and initialize
-func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize, maxRequestsSize int) (bool, error) {
+func (d *DeviceManager) Init(s string, sizes common.MaxSizes) (bool, error) {
 	URL, err := url.Parse(s)
 	if err != nil || URL.Scheme != "redis" {
 		return false, err
@@ -447,6 +454,7 @@ func (d *DeviceManager) initDevice(u uuid.UUID, onboard *x509.Certificate, seria
 			name:   deviceRequestsStream + u.String(),
 			client: d.client,
 		},
+		AppLogs: map[uuid.UUID]common.BigData{},
 	}
 }
 
@@ -536,6 +544,36 @@ func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
 		return fmt.Errorf("device not found: %s", u)
 	}
 	return dev.AddLog(m)
+}
+
+// appExists return if an app has been created
+func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
+	if _, ok := d.devices[u]; !ok {
+		return false
+	}
+	if _, ok := d.devices[u].AppLogs[instanceID]; !ok {
+		return false
+	}
+	return true
+}
+
+// WriteAppInstanceLogs write a message of AppInstanceLogBundle
+func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, m *logs.AppInstanceLogBundle) error {
+	// make sure it is not nil
+	if m == nil {
+		return fmt.Errorf("invalid nil message")
+	}
+	dev, ok := d.devices[deviceID]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", deviceID)
+	}
+	if !d.appExists(deviceID, instanceID) {
+		d.devices[deviceID].AppLogs[instanceID] = &ManagedStream{
+			name:   fmt.Sprintf("%s%s_%s", deviceAppLogsStream, deviceID.String(), instanceID.String()),
+			client: d.client,
+		}
+	}
+	return dev.AddAppLog(instanceID, m)
 }
 
 // WriteMetrics write a metrics message

@@ -8,14 +8,13 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"io"
-
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
+	"io"
 )
 
 const (
@@ -24,6 +23,7 @@ const (
 	maxInfoSizeMemory     = 10 * MB
 	maxMetricSizeMemory   = 10 * MB
 	maxRequestsSizeMemory = 10 * MB
+	maxAppLogsSizeMemory  = 10 * MB
 )
 
 // DeviceManager implementation of DeviceManager with an ephemeral memory backing store
@@ -35,6 +35,7 @@ type DeviceManager struct {
 	maxInfoSize     int
 	maxMetricSize   int
 	maxRequestsSize int
+	maxAppLogsSize  int
 }
 
 // Name return name
@@ -67,27 +68,42 @@ func (d *DeviceManager) MaxRequestsSize() int {
 	return maxRequestsSizeMemory
 }
 
+// MaxAppLogsSize return the maximum app logs size in bytes for this device manager
+func (d *DeviceManager) MaxAppLogsSize() int {
+	return maxAppLogsSizeMemory
+}
+
 // Init initialize, valid only with a blank URL
-func (d *DeviceManager) Init(s string, maxLogSize, maxInfoSize, maxMetricSize, maxRequestsSize int) (bool, error) {
+func (d *DeviceManager) Init(s string, sizes common.MaxSizes) (bool, error) {
 	if s != "" {
 		return false, nil
 	}
-	if maxLogSize == 0 {
-		maxLogSize = maxLogSizeMemory
+
+	if sizes.MaxLogSize == 0 {
+		d.maxLogSize = maxLogSizeMemory
+	} else {
+		d.maxLogSize = sizes.MaxLogSize
 	}
-	if maxInfoSize == 0 {
-		maxInfoSize = maxInfoSizeMemory
+	if sizes.MaxInfoSize == 0 {
+		d.maxInfoSize = maxInfoSizeMemory
+	} else {
+		d.maxInfoSize = sizes.MaxInfoSize
 	}
-	if maxMetricSize == 0 {
-		maxMetricSize = maxMetricSizeMemory
+	if sizes.MaxMetricSize == 0 {
+		d.maxMetricSize = maxMetricSizeMemory
+	} else {
+		d.maxMetricSize = sizes.MaxMetricSize
 	}
-	if maxRequestsSize == 0 {
-		maxRequestsSize = maxRequestsSizeMemory
+	if sizes.MaxRequestsSize == 0 {
+		d.maxRequestsSize = maxRequestsSizeMemory
+	} else {
+		d.maxRequestsSize = sizes.MaxRequestsSize
 	}
-	d.maxLogSize = maxLogSize
-	d.maxInfoSize = maxInfoSize
-	d.maxMetricSize = maxMetricSize
-	d.maxRequestsSize = maxRequestsSize
+	if sizes.MaxAppLogsSize == 0 {
+		d.maxAppLogsSize = maxAppLogsSizeMemory
+	} else {
+		d.maxAppLogsSize = sizes.MaxAppLogsSize
+	}
 	return true, nil
 }
 
@@ -252,6 +268,7 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 		Metrics: &ByteSlice{
 			maxSize: d.maxMetricSize,
 		},
+		AppLogs: map[uuid.UUID]common.BigData{},
 	}
 	return &unew, nil
 }
@@ -330,6 +347,35 @@ func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
 	dev.AddLog(m)
 	d.devices[u] = dev
 	return nil
+}
+
+// appExists return if an app has been created
+func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
+	if _, ok := d.devices[u]; !ok {
+		return false
+	}
+	if _, ok := d.devices[u].AppLogs[instanceID]; !ok {
+		return false
+	}
+	return true
+}
+
+// WriteAppInstanceLogs write a message of AppInstanceLogBundle
+func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, m *logs.AppInstanceLogBundle) error {
+	// make sure it is not nil
+	if m == nil {
+		return fmt.Errorf("invalid nil message")
+	}
+	dev, ok := d.devices[deviceID]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", deviceID)
+	}
+	if !d.appExists(deviceID, instanceID) {
+		d.devices[deviceID].AppLogs[instanceID] = &ByteSlice{
+			maxSize: d.maxAppLogsSize,
+		}
+	}
+	return dev.AddAppLog(instanceID, m)
 }
 
 // WriteMetrics write a metrics message
