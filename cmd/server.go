@@ -80,34 +80,52 @@ var serverCmd = &cobra.Command{
 			log.Fatalf("failed to make directory %s: %v", configDir, err)
 		}
 
-		// if we were asked to autoCert, then we do it
-		if autoCert {
-			if certCN == certHosts && certCN == "" {
-				log.Fatalf("must specify at least one hostname/IP or CN")
-			}
-			// get the directory
-			certDir := path.Dir(serverCert)
-			keyDir := path.Dir(serverKey)
-			// only do it if the files do not exist
-			certForce := false
-			// make the directories or fail
-			if err := os.MkdirAll(certDir, 0755); err != nil {
-				log.Fatalf("failed to make cert directory %s: %v", certDir, err)
-			}
-			if err := os.MkdirAll(keyDir, 0755); err != nil {
-				log.Fatalf("failed to make key directory %s: %v", keyDir, err)
-			}
-			if err := ax509.GenerateAndWrite(certCN, certHosts, serverCert, serverKey, certForce); err != nil {
-				log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", serverKey, serverCert)
-			} else {
-				log.Printf("saved new server certificate to %s", serverCert)
-				log.Printf("saved new server key to %s", serverKey)
-			}
+		serverENVCert, serverENVCertProvided := os.LookupEnv("SERVER_CERT")
+		serverENVKey, serverENVKeyProvided := os.LookupEnv("SERVER_KEY")
+
+		// get the directory
+		certDir := path.Dir(serverCert)
+		keyDir := path.Dir(serverKey)
+		// make the directories or fail
+		if err := os.MkdirAll(certDir, 0755); err != nil {
+			log.Fatalf("failed to make cert directory %s: %v", certDir, err)
+		}
+		if err := os.MkdirAll(keyDir, 0755); err != nil {
+			log.Fatalf("failed to make key directory %s: %v", keyDir, err)
 		}
 
-		catls, err := tls.LoadX509KeyPair(serverCert, serverKey)
-		if err != nil {
-			log.Fatalf("error loading server cert %s and server key %s: %v", serverCert, serverKey, err)
+		var catls tls.Certificate
+		if serverENVCertProvided && serverENVKeyProvided {
+			catls, err = tls.X509KeyPair([]byte(serverENVCert), []byte(serverENVKey))
+			if err != nil {
+				log.Fatalf("error loading server cert and key from environment variables: %v", err)
+			}
+			if err = ioutil.WriteFile(serverCert, []byte(serverENVCert), 0644); err != nil {
+				log.Fatal(err)
+			}
+			if err = ioutil.WriteFile(serverKey, []byte(serverENVKey), 0600); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			// if we were asked to autoCert, then we do it
+			if autoCert {
+				if certCN == certHosts && certCN == "" {
+					log.Fatalf("must specify at least one hostname/IP or CN")
+				}
+				// only do it if the files do not exist
+				certForce := false
+				if err := ax509.GenerateAndWrite(certCN, certHosts, serverCert, serverKey, certForce); err != nil {
+					log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", serverKey, serverCert)
+				} else {
+					log.Printf("saved new server certificate to %s", serverCert)
+					log.Printf("saved new server key to %s", serverKey)
+				}
+			}
+
+			catls, err = tls.LoadX509KeyPair(serverCert, serverKey)
+			if err != nil {
+				log.Fatalf("error loading server cert %s and server key %s: %v", serverCert, serverKey, err)
+			}
 		}
 		ca, err := x509.ParseCertificate(catls.Certificate[0])
 		if err != nil {
