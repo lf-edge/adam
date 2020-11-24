@@ -1,8 +1,8 @@
 # Adam
 
-Welcome to Adam! Adam is the reference implementation of an [LF-Edge](https://www.lfedge.org) [API-compliant Controller](https://github.com/lf-edge/eve/blob/master/api/API.md). You can use Adam to drive one or more [EVE](https://www.lfedge.org/projects/eve/) instances from any computer, locally, in the cloud, or in a container.
+Welcome to Adam! Adam is the reference implementation of an [LF-Edge](https://www.lfedge.org) [API-compliant Controller](https://github.com/lf-edge/eve/blob/master/api/README.md). You can use Adam to drive one or more [EVE](https://www.lfedge.org/projects/eve/) instances from any computer, locally, in the cloud, or in a container.
 
-Adam is a reference implementation. Thus, while it has all of the TLS encryption and authentication requirements of [the official API](https://github.com/lf-edge/eve/blob/master/api/API.md), it has not been built or tested to withstand penetration attacks, DDoS, or any other major security requirements, and it has not been built with massive scale in mind. For those, please refer to various vendor cloud controller offerings, such as [Zededa zedcloud](https://www.zededa.com/technology/).
+Adam is a reference implementation. Thus, while it has all of the TLS encryption and authentication requirements of [the official API](https://github.com/lf-edge/eve/blob/master/api/README.md), it has not been built or tested to withstand penetration attacks, DDoS, or any other major security requirements, and it has not been built with massive scale in mind. For those, please refer to various vendor cloud controller offerings, such as [Zededa zedcloud](https://www.zededa.com/technology/).
 
 ## Running Adam
 
