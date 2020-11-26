@@ -955,7 +955,7 @@ func (d *DeviceManager) getOnboardPath(cn string) string {
 
 func openTimestampFile(filename string) (*os.File, error) {
 	// open a new one
-	fullPath := path.Join(filename, time.Now().Format("2006-01-02T15:04:05"))
+	fullPath := path.Join(filename, time.Now().Format("2006-01-02T15:04:05.111"))
 	return os.Create(fullPath)
 }
 

@@ -4,7 +4,9 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -361,6 +363,60 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+func (h *apiHandler) newLogs(w http.ResponseWriter, r *http.Request) {
+	cert := getClientCert(r)
+	u, err := h.manager.DeviceCheckCert(cert)
+	if err != nil {
+		log.Printf("error checking device cert: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	h.recordClient(u, r)
+	gr, err := gzip.NewReader(r.Body)
+	if err != nil {
+		log.Printf("error gzip.NewReader: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	msg := &logs.LogBundle{}
+	if err := json.Unmarshal([]byte(gr.Comment), msg); err != nil {
+		log.Printf("Failed to parse logbundle from Comment: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	scanner := bufio.NewScanner(gr)
+	for scanner.Scan() {
+		le := &logs.LogEntry{}
+		if err := json.Unmarshal(scanner.Bytes(), le); err != nil {
+			log.Printf("Failed to parse logentry message: %v", err)
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		entry := &common.FullLogEntry{
+			LogEntry:   le,
+			Image:      msg.GetImage(),
+			EveVersion: msg.GetEveVersion(),
+		}
+		var b []byte
+		if b, err = proto.Marshal(entry); err != nil {
+			log.Printf("Failed to marshal FullLogEntry message: %v", err)
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		select {
+		case h.logChannel <- b:
+		default:
+		}
+		err = h.manager.WriteLogs(*u, b)
+		if err != nil {
+			log.Printf("Failed to write logbundle message: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
 func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 	uid, err := uuid.FromString(mux.Vars(r)["uuid"])
 	if err != nil {
@@ -393,15 +449,78 @@ func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	select {
-	case h.logChannel <- b:
-	default:
+	for _, le := range msg.Log {
+		var b []byte
+		if b, err = proto.Marshal(le); err != nil {
+			log.Printf("Failed to marshal LogEntry message: %v", err)
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		select {
+		case h.logChannel <- b:
+		default:
+		}
+		err = h.manager.WriteAppInstanceLogs(uid, *u, b)
+		if err != nil {
+			log.Printf("Failed to write appinstancelogbundle message: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
 	}
-	err = h.manager.WriteAppInstanceLogs(uid, *u, b)
+	// send back a 201
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
+	uid, err := uuid.FromString(mux.Vars(r)["uuid"])
 	if err != nil {
-		log.Printf("Failed to write appinstancelogbundle message: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	// only uses the device cert
+	cert := getClientCert(r)
+	u, err := h.manager.DeviceCheckCert(cert)
+	if u == nil {
+		log.Printf("unknown device cert")
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	if err != nil {
+		log.Printf("error checking device cert: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	h.recordClient(u, r)
+	gr, err := gzip.NewReader(r.Body)
+	if err != nil {
+		log.Printf("error gzip.NewReader: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	scanner := bufio.NewScanner(gr)
+	for scanner.Scan() {
+		le := &logs.LogEntry{}
+		if err := json.Unmarshal(scanner.Bytes(), le); err != nil {
+			log.Printf("Failed to parse logentry message: %v", err)
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		var b []byte
+		if b, err = proto.Marshal(le); err != nil {
+			log.Printf("Failed to marshal LogEntry message: %v", err)
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		select {
+		case h.logChannel <- b:
+		default:
+		}
+		err = h.manager.WriteAppInstanceLogs(uid, *u, b)
+		if err != nil {
+			log.Printf("Failed to write appinstancelogbundle message: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
 	}
 	// send back a 201
 	w.WriteHeader(http.StatusCreated)
