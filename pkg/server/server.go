@@ -7,13 +7,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-
-	"github.com/golang/protobuf/proto"
-	"github.com/lf-edge/eve/api/go/config"
 
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
@@ -52,8 +48,8 @@ func (s *Server) Start() {
 	router.NotFoundHandler = http.HandlerFunc(notFound)
 
 	// to pass logs and info around
-	logChannel := make(chan proto.Message)
-	infoChannel := make(chan proto.Message)
+	logChannel := make(chan []byte)
+	infoChannel := make(chan []byte)
 
 	// edgedevice endpoint - fully compliant with EVE open API
 	api := &apiHandler{
@@ -149,22 +145,6 @@ func logRequest(next http.Handler) http.Handler {
 // retrieve the client cert
 func getClientCert(r *http.Request) *x509.Certificate {
 	return r.TLS.PeerCertificates[0]
-}
-
-// retrieve the config request
-func getClientConfigRequest(r *http.Request) (*config.ConfigRequest, error) {
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Printf("Body read failed: %v", err)
-		return nil, err
-	}
-	configRequest := &config.ConfigRequest{}
-	err = proto.Unmarshal(body, configRequest)
-	if err != nil {
-		log.Printf("Unmarshalling failed: %v", err)
-		return nil, err
-	}
-	return configRequest, nil
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {

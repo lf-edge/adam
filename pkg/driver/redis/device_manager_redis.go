@@ -4,9 +4,7 @@
 package redis
 
 import (
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -17,15 +15,11 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
-	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
-	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
-	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
 	"github.com/vmihailenco/msgpack/v4"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -369,38 +363,33 @@ func (d *DeviceManager) DeviceList() ([]*uuid.UUID, error) {
 }
 
 // DeviceRegister register a new device cert
-func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
+func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certificate, serial string, conf []byte) error {
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
+		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	// check if it already exists - this also checks for nil cert
 	u, err := d.DeviceCheckCert(cert)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// if we found a uuid, then it already exists
 	if u != nil {
-		return nil, fmt.Errorf("device already registered")
-	}
-	// generate a new uuid
-	unew, err := uuid.NewV4()
-	if err != nil {
-		return nil, fmt.Errorf("error generating uuid for device: %v", err)
+		return fmt.Errorf("device already registered")
 	}
 
 	// save the device certificate
 	err = d.writeCert(cert.Raw, deviceCertsHash, unew.String(), true)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// save the onboard certificate and serial, if provided
 	if onboard != nil {
 		err = d.writeCert(onboard.Raw, deviceOnboardCertsHash, unew.String(), true)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if serial != "" {
@@ -408,14 +397,14 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 			_, err = d.client.Save().Result()
 		}
 		if err != nil {
-			return nil, fmt.Errorf("error saving device serial for %v: %v", unew, err)
+			return fmt.Errorf("error saving device serial for %v: %v", unew, err)
 		}
 	}
 
 	// save the base configuration
-	err = d.writeProtobufToJSONMsgPack(unew, deviceConfigsHash, common.CreateBaseConfig(unew))
+	err = d.writeJSONMsgPack(unew, deviceConfigsHash, conf)
 	if err != nil {
-		return nil, fmt.Errorf("error saving device config for %v: %v", unew, err)
+		return fmt.Errorf("error saving device config for %v: %v", unew, err)
 	}
 
 	// save new one to cache - just the serial and onboard; the rest is on disk
@@ -426,11 +415,11 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 	// create the necessary Redis streams for this device
 	for _, ms := range []common.BigData{ds.Logs, ds.Info, ds.Metrics, ds.Requests} {
 		if _, err := ms.Write([]byte("")); err != nil {
-			return nil, fmt.Errorf("error creating stream: %v", err)
+			return fmt.Errorf("error creating stream: %v", err)
 		}
 	}
 
-	return &unew, nil
+	return nil
 }
 
 // initDevice initialize a device
@@ -496,54 +485,40 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 }
 
 // WriteRequest record a request
-func (d *DeviceManager) WriteRequest(req common.ApiRequest) error {
-	var emptyUUID uuid.UUID
-	if uuid.Equal(req.UUID, emptyUUID) {
-		return fmt.Errorf("no device given")
-	}
-	if dev, ok := d.devices[req.UUID]; ok {
-		dev.AddRequest(&req)
+func (d *DeviceManager) WriteRequest(u uuid.UUID, b []byte) error {
+	if dev, ok := d.devices[u]; ok {
+		dev.AddRequest(b)
 		return nil
 	}
-	return fmt.Errorf("device not found: %s", req.UUID)
+	return fmt.Errorf("device not found: %s", u)
 }
 
 // WriteInfo write an info message
-func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
+func (d *DeviceManager) WriteInfo(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
-	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevId)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevId, err)
+	if len(b) < 1 {
+		return nil
 	}
 	// check that the device actually exists
 	dev, ok := d.devices[u]
 	if !ok {
 		return fmt.Errorf("device not found: %s", u)
 	}
-	return dev.AddInfo(m)
+	return dev.AddInfo(b)
 }
 
 // WriteLogs write a message of logs
-func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
+func (d *DeviceManager) WriteLogs(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
-	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevID)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
+	if len(b) < 1 {
+		return nil
 	}
 	// check that the device actually exists
 	dev, ok := d.devices[u]
 	if !ok {
 		return fmt.Errorf("device not found: %s", u)
 	}
-	return dev.AddLog(m)
+	return dev.AddLogs(b)
 }
 
 // appExists return if an app has been created
@@ -558,10 +533,10 @@ func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
 }
 
 // WriteAppInstanceLogs write a message of AppInstanceLogBundle
-func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, m *logs.AppInstanceLogBundle) error {
+func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
+	if len(b) < 1 {
+		return nil
 	}
 	dev, ok := d.devices[deviceID]
 	if !ok {
@@ -573,87 +548,49 @@ func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid
 			client: d.client,
 		}
 	}
-	return dev.AddAppLog(instanceID, m)
+	return dev.AddAppLog(instanceID, b)
 }
 
 // WriteMetrics write a metrics message
-func (d *DeviceManager) WriteMetrics(m *metrics.ZMetricMsg) error {
+func (d *DeviceManager) WriteMetrics(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
-	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevID)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
+	if len(b) < 1 {
+		return nil
 	}
 	// check that the device actually exists
 	dev, ok := d.devices[u]
 	if !ok {
 		return fmt.Errorf("device not found: %s", u)
 	}
-	return dev.AddMetrics(m)
+	return dev.AddMetrics(b)
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *DeviceManager) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
+func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 	// hold our config
-	msg := &config.EdgeDevConfig{}
-	b, err := d.client.HGet(deviceConfigsHash, u.String()).Result()
+	var b []byte
+	data, err := d.client.HGet(deviceConfigsHash, u.String()).Result()
 	if err != nil {
 		// if config doesn't exist - create an empty one
-		msg = common.CreateBaseConfig(u)
-		v, err := msgpack.Marshal(&msg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshall config %v", err)
-		}
-		if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(v)).Result(); err == nil {
+		b = common.CreateBaseConfig(u)
+		if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(b)).Result(); err == nil {
 			_, err = d.client.Save().Result()
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to save config for %s: %v", u.String(), err)
 		}
 	} else {
-		err := msgpack.Unmarshal([]byte(b), &msg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal config %v", err)
-		}
+		b = []byte(data)
 	}
 
-	return msg, nil
-}
-
-// GetConfigResponse retrieve the config for a particular device
-func (d *DeviceManager) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
-	// hold our config
-	msg := &config.EdgeDevConfig{}
-
-	msg, err := d.GetConfig(u)
-	if err != nil {
-		return nil, err
-	}
-
-	response := &config.ConfigResponse{}
-
-	h := sha256.New()
-	common.ComputeConfigElementSha(h, msg)
-	configHash := h.Sum(nil)
-
-	response.Config = msg
-	response.ConfigHash = base64.URLEncoding.EncodeToString(configHash)
-
-	return response, nil
+	return b, nil
 }
 
 // SetConfig set the config for a particular device
-func (d *DeviceManager) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
+func (d *DeviceManager) SetConfig(u uuid.UUID, b []byte) error {
 	// pre-flight checks to bail early
-	if m == nil {
+	if len(b) < 1 {
 		return fmt.Errorf("empty configuration")
-	}
-	// check for UUID mismatch
-	if m.Id == nil || m.Id.Uuid != u.String() {
-		return fmt.Errorf("mismatched UUID")
 	}
 
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
@@ -667,12 +604,7 @@ func (d *DeviceManager) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
 		return fmt.Errorf("unregistered device UUID %s", u.String())
 	}
 
-	// save the base configuration
-	v, err := msgpack.Marshal(&m)
-	if err != nil {
-		return fmt.Errorf("failed to marshall config %v", err)
-	}
-	if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(v)).Result(); err == nil {
+	if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(b)).Result(); err == nil {
 		_, err = d.client.Save().Result()
 	}
 	if err != nil {
@@ -844,12 +776,17 @@ func (d *DeviceManager) writeProtobufToJSONMsgPack(u uuid.UUID, hash string, msg
 	if err != nil {
 		return fmt.Errorf("can't marshal proto message %v", err)
 	}
+	return d.writeJSONMsgPack(u, hash, s)
+}
 
-	if _, err = d.client.HSet(hash, u.String(), s).Result(); err == nil {
+// writeJSONMsgPack write a JSON to a named hash in Redis
+func (d *DeviceManager) writeJSONMsgPack(u uuid.UUID, hash string, b []byte) error {
+	var err error
+	if _, err = d.client.HSet(hash, u.String(), string(b)).Result(); err == nil {
 		_, err = d.client.Save().Result()
 	}
 	if err != nil {
-		return fmt.Errorf("can't save proto message for %s in %s: %v", u.String(), hash, err)
+		return fmt.Errorf("can't save message for %s in %s: %v", u.String(), hash, err)
 	}
 	return nil
 }

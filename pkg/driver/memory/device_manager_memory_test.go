@@ -10,13 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/protobuf/jsonpb"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestDeviceManager(t *testing.T) {
@@ -405,21 +404,17 @@ func TestDeviceManager(t *testing.T) {
 		d := DeviceManager{}
 		tests := []struct {
 			validMsg     bool
-			validUUID    bool
 			deviceExists bool
 			err          error
 		}{
-			{false, false, false, fmt.Errorf("invalid nil message")},
-			{true, false, false, fmt.Errorf("unable to retrieve valid device UUID")},
-			{true, true, false, fmt.Errorf("unregistered device UUID")},
-			{true, true, true, nil},
+			{false, false, nil},
+			{true, false, fmt.Errorf("unregistered device UUID")},
+			{true, true, nil},
 		}
 		for i, tt := range tests {
 			var msg *info.ZInfoMsg
 			if tt.validMsg {
 				msg = &info.ZInfoMsg{}
-			}
-			if tt.validUUID {
 				msg.DevId = u.String()
 			}
 			// fresh each time
@@ -431,18 +426,21 @@ func TestDeviceManager(t *testing.T) {
 					},
 				}
 			}
-			err := d.WriteInfo(msg)
 
+			var (
+				outBytes []byte
+				err      error
+			)
 			// get the msg as bytes to compare
-			buf := bytes.NewBuffer([]byte{})
 			if msg != nil {
-				mler := jsonpb.Marshaler{}
-				if err := mler.Marshal(buf, msg); err != nil {
+				outBytes, err = protojson.Marshal(msg)
+				if err != nil {
 					t.Fatalf("failed to marshal protobuf message into json: %v", err)
 				}
 			}
 
-			outBytes := buf.Bytes()
+			err = d.WriteInfo(u, outBytes)
+
 			var (
 				actual []byte
 				geterr error
@@ -465,22 +463,21 @@ func TestDeviceManager(t *testing.T) {
 		d := DeviceManager{}
 		tests := []struct {
 			validMsg     bool
-			validUUID    bool
 			deviceExists bool
 			err          error
 		}{
-			{false, false, false, fmt.Errorf("invalid nil message")},
-			{true, false, false, fmt.Errorf("unable to retrieve valid device UUID")},
-			{true, true, false, fmt.Errorf("unregistered device UUID")},
-			{true, true, true, nil},
+			{false, false, nil},
+			{true, false, fmt.Errorf("unregistered device UUID")},
+			{true, true, nil},
 		}
 		for i, tt := range tests {
-			var msg *logs.LogBundle
+			var msg []byte
 			if tt.validMsg {
-				msg = &logs.LogBundle{}
-			}
-			if tt.validUUID {
-				msg.DevID = u.String()
+				b, err := common.FullLogEntry{}.Json()
+				if err != nil {
+					t.Fatalf("%d: %v", i, err)
+				}
+				msg = append(msg, b...)
 			}
 			// fresh each time
 			d.devices = map[uuid.UUID]common.DeviceStorage{}
@@ -491,17 +488,9 @@ func TestDeviceManager(t *testing.T) {
 					},
 				}
 			}
-			err := d.WriteLogs(msg)
+			err := d.WriteLogs(u, msg)
 
 			// get the msg as bytes to compare
-			buf := bytes.NewBuffer([]byte{})
-			if msg != nil {
-				mler := jsonpb.Marshaler{}
-				if err := mler.Marshal(buf, msg); err != nil {
-					t.Fatalf("failed to marshal protobuf message into json: %v", err)
-				}
-			}
-
 			var (
 				actual []byte
 				geterr error
@@ -513,7 +502,7 @@ func TestDeviceManager(t *testing.T) {
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && (geterr != nil || !bytes.Equal(actual, buf.Bytes())):
+			case err == nil && (geterr != nil || !bytes.Equal(actual, msg)):
 				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].Logs, msg)
 			}
 		}
@@ -524,21 +513,17 @@ func TestDeviceManager(t *testing.T) {
 		d := DeviceManager{}
 		tests := []struct {
 			validMsg     bool
-			validUUID    bool
 			deviceExists bool
 			err          error
 		}{
-			{false, false, false, fmt.Errorf("invalid nil message")},
-			{true, false, false, fmt.Errorf("unable to retrieve valid device UUID")},
-			{true, true, false, fmt.Errorf("unregistered device UUID")},
-			{true, true, true, nil},
+			{false, false, nil},
+			{true, false, fmt.Errorf("unregistered device UUID")},
+			{true, true, nil},
 		}
 		for i, tt := range tests {
 			var msg *metrics.ZMetricMsg
 			if tt.validMsg {
 				msg = &metrics.ZMetricMsg{}
-			}
-			if tt.validUUID {
 				msg.DevID = u.String()
 			}
 			// fresh each time
@@ -550,15 +535,18 @@ func TestDeviceManager(t *testing.T) {
 					},
 				}
 			}
-			err := d.WriteMetrics(msg)
-			// get the msg as bytes to compare
-			buf := bytes.NewBuffer([]byte{})
+			var (
+				outBytes []byte
+				err      error
+			)
 			if msg != nil {
-				mler := jsonpb.Marshaler{}
-				if err := mler.Marshal(buf, msg); err != nil {
+				outBytes, err = protojson.Marshal(msg)
+				if err != nil {
 					t.Fatalf("failed to marshal protobuf message into json: %v", err)
 				}
 			}
+			err = d.WriteMetrics(u, outBytes)
+			// get the msg as bytes to compare
 
 			var (
 				actual []byte
@@ -571,7 +559,7 @@ func TestDeviceManager(t *testing.T) {
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && (geterr != nil || !bytes.Equal(actual, buf.Bytes())):
+			case err == nil && (geterr != nil || !bytes.Equal(actual, outBytes)):
 				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].Metrics, msg)
 			}
 		}
@@ -593,12 +581,11 @@ func TestDeviceManager(t *testing.T) {
 		tests := []struct {
 			validDeviceCert bool
 			used            bool
-			validU          bool
 			err             error
 		}{
-			{false, false, false, fmt.Errorf("invalid nil certificate")},
-			{true, true, false, fmt.Errorf("device already registered")},
-			{true, false, true, nil},
+			{false, false, fmt.Errorf("invalid nil certificate")},
+			{true, true, fmt.Errorf("device already registered")},
+			{true, false, nil},
 		}
 		for i, tt := range tests {
 			var (
@@ -622,19 +609,19 @@ func TestDeviceManager(t *testing.T) {
 				certStr := string(deviceCert.Raw)
 				d.deviceCerts[certStr] = u
 			}
-			u, err := d.DeviceRegister(deviceCert, onboard, serial)
+			u, err := uuid.NewV4()
+			if err != nil {
+				t.Fatalf("error generating a new device UUID: %v", err)
+			}
+			err = d.DeviceRegister(u, deviceCert, onboard, serial, common.CreateBaseConfig(u))
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case tt.validU && u == nil:
-				t.Errorf("%d: received nil uuid when expected valid one", i)
-			case !tt.validU && u != nil:
-				t.Errorf("%d: received valid uuid when expected nil", i)
-			case tt.validU && tt.err == nil && d.devices[*u].Serial != serial:
-				t.Errorf("%d: mismatched serial stored, actual %s expected %s", i, d.devices[*u].Serial, serial)
-			case tt.validU && tt.err == nil && d.devices[*u].Onboard != onboard:
+			case tt.err == nil && d.devices[u].Serial != serial:
+				t.Errorf("%d: mismatched serial stored, actual %s expected %s", i, d.devices[u].Serial, serial)
+			case tt.err == nil && d.devices[u].Onboard != onboard:
 				t.Errorf("%d: mismatched onboard certificate stored, actual then expected", i)
-				t.Errorf("\t%#v", d.devices[*u].Onboard)
+				t.Errorf("\t%#v", d.devices[u].Onboard)
 				t.Errorf("\t%#v", onboard)
 			}
 		}

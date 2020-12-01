@@ -18,6 +18,6 @@ require (
 	github.com/spf13/viper v1.3.2
 	github.com/stretchr/testify v1.2.2
 	github.com/vmihailenco/msgpack/v4 v4.3.11
-	google.golang.org/protobuf v1.21.0 // indirect
+	google.golang.org/protobuf v1.21.0
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 )

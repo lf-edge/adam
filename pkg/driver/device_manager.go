@@ -8,10 +8,6 @@ import (
 	"io"
 
 	"github.com/lf-edge/adam/pkg/driver/common"
-	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
-	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -66,23 +62,21 @@ type DeviceManager interface {
 	// DeviceList list all of the known UUIDs for devices
 	DeviceList() ([]*uuid.UUID, error)
 	// DeviceRegister register a new device certificate, including the onboarding certificate used to register it and its serial
-	DeviceRegister(*x509.Certificate, *x509.Certificate, string) (*uuid.UUID, error)
+	DeviceRegister(uuid.UUID, *x509.Certificate, *x509.Certificate, string, []byte) error
 	// WriteInfo write an information message
-	WriteInfo(*info.ZInfoMsg) error
-	// WriteLogs write a LogBundle message
-	WriteLogs(*logs.LogBundle) error
+	WriteInfo(uuid.UUID, []byte) error
+	// WriteLogs write log messages
+	WriteLogs(uuid.UUID, []byte) error
 	// WriteAppInstanceLogs write a AppInstanceLogBundle message for instanceID
-	WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, m *logs.AppInstanceLogBundle) error
+	WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, b []byte) error
 	// WriteMetrics write a MetricMsg
-	WriteMetrics(*metrics.ZMetricMsg) error
+	WriteMetrics(uuid.UUID, []byte) error
 	// WriteRequest record a request that was made, including the remote IP, x-forwarded-for header, and path
-	WriteRequest(common.ApiRequest) error
+	WriteRequest(uuid.UUID, []byte) error
 	// GetConfig get the config for a given uuid
-	GetConfig(uuid.UUID) (*config.EdgeDevConfig, error)
+	GetConfig(uuid.UUID) ([]byte, error)
 	// SetConfig set the config for a given uuid
-	SetConfig(uuid.UUID, *config.EdgeDevConfig) error
-	// GetConfig get the config for a given uuid
-	GetConfigResponse(uuid.UUID) (*config.ConfigResponse, error)
+	SetConfig(uuid.UUID, []byte) error
 	// GetLogsReader get the logs for a given uuid
 	GetLogsReader(u uuid.UUID) (io.Reader, error)
 	// GetInfoReader get the info for a given uuid

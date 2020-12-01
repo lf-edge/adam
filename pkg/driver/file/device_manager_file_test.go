@@ -16,9 +16,9 @@ import (
 
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/lf-edge/adam/pkg/driver/common"
+	"github.com/lf-edge/adam/pkg/util"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
 )
@@ -492,18 +492,16 @@ func TestDeviceManager(t *testing.T) {
 		}
 	})
 
-	writeTester := func(t *testing.T, sectionName string, cmd func(int64, string, bool, bool, DeviceManager) error) {
+	writeTester := func(t *testing.T, sectionName string, cmd func(int64, uuid.UUID, bool, DeviceManager) error) {
 		u, _ := uuid.NewV4()
 		tests := []struct {
 			validMsg     bool
-			validUUID    bool
 			deviceExists bool
 			err          error
 		}{
-			{false, false, false, fmt.Errorf("invalid nil message")},
-			{true, false, false, fmt.Errorf("unable to retrieve valid device UUID")},
-			{true, true, false, fmt.Errorf("unregistered device UUID")},
-			{true, true, true, nil},
+			{false, false, nil},
+			{true, false, fmt.Errorf("unregistered device UUID")},
+			{true, true, nil},
 		}
 		for i, tt := range tests {
 			ts := int64(1000)
@@ -520,12 +518,13 @@ func TestDeviceManager(t *testing.T) {
 			if tt.deviceExists {
 				d.initDevice(u)
 			}
-			err = cmd(ts, u.String(), tt.validMsg, tt.validUUID, d)
+			err = cmd(ts, u, tt.validMsg, d)
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && tt.err == nil:
+			case err == nil && tt.err == nil && tt.validMsg:
 				// check if the correct file exists
+				// only check if errors were nil, and we had a validMsg; nothing to write otherwise
 				fi, err := ioutil.ReadDir(sectionPath)
 				switch {
 				case err != nil:
@@ -537,53 +536,60 @@ func TestDeviceManager(t *testing.T) {
 		}
 	}
 	t.Run("TestWriteInfo", func(t *testing.T) {
-		writeTester(t, "info", func(ts int64, u string, validMsg, validUUID bool, d DeviceManager) error {
-			var msg *info.ZInfoMsg
+		writeTester(t, "info", func(ts int64, u uuid.UUID, validMsg bool, d DeviceManager) error {
+			var (
+				msg *info.ZInfoMsg
+				b   []byte
+				err error
+			)
 			if validMsg {
 				msg = &info.ZInfoMsg{
 					AtTimeStamp: &timestamp.Timestamp{
 						Seconds: ts,
 					},
 				}
+				b, err = util.ProtobufToBytes(msg)
+				if err != nil {
+					return fmt.Errorf("error converting protobuf message to bytes: %v", err)
+				}
 			}
-			if validUUID {
-				msg.DevId = u
-			}
-			return d.WriteInfo(msg)
+			return d.WriteInfo(u, b)
 		})
 	})
 
 	t.Run("TestWriteLogs", func(t *testing.T) {
-		writeTester(t, "logs", func(ts int64, u string, validMsg, validUUID bool, d DeviceManager) error {
-			var msg *logs.LogBundle
+		writeTester(t, "logs", func(ts int64, u uuid.UUID, validMsg bool, d DeviceManager) error {
+			var msg []byte
 			if validMsg {
-				msg = &logs.LogBundle{
-					Timestamp: &timestamp.Timestamp{
-						Seconds: ts,
-					},
+				b, err := common.FullLogEntry{}.Json()
+				if err != nil {
+					return err
 				}
+				msg = append(msg, b...)
 			}
-			if validUUID {
-				msg.DevID = u
-			}
-			return d.WriteLogs(msg)
+			return d.WriteLogs(u, msg)
 		})
 	})
 
 	t.Run("TestWriteMetrics", func(t *testing.T) {
-		writeTester(t, "metrics", func(ts int64, u string, validMsg, validUUID bool, d DeviceManager) error {
-			var msg *metrics.ZMetricMsg
+		writeTester(t, "metrics", func(ts int64, u uuid.UUID, validMsg bool, d DeviceManager) error {
+			var (
+				msg *metrics.ZMetricMsg
+				b   []byte
+				err error
+			)
 			if validMsg {
 				msg = &metrics.ZMetricMsg{
 					AtTimeStamp: &timestamp.Timestamp{
 						Seconds: ts,
 					},
 				}
+				b, err = util.ProtobufToBytes(msg)
+				if err != nil {
+					return fmt.Errorf("error converting protobuf to bytes: %v", err)
+				}
 			}
-			if validUUID {
-				msg.DevID = u
-			}
-			return d.WriteMetrics(msg)
+			return d.WriteMetrics(u, b)
 		})
 	})
 
@@ -602,12 +608,11 @@ func TestDeviceManager(t *testing.T) {
 		tests := []struct {
 			validDeviceCert bool
 			used            bool
-			validU          bool
 			err             error
 		}{
 			//{false, false, false, fmt.Errorf("invalid nil certificate")},
 			//{true, true, false, fmt.Errorf("device already registered")},
-			{true, false, true, nil},
+			{true, false, nil},
 		}
 		for i, tt := range tests {
 			var (
@@ -647,17 +652,18 @@ func TestDeviceManager(t *testing.T) {
 					t.Fatalf("%d: error writing existing device certificate file %s: %v", i, deviceUCertPath, err)
 				}
 			}
-			unew, err := d.DeviceRegister(deviceCert, onboard, serial)
+			unew, err := uuid.NewV4()
+			if err != nil {
+				t.Fatalf("error generating a new device UUID: %v", err)
+			}
+
+			err = d.DeviceRegister(unew, deviceCert, onboard, serial, common.CreateBaseConfig(unew))
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case tt.validU && unew == nil:
-				t.Errorf("%d: received nil uuid when expected valid one", i)
-			case !tt.validU && unew != nil:
-				t.Errorf("%d: received valid uuid when expected nil", i)
-			case unew != nil && tt.validU:
+			default:
 				// check that the device directory exists, that it has the device, cert and serial files, and that their contents are correct
-				if err = checkDeviceDirectory(devicePath, *unew, deviceCert, onboard, serial); err != nil {
+				if err = checkDeviceDirectory(devicePath, unew, deviceCert, onboard, serial); err != nil {
 					t.Errorf("%d: %v", i, err)
 				}
 			}
