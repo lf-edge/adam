@@ -4,9 +4,7 @@
 package file
 
 import (
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -19,15 +17,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver/common"
+	"github.com/lf-edge/adam/pkg/util"
 	ax "github.com/lf-edge/adam/pkg/x509"
-	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
-	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -534,30 +528,25 @@ func (d *DeviceManager) initDevice(u uuid.UUID) error {
 }
 
 // DeviceRegister register a new device cert
-func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
+func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certificate, serial string, conf []byte) error {
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
-		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
 	// check if it already exists - this also checks for nil cert
 	u, err := d.DeviceCheckCert(cert)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// if we found a uuid, then it already exists
 	if u != nil {
-		return nil, fmt.Errorf("device already registered")
-	}
-	// generate a new uuid
-	unew, err := uuid.NewV4()
-	if err != nil {
-		return nil, fmt.Errorf("error generating uuid for device: %v", err)
+		return fmt.Errorf("device already registered")
 	}
 
 	// create filesystem tree and subdirs for the new device
 	if err := d.initDevice(unew); err != nil {
-		return nil, fmt.Errorf("error initializing device: %v", err)
+		return fmt.Errorf("error initializing device: %v", err)
 	}
 	devicePath := d.getDevicePath(unew)
 
@@ -565,7 +554,7 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 	certPath := path.Join(devicePath, DeviceCertFilename)
 	err = ax.WriteCert(cert.Raw, certPath, true)
 	if err != nil {
-		return nil, fmt.Errorf("error saving device certificate to %s: %v", certPath, err)
+		return fmt.Errorf("error saving device certificate to %s: %v", certPath, err)
 	}
 
 	// save the onboard certificate and serial, if provided
@@ -573,20 +562,20 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 	if onboard != nil {
 		err = ax.WriteCert(onboard.Raw, certPath, true)
 		if err != nil {
-			return nil, fmt.Errorf("error saving device onboard certificate to %s: %v", certPath, err)
+			return fmt.Errorf("error saving device onboard certificate to %s: %v", certPath, err)
 		}
 	}
 	if serial != "" {
 		serialPath := path.Join(devicePath, deviceSerialFilename)
 		err = ioutil.WriteFile(serialPath, []byte(serial), 0644)
 		if err != nil {
-			return nil, fmt.Errorf("error saving device serial to %s: %v", serialPath, err)
+			return fmt.Errorf("error saving device serial to %s: %v", serialPath, err)
 		}
 	}
 	// save the base configuration
-	err = d.writeProtobufToJSONFile(unew, "", deviceConfigFilename, common.CreateBaseConfig(unew))
+	err = d.writeJSONFile(unew, "", deviceConfigFilename, conf)
 	if err != nil {
-		return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
+		return fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
 	}
 
 	// save new one to cache - just the serial and onboard; the rest is on disk
@@ -597,7 +586,7 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 	ds.Serial = serial
 	ds.Onboard = onboard
 
-	return &unew, nil
+	return nil
 }
 
 // OnboardRegister register an onboard cert and update its serials
@@ -648,54 +637,40 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 }
 
 // WriteRequest record a request
-func (d *DeviceManager) WriteRequest(req common.ApiRequest) error {
-	var emptyUUID uuid.UUID
-	if uuid.Equal(req.UUID, emptyUUID) {
-		return fmt.Errorf("no device given")
-	}
-	if dev, ok := d.devices[req.UUID]; ok {
-		dev.AddRequest(&req)
+func (d *DeviceManager) WriteRequest(u uuid.UUID, b []byte) error {
+	if dev, ok := d.devices[u]; ok {
+		dev.AddRequest(b)
 		return nil
 	}
-	return fmt.Errorf("device not found: %s", req.UUID)
+	return fmt.Errorf("device not found: %s", u)
 }
 
 // WriteInfo write an info message
-func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
+func (d *DeviceManager) WriteInfo(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
-	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevId)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevId, err)
+	if len(b) < 1 {
+		return nil
 	}
 	// check that the device actually exists
 	if !d.deviceExists(u) {
-		return fmt.Errorf("unregistered device UUID: %s", m.DevId)
+		return fmt.Errorf("unregistered device UUID: %s", u)
 	}
 	dev := d.devices[u]
-	return dev.AddInfo(m)
+	return dev.AddInfo(b)
 }
 
 // WriteLogs write a message of logs
-func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
+func (d *DeviceManager) WriteLogs(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
-	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevID)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
+	if len(b) < 1 {
+		return nil
 	}
 	// check that the device actually exists
 	if !d.deviceExists(u) {
-		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
+		return fmt.Errorf("unregistered device UUID: %s", u)
 	}
 	dev := d.devices[u]
-	return dev.AddLog(m)
+	return dev.AddLogs(b)
 }
 
 // appExists return if an app has been created
@@ -711,10 +686,10 @@ func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
 }
 
 // WriteAppInstanceLogs write a message of AppInstanceLogBundle
-func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, m *logs.AppInstanceLogBundle) error {
+func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
+	if len(b) == 0 {
+		return nil
 	}
 	// get the uuid
 	// check that the device actually exists
@@ -728,95 +703,45 @@ func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid
 		}
 	}
 	dev := d.devices[deviceID]
-	return dev.AddAppLog(instanceID, m)
+	return dev.AddAppLog(instanceID, b)
 }
 
 // WriteMetrics write a metrics message
-func (d *DeviceManager) WriteMetrics(m *metrics.ZMetricMsg) error {
+func (d *DeviceManager) WriteMetrics(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
-	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevID)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
+	if len(b) < 1 {
+		return nil
 	}
 	// check that the device actually exists
 	if !d.deviceExists(u) {
-		return fmt.Errorf("unregistered device UUID: %s", m.DevID)
+		return fmt.Errorf("unregistered device UUID: %s", u)
 	}
 	dev := d.devices[u]
-	return dev.AddMetrics(m)
+	return dev.AddMetrics(b)
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *DeviceManager) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
-	// hold our config
-	msg := &config.EdgeDevConfig{}
+func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 	// read the config from disk
 	fullConfigPath := path.Join(d.getDevicePath(u), deviceConfigFilename)
 	b, err := ioutil.ReadFile(fullConfigPath)
 	switch {
 	case err != nil && os.IsNotExist(err):
 		// create the base file if it does not exist
-		msg = common.CreateBaseConfig(u)
-		err = d.writeProtobufToJSONFile(u, "", deviceConfigFilename, msg)
+		b = common.CreateBaseConfig(u)
+		err = d.writeJSONFile(u, "", deviceConfigFilename, b)
 		if err != nil {
 			return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
 		}
 	case err != nil:
 		return nil, fmt.Errorf("could not read config from %s: %v", fullConfigPath, err)
-	default:
-		// convert it to the message format
-		err = jsonpb.UnmarshalString(string(b), msg)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing the config to protobuf: %v", err)
-		}
 	}
 
-	return msg, nil
-}
-
-// GetConfigResponse retrieve the config for a particular device
-func (d *DeviceManager) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
-	// hold our config
-	msg := &config.EdgeDevConfig{}
-	// read the config from disk
-	fullConfigPath := path.Join(d.getDevicePath(u), deviceConfigFilename)
-	b, err := ioutil.ReadFile(fullConfigPath)
-	switch {
-	case err != nil && os.IsNotExist(err):
-		// create the base file if it does not exist
-		msg = common.CreateBaseConfig(u)
-		err = d.writeProtobufToJSONFile(u, "", deviceConfigFilename, msg)
-		if err != nil {
-			return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
-		}
-	case err != nil:
-		return nil, fmt.Errorf("could not read config from %s: %v", fullConfigPath, err)
-	default:
-		// convert it to the message format
-		err = jsonpb.UnmarshalString(string(b), msg)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing the config to protobuf: %v", err)
-		}
-	}
-
-	response := &config.ConfigResponse{}
-
-	h := sha256.New()
-	common.ComputeConfigElementSha(h, msg)
-	configHash := h.Sum(nil)
-
-	response.Config = msg
-	response.ConfigHash = base64.URLEncoding.EncodeToString(configHash)
-
-	return response, nil
+	return b, nil
 }
 
 // SetConfig set the config for a particular device
-func (d *DeviceManager) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
+func (d *DeviceManager) SetConfig(u uuid.UUID, b []byte) error {
 	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
 	err := d.refreshCache()
 	if err != nil {
@@ -827,15 +752,11 @@ func (d *DeviceManager) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
 	if !ok {
 		return fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	if m == nil {
+	if len(b) < 1 {
 		return fmt.Errorf("empty configuration")
 	}
-	// check for UUID mismatch
-	if m.Id == nil || m.Id.Uuid != u.String() {
-		return fmt.Errorf("mismatched UUID")
-	}
 	// save the base configuration
-	err = d.writeProtobufToJSONFile(u, "", deviceConfigFilename, m)
+	err = d.writeJSONFile(u, "", deviceConfigFilename, b)
 	if err != nil {
 		return fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)
 	}
@@ -1040,6 +961,15 @@ func openTimestampFile(filename string) (*os.File, error) {
 
 // writeProtobufToJSONFile write a protobuf to a named file in the given directory
 func (d *DeviceManager) writeProtobufToJSONFile(u uuid.UUID, dir, filename string, msg proto.Message) error {
+	b, err := util.ProtobufToBytes(msg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
+	}
+	return d.writeJSONFile(u, dir, filename, b)
+}
+
+// writeJSONFile write json to a named file in the given directory
+func (d *DeviceManager) writeJSONFile(u uuid.UUID, dir, filename string, b []byte) error {
 	// if dir == "", then path.Join() automatically ignores it
 	fullPath := path.Join(d.getDevicePath(u), dir, filename)
 	f, err := os.Create(fullPath)
@@ -1047,10 +977,8 @@ func (d *DeviceManager) writeProtobufToJSONFile(u uuid.UUID, dir, filename strin
 		return fmt.Errorf("failed to open file %s: %v", fullPath, err)
 	}
 	defer f.Close()
-	mler := jsonpb.Marshaler{}
-	err = mler.Marshal(f, msg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
+	if _, err := f.Write(b); err != nil {
+		return fmt.Errorf("error writing to file: %v", err)
 	}
 	// no need to f.Close() as it happens automatically
 	return nil

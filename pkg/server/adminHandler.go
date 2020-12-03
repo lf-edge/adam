@@ -4,24 +4,23 @@
 package server
 
 import (
-	"bytes"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/golang/protobuf/jsonpb"
-	"github.com/golang/protobuf/proto"
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/config"
 	uuid "github.com/satori/go.uuid"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
@@ -31,9 +30,9 @@ const (
 
 type adminHandler struct {
 	manager         driver.DeviceManager
-	logChannel      chan proto.Message
-	infoChannel     chan proto.Message
-	requestsChannel chan proto.Message
+	logChannel      chan []byte
+	infoChannel     chan []byte
+	requestsChannel chan []byte
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
@@ -156,8 +155,14 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("bad onboard cert: %v", err), http.StatusBadRequest)
 		}
 	}
-	_, err = h.manager.DeviceRegister(cert, onboard, t.Serial)
+	// generate a new uuid
+	unew, err := uuid.NewV4()
 	if err != nil {
+		log.Printf("error generating a new device UUID: %v", err)
+		http.Error(w, fmt.Sprintf("error generating a new device UUID: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := h.manager.DeviceRegister(unew, cert, onboard, t.Serial, common.CreateBaseConfig(unew)); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 	}
 	w.WriteHeader(http.StatusCreated)
@@ -257,12 +262,8 @@ func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
 	case deviceConfig == nil:
 		http.Error(w, "found device information, but cert was empty", http.StatusInternalServerError)
 	default:
-		body, err := json.Marshal(deviceConfig)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("error marshaling config to json: %v", err), http.StatusInternalServerError)
-		}
 		w.WriteHeader(http.StatusOK)
-		w.Write(body)
+		w.Write(deviceConfig)
 	}
 }
 
@@ -283,8 +284,11 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	}
 	// before setting the config, set any necessary defaults
 	// check for UUID and/or version mismatch
-	var existingId *config.UUIDandVersion
-	existingConfig, err := h.manager.GetConfig(uid)
+	var (
+		existingId     *config.UUIDandVersion
+		existingConfig config.EdgeDevConfig
+	)
+	existingConfigB, err := h.manager.GetConfig(uid)
 	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
@@ -293,12 +297,16 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		http.Error(w, fmt.Sprintf("error retrieving existing config for device %s: %v", u, err), http.StatusBadRequest)
 		return
-	case existingConfig == nil:
+	case len(existingConfigB) == 0:
 		http.Error(w, "found device information, but had no config", http.StatusInternalServerError)
 		return
-	default:
-		existingId = existingConfig.Id
 	}
+	// convert it to protobuf so we can work with it
+	if err := protojson.Unmarshal(existingConfigB, &existingConfig); err != nil {
+		http.Error(w, fmt.Sprintf("error processing existing config: %v", err), http.StatusInternalServerError)
+		return
+	}
+	existingId = existingConfig.Id
 
 	// we only can bump the version if it is a valid integer
 	newVersion, versionError := strconv.Atoi(existingId.Version)
@@ -331,7 +339,12 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err = h.manager.SetConfig(uid, &deviceConfig)
+	b, err := protojson.Marshal(&deviceConfig)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error processing device config: %v", err), http.StatusBadRequest)
+		return
+	}
+	err = h.manager.SetConfig(uid, b)
 	_, isNotFound = err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
@@ -355,7 +368,7 @@ func (h *adminHandler) deviceRequestsGet(w http.ResponseWriter, r *http.Request)
 	h.deviceDataGet(w, r, h.requestsChannel, h.manager.GetRequestsReader)
 }
 
-func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <-chan proto.Message, readerFunc func(u uuid.UUID) (io.Reader, error)) {
+func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <-chan []byte, readerFunc func(u uuid.UUID) (io.Reader, error)) {
 	u := mux.Vars(r)["uuid"]
 	uid, err := uuid.FromString(u)
 	if err != nil {
@@ -383,14 +396,8 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 
 		for {
 			select {
-			case m := <-c:
-				buf := bytes.NewBuffer(make([]byte, 0))
-				mler := jsonpb.Marshaler{}
-				err = mler.Marshal(buf, m)
-				if err != nil {
-					http.Error(w, fmt.Sprintf("error converting message to bytes: %v", err), http.StatusInternalServerError)
-				}
-				w.Write(append(buf.Bytes(), 0x0a))
+			case b := <-c:
+				w.Write(append(b, 0x0a))
 				flusher.Flush()
 			case <-cn.CloseNotify():
 				// client stopped listening

@@ -4,21 +4,16 @@
 package common
 
 import (
-	"bytes"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
-	"github.com/lf-edge/eve/api/go/metrics"
 
-	"github.com/golang/protobuf/jsonpb"
 	uuid "github.com/satori/go.uuid"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 const (
@@ -27,27 +22,18 @@ const (
 )
 
 // MaxSizes defines maximum sizes of objects storage
-type MaxSizes struct{
-	MaxLogSize int
-	MaxInfoSize int
-	MaxMetricSize int
+type MaxSizes struct {
+	MaxLogSize      int
+	MaxInfoSize     int
+	MaxMetricSize   int
 	MaxRequestsSize int
-	MaxAppLogsSize int
+	MaxAppLogsSize  int
 }
 
 type BigData interface {
 	Get(index int) ([]byte, error)
 	Reader() (io.Reader, error)
 	Write(b []byte) (int, error)
-}
-
-type ApiRequest struct {
-	Timestamp time.Time `json:"timestamp"`
-	UUID      uuid.UUID `json:"uuid,omitempty"`
-	ClientIP  string    `json:"client-ip"`
-	Forwarded string    `json:"forwarded,omitempty"`
-	Method    string    `json:"method"`
-	URL       string    `json:"url"`
 }
 
 type DeviceStorage struct {
@@ -58,32 +44,31 @@ type DeviceStorage struct {
 	Requests   BigData
 	AppLogs    map[uuid.UUID]BigData
 	CurrentLog int
-	Config     *config.EdgeDevConfig
+	Config     []byte
 	Serial     string
 	Onboard    *x509.Certificate
 }
 
-func (d *DeviceStorage) AddLog(m *logs.LogBundle) error {
-	// convert the message to bytes
-	buf := bytes.NewBuffer([]byte{})
-	mler := jsonpb.Marshaler{}
-	if err := mler.Marshal(buf, m); err != nil {
-		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
-	}
+type FullLogEntry struct {
+	*logs.LogEntry
+	Image      string `json:"image,omitempty"`      // SW image the log got emitted from
+	EveVersion string `json:"eveVersion,omitempty"` // EVE software version
+}
+
+// Bytes convenience to convert to json bytes
+func (f FullLogEntry) Json() ([]byte, error) {
+	return protojson.Marshal(f)
+}
+
+func (d *DeviceStorage) AddLogs(b []byte) error {
 	// what if the device was not initialized yet?
 	if d.Logs == nil {
 		return errors.New("AddLog: Logs struct not yet initialized")
 	}
-	_, err := d.Logs.Write(buf.Bytes())
+	_, err := d.Logs.Write(b)
 	return err
 }
-func (d *DeviceStorage) AddAppLog(instanceID uuid.UUID, m *logs.AppInstanceLogBundle) error {
-	// convert the message to bytes
-	buf := bytes.NewBuffer([]byte{})
-	mler := jsonpb.Marshaler{}
-	if err := mler.Marshal(buf, m); err != nil {
-		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
-	}
+func (d *DeviceStorage) AddAppLog(instanceID uuid.UUID, b []byte) error {
 	// what if the device was not initialized yet?
 	if d.AppLogs == nil {
 		return fmt.Errorf("AddAppLog: AppLogs struct not yet initialized")
@@ -91,56 +76,45 @@ func (d *DeviceStorage) AddAppLog(instanceID uuid.UUID, m *logs.AppInstanceLogBu
 	if _, ok := d.AppLogs[instanceID]; !ok {
 		return fmt.Errorf("AddAppLog: AppLogs for instance %s not yet initialized", instanceID)
 	}
-	_, err := d.AppLogs[instanceID].Write(buf.Bytes())
+	_, err := d.AppLogs[instanceID].Write(b)
 	return err
 }
-func (d *DeviceStorage) AddInfo(m *info.ZInfoMsg) error {
-	// convert the message to bytes
-	buf := bytes.NewBuffer([]byte{})
-	mler := jsonpb.Marshaler{}
-	if err := mler.Marshal(buf, m); err != nil {
-		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
-	}
+func (d *DeviceStorage) AddInfo(b []byte) error {
 	// what if the device was not initialized yet?
 	if d.Info == nil {
 		return errors.New("AddInfo: Info struct not yet initialized")
 	}
-	_, err := d.Info.Write(buf.Bytes())
+	_, err := d.Info.Write(b)
 	return err
 }
-func (d *DeviceStorage) AddMetrics(m *metrics.ZMetricMsg) error {
-	// convert the message to bytes
-	buf := bytes.NewBuffer([]byte{})
-	mler := jsonpb.Marshaler{}
-	if err := mler.Marshal(buf, m); err != nil {
-		return fmt.Errorf("failed to marshal protobuf message into json: %v", err)
-	}
+func (d *DeviceStorage) AddMetrics(b []byte) error {
 	// what if the device was not initialized yet?
 	if d.Metrics == nil {
 		return errors.New("AddMetrics: Metrics struct not yet initialized")
 	}
-	_, err := d.Metrics.Write(buf.Bytes())
+	_, err := d.Metrics.Write(b)
 	return err
 }
 
-func (d *DeviceStorage) AddRequest(m *ApiRequest) error {
-	b, err := json.Marshal(m)
-	if err != nil {
-		return fmt.Errorf("failed to marshall request struct to json: %v", err)
-	}
+func (d *DeviceStorage) AddRequest(b []byte) error {
 	// what if the device was not initialized yet?
 	if d.Requests == nil {
 		return errors.New("AddRequest: Requests struct not yet initialized")
 	}
-	_, err = d.Requests.Write(b)
+	_, err := d.Requests.Write(b)
 	return err
 }
 
-func CreateBaseConfig(u uuid.UUID) *config.EdgeDevConfig {
-	return &config.EdgeDevConfig{
+func CreateBaseConfig(u uuid.UUID) []byte {
+	conf := &config.EdgeDevConfig{
 		Id: &config.UUIDandVersion{
 			Uuid:    u.String(),
 			Version: "4",
 		},
 	}
+	// we ignore the error because it is tightly controlled
+	// we probably should handle it, but then we have to do it with everything downstream
+	// eventually
+	b, _ := protojson.Marshal(conf)
+	return b
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lf-edge/adam/pkg/driver"
+	"github.com/lf-edge/adam/pkg/driver/common"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -13,7 +14,7 @@ func TestURLs(t *testing.T) {
 		t.Run("redis-url", func(t *testing.T) {
 			var mgr driver.DeviceManager
 			for _, mgr = range driver.GetDeviceManagers() {
-				if ok, _ := mgr.Init(url, 0, 0, 0, 0); ok {
+				if ok, _ := mgr.Init(url, common.MaxSizes{}); ok {
 					break
 				}
 			}
@@ -26,7 +27,7 @@ func TestURLs(t *testing.T) {
 		t.Run("non-redis-url", func(t *testing.T) {
 			var mgr driver.DeviceManager
 			for _, mgr = range driver.GetDeviceManagers() {
-				if ok, _ := mgr.Init(url, 0, 0, 0, 0); ok {
+				if ok, _ := mgr.Init(url, common.MaxSizes{}); ok {
 					break
 				}
 			}

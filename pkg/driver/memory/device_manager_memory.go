@@ -4,17 +4,12 @@
 package memory
 
 import (
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
 	"fmt"
-	"github.com/lf-edge/adam/pkg/driver/common"
-	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
-	"github.com/lf-edge/eve/api/go/metrics"
-	uuid "github.com/satori/go.uuid"
 	"io"
+
+	"github.com/lf-edge/adam/pkg/driver/common"
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
@@ -234,20 +229,15 @@ func (d *DeviceManager) DeviceList() ([]*uuid.UUID, error) {
 }
 
 // DeviceRegister register a new device cert
-func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial string) (*uuid.UUID, error) {
+func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certificate, serial string, conf []byte) error {
 	// first check if it already exists - this also checks for nil cert
 	u, err := d.DeviceCheckCert(cert)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// if we found a uuid, then it already exists
 	if u != nil {
-		return nil, fmt.Errorf("device already registered")
-	}
-	// generate a new uuid
-	unew, err := uuid.NewV4()
-	if err != nil {
-		return nil, fmt.Errorf("error generating uuid for device: %v", err)
+		return fmt.Errorf("device already registered")
 	}
 	// register the cert for this uuid
 	d.deviceCerts[string(cert.Raw)] = unew
@@ -258,7 +248,7 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 	d.devices[unew] = common.DeviceStorage{
 		Onboard: onboard,
 		Serial:  serial,
-		Config:  common.CreateBaseConfig(unew),
+		Config:  conf,
 		Logs: &ByteSlice{
 			maxSize: d.maxLogSize,
 		},
@@ -270,7 +260,7 @@ func (d *DeviceManager) DeviceRegister(cert, onboard *x509.Certificate, serial s
 		},
 		AppLogs: map[uuid.UUID]common.BigData{},
 	}
-	return &unew, nil
+	return nil
 }
 
 // OnboardRegister register a new onboard certificate and its serials or update an existing one
@@ -292,59 +282,46 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 }
 
 // WriteRequest record a request
-func (d *DeviceManager) WriteRequest(req common.ApiRequest) error {
-	var emptyUUID uuid.UUID
-	if uuid.Equal(req.UUID, emptyUUID) {
-		return fmt.Errorf("no device given")
-	}
-	if dev, ok := d.devices[req.UUID]; ok {
-		dev.AddRequest(&req)
+func (d *DeviceManager) WriteRequest(u uuid.UUID, b []byte) error {
+	if dev, ok := d.devices[u]; ok {
+		dev.AddRequest(b)
 		return nil
 	}
-	return fmt.Errorf("device not found: %s", req.UUID)
+	return fmt.Errorf("device not found: %s", u)
 }
 
 // WriteInfo write an info message
-func (d *DeviceManager) WriteInfo(m *info.ZInfoMsg) error {
+func (d *DeviceManager) WriteInfo(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
-	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevId)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevId, err)
+	if len(b) < 1 {
+		return nil
 	}
 	// now look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
-		return fmt.Errorf("unregistered device UUID %s", m.DevId)
+		return fmt.Errorf("unregistered device UUID %s", u)
 	}
 	// append the messages
-	dev.AddInfo(m)
+	dev.AddInfo(b)
 	d.devices[u] = dev
 	return nil
 }
 
 // WriteLogs write a message of logs
-func (d *DeviceManager) WriteLogs(m *logs.LogBundle) error {
+func (d *DeviceManager) WriteLogs(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
+	if len(b) < 1 {
+		return nil
 	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevID)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
-	}
+
 	// now look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
-		return fmt.Errorf("unregistered device UUID %s", m.DevID)
+		return fmt.Errorf("unregistered device UUID %s", u)
 	}
 	// append the messages
 	// each slice in dev.logs is allowed up to `memoryLogSlicePart` of the total maxSize
-	dev.AddLog(m)
+	dev.AddLogs(b)
 	d.devices[u] = dev
 	return nil
 }
@@ -361,10 +338,10 @@ func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
 }
 
 // WriteAppInstanceLogs write a message of AppInstanceLogBundle
-func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, m *logs.AppInstanceLogBundle) error {
+func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
+	if len(b) < 1 {
+		return nil
 	}
 	dev, ok := d.devices[deviceID]
 	if !ok {
@@ -375,33 +352,28 @@ func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid
 			maxSize: d.maxAppLogsSize,
 		}
 	}
-	return dev.AddAppLog(instanceID, m)
+	return dev.AddAppLog(instanceID, b)
 }
 
 // WriteMetrics write a metrics message
-func (d *DeviceManager) WriteMetrics(m *metrics.ZMetricMsg) error {
+func (d *DeviceManager) WriteMetrics(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
-	if m == nil {
-		return fmt.Errorf("invalid nil message")
-	}
-	// get the uuid
-	u, err := uuid.FromString(m.DevID)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve valid device UUID from message as %s: %v", m.DevID, err)
+	if len(b) < 1 {
+		return nil
 	}
 	// now look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
-		return fmt.Errorf("unregistered device UUID %s", m.DevID)
+		return fmt.Errorf("unregistered device UUID %s", u)
 	}
 	// append the messages
-	dev.AddMetrics(m)
+	dev.AddMetrics(b)
 	d.devices[u] = dev
 	return nil
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *DeviceManager) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
+func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
@@ -410,40 +382,17 @@ func (d *DeviceManager) GetConfig(u uuid.UUID) (*config.EdgeDevConfig, error) {
 	return dev.Config, nil
 }
 
-// GetConfigResponse retrieve the config for a particular device
-func (d *DeviceManager) GetConfigResponse(u uuid.UUID) (*config.ConfigResponse, error) {
-	// look up the device by uuid
-	dev, ok := d.devices[u]
-	if !ok {
-		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
-	}
-
-	response := &config.ConfigResponse{}
-
-	h := sha256.New()
-	common.ComputeConfigElementSha(h, dev.Config)
-	configHash := h.Sum(nil)
-
-	response.Config = dev.Config
-	response.ConfigHash = base64.URLEncoding.EncodeToString(configHash)
-	return response, nil
-}
-
 // SetConfig set the config for a particular device
-func (d *DeviceManager) SetConfig(u uuid.UUID, m *config.EdgeDevConfig) error {
+func (d *DeviceManager) SetConfig(u uuid.UUID, b []byte) error {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
 		return fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	if m == nil {
+	if len(b) < 1 {
 		return fmt.Errorf("empty configuration")
 	}
-	// check for UUID mismatch
-	if m.Id == nil || m.Id.Uuid != u.String() {
-		return fmt.Errorf("mismatched UUID")
-	}
-	dev.Config = m
+	dev.Config = b
 	return nil
 }
 

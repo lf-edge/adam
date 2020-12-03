@@ -7,23 +7,26 @@ import (
 	"crypto/x509"
 	"testing"
 
+	"github.com/lf-edge/adam/pkg/driver/common"
+	"github.com/lf-edge/adam/pkg/util"
 	ax "github.com/lf-edge/adam/pkg/x509"
+	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestInit(t *testing.T) {
 	redisDriver := DeviceManager{}
-	redisDriver.Init("redis://localhost:12345/12", 0, 0, 0, 0)
+	redisDriver.Init("redis://localhost:12345/12", common.MaxSizes{})
 	assert.Equal(t, "localhost:12345", redisDriver.Database())
 }
 
 func TestOnboardRedis(t *testing.T) {
 	r := DeviceManager{}
-	r.Init("redis://localhost:6379/0", 0, 0, 0, 0)
+	r.Init("redis://localhost:6379/0", common.MaxSizes{})
 
 	if r.client.FlushAll().Err() != nil {
 		t.Skip("you need to run 'docker run redis' before running the rest of the tests")
@@ -65,7 +68,7 @@ func TestOnboardRedis(t *testing.T) {
 
 func TestDeviceRedis(t *testing.T) {
 	r := DeviceManager{}
-	r.Init("redis://localhost:6379/0", 0, 0, 0, 0)
+	r.Init("redis://localhost:6379/0", common.MaxSizes{})
 
 	if r.client.FlushAll().Err() != nil {
 		t.Skip("you need to run 'docker run redis' before running the rest of the tests")
@@ -82,12 +85,24 @@ func TestDeviceRedis(t *testing.T) {
 	cert3 := generateCert(t, "baz", "vax.kremlin")
 	certOnboard := generateCert(t, "onboard", "vax.kremlin")
 
-	UUID2, err := r.DeviceRegister(cert2, certOnboard, "------")
+	UUID2, err := uuid.NewV4()
+	if err != nil {
+		t.Fatalf("unable to generate new UUID: %v", err)
+	}
+	err = r.DeviceRegister(UUID2, cert2, certOnboard, "------", common.CreateBaseConfig(UUID2))
 	assert.Equal(t, nil, err)
-	_, err = r.DeviceRegister(cert3, certOnboard, "------")
+	UUID3, err := uuid.NewV4()
+	if err != nil {
+		t.Fatalf("unable to generate new UUID: %v", err)
+	}
+	err = r.DeviceRegister(UUID3, cert3, certOnboard, "------", common.CreateBaseConfig(UUID3))
 	assert.Equal(t, nil, err)
 
-	UUID1, err := r.DeviceRegister(cert, certOnboard, "123456")
+	UUID1, err := uuid.NewV4()
+	if err != nil {
+		t.Fatalf("unable to generate new UUID: %v", err)
+	}
+	err = r.DeviceRegister(UUID1, cert, certOnboard, "123456", common.CreateBaseConfig(UUID1))
 	assert.Equal(t, nil, err)
 	UUID, err := r.DeviceCheckCert(cert)
 	assert.Equal(t, nil, err)
@@ -103,7 +118,7 @@ func TestDeviceRedis(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 3, len(UUIDs))
 
-	assert.Equal(t, nil, r.DeviceRemove(UUID2))
+	assert.Equal(t, nil, r.DeviceRemove(&UUID2))
 	UUIDs, err = r.DeviceList()
 	assert.Equal(t, nil, err)
 	assert.Equal(t, 2, len(UUIDs))
@@ -116,7 +131,7 @@ func TestDeviceRedis(t *testing.T) {
 
 func TestConfigRedis(t *testing.T) {
 	r := DeviceManager{}
-	r.Init("redis://localhost:6379/0", 0, 0, 0, 0)
+	r.Init("redis://localhost:6379/0", common.MaxSizes{})
 
 	if r.client.FlushAll().Err() != nil {
 		t.Skip("you need to run 'docker run redis' before running the rest of the tests")
@@ -131,27 +146,49 @@ func TestConfigRedis(t *testing.T) {
 	cert := generateCert(t, "kgb", "vax.kremlin")
 	certOnboard := generateCert(t, "onboard", "vax.kremlin")
 
-	UUID, err := r.DeviceRegister(cert, certOnboard, "123456")
+	UUID, err := uuid.NewV4()
+	if err != nil {
+		t.Fatalf("unable to generate new UUID: %v", err)
+	}
+	err = r.DeviceRegister(UUID, cert, certOnboard, "123456", common.CreateBaseConfig(UUID))
 	assert.Equal(t, nil, err)
 
-	conf, err := r.GetConfig(*UUID)
+	conf, err := r.GetConfig(UUID)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, UUID.String(), conf.GetId().Uuid)
-	assert.Equal(t, "4", conf.GetId().Version)
+	// convert to struct
+	var msg config.EdgeDevConfig
+	if err := protojson.Unmarshal(conf, &msg); err != nil {
+		t.Fatalf("error converting device config bytes to struct: %v", err)
+	}
 
-	conf.Enterprise = "foo"
-	assert.Equal(t, nil, r.SetConfig(*UUID, conf))
+	assert.Equal(t, UUID.String(), msg.GetId().Uuid)
+	assert.Equal(t, "4", msg.GetId().Version)
 
-	conf, err = r.GetConfig(*UUID)
+	msg.Enterprise = "foo"
+
+	// convert to bytes
+	conf, err = protojson.Marshal(&msg)
+	if err != nil {
+		t.Fatalf("error converting device config struct to bytes: %v", err)
+	}
+
+	assert.Equal(t, nil, r.SetConfig(UUID, conf))
+
+	conf, err = r.GetConfig(UUID)
+	// convert to struct
+	if err := protojson.Unmarshal(conf, &msg); err != nil {
+		t.Fatalf("error converting device config bytes to struct: %v", err)
+	}
+
 	assert.Equal(t, nil, err)
-	assert.Equal(t, UUID.String(), conf.GetId().Uuid)
-	assert.Equal(t, "4", conf.GetId().Version)
-	assert.Equal(t, "foo", conf.GetEnterprise())
+	assert.Equal(t, UUID.String(), msg.GetId().Uuid)
+	assert.Equal(t, "4", msg.GetId().Version)
+	assert.Equal(t, "foo", msg.GetEnterprise())
 }
 
 func TestStreamsRedis(t *testing.T) {
 	r := DeviceManager{}
-	r.Init("redis://localhost:6379/0", 0, 0, 0, 0)
+	r.Init("redis://localhost:6379/0", common.MaxSizes{})
 
 	if r.client.FlushAll().Err() != nil {
 		t.Skip("you need to run 'docker run redis' before running the rest of the tests")
@@ -162,19 +199,43 @@ func TestStreamsRedis(t *testing.T) {
 		return
 	}
 
-	var log logs.LogBundle
-	var info info.ZInfoMsg
-	var metric metrics.ZMetricMsg
+	var (
+		b      []byte
+		log    []byte
+		infos  []byte
+		metric []byte
+	)
 	buffer := make([]byte, 1024)
 
-	log.DevID = u.String()
-	info.DevId = u.String()
-	metric.DevID = u.String()
+	// logs
+	b, err = common.FullLogEntry{}.Json()
+	if err != nil {
+		t.Fatalf("error converting entry to json: %v", err)
+	}
+	log = append(log, b...)
 
-	assert.Equal(t, nil, r.WriteLogs(&log))
-	assert.Equal(t, nil, r.WriteLogs(&log))
-	assert.Equal(t, nil, r.WriteMetrics(&metric))
-	assert.Equal(t, nil, r.WriteInfo(&info))
+	// info
+	b, err = util.ProtobufToBytes(&info.ZInfoMsg{
+		DevId: u.String(),
+	})
+	if err != nil {
+		t.Fatalf("error converting entry to json: %v", err)
+	}
+	infos = append(infos, b...)
+
+	// metrics
+	b, err = util.ProtobufToBytes(&metrics.ZMetricMsg{
+		DevID: u.String(),
+	})
+	if err != nil {
+		t.Fatalf("error converting entry to json: %v", err)
+	}
+	metric = append(metric, b...)
+
+	assert.Equal(t, nil, r.WriteLogs(u, log))
+	assert.Equal(t, nil, r.WriteLogs(u, log))
+	assert.Equal(t, nil, r.WriteMetrics(u, metric))
+	assert.Equal(t, nil, r.WriteInfo(u, infos))
 
 	lr, err := r.GetLogsReader(u)
 	assert.Equal(t, nil, err)
