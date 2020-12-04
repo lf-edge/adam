@@ -5,7 +5,6 @@ package server
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"crypto/x509"
@@ -337,7 +336,6 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 	}
 	eveVersion := msg.GetEveVersion()
 	image := msg.GetImage()
-	var buf bytes.Buffer
 	for _, entry := range msg.GetLog() {
 		entry := &common.FullLogEntry{
 			LogEntry:   entry,
@@ -350,15 +348,14 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 			log.Printf("failed to marshal protobuf message into json: %v", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
-		buf.Write(entryBytes)
+		err = h.manager.WriteLogs(*u, entryBytes)
+		if err != nil {
+			log.Printf("Failed to write log message: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
 	}
 
-	err = h.manager.WriteLogs(*u, buf.Bytes())
-	if err != nil {
-		log.Printf("Failed to write logbundle message: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
 	// send back a 201
 	w.WriteHeader(http.StatusCreated)
 }
