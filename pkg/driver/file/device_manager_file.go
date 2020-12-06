@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -182,6 +183,17 @@ func (d *DeviceManager) MaxAppLogsSize() int {
 
 // Init check if a URL is valid and initialize
 func (d *DeviceManager) Init(s string, sizes common.MaxSizes) (bool, error) {
+	// parse the URL
+	// we accept the following:
+	// - scheme = file
+	// - invalid URL (everything is path)
+	URL, err := url.Parse(s)
+	if err != nil {
+		return false, err
+	}
+	if URL.Scheme != "file" && URL.Scheme != "" {
+		return false, nil
+	}
 	fi, err := os.Stat(s)
 	if err == nil && !fi.IsDir() {
 		return false, fmt.Errorf("database path %s exists and is not a directory", s)
