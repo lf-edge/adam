@@ -33,6 +33,6 @@ jobs:
         with:
           push: true
           tags: |
-            ${{env.IMAGE_NAME}}:${{env.GITHUB_SHA}}
-            ${{env.IMAGE_NAME}}:0.0.${{env.GITHUB_RUN_NUMBER}}
+            ${{env.IMAGE_NAME}}:${{github.sha}}
+            ${{env.IMAGE_NAME}}:0.0.${{github.run_number}}
 
