@@ -1,0 +1,25 @@
+name: build
+
+on:
+  push:
+    branches: main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: setup go environment
+        uses: actions/setup-go@v1
+        with:
+          go-version: '1.15.2'
+      - name: go vet
+        run: go vet ./...
+      - name: unit tests
+        run: go test ./...
+      - name: fmt
+        run: test -z "$(gofmt -l -e -s $(find . -name '*.go'))"
+      - name: build
+        run: go build .
