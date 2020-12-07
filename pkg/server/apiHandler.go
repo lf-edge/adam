@@ -5,7 +5,6 @@ package server
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"crypto/x509"
@@ -263,11 +262,17 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	var entryBytes []byte
+	if entryBytes, err = protojson.Marshal(msg); err != nil {
+		log.Printf("Failed to marshal info message: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
 	select {
-	case h.infoChannel <- b:
+	case h.infoChannel <- entryBytes:
 	default:
 	}
-	err = h.manager.WriteInfo(*u, b)
+	err = h.manager.WriteInfo(*u, entryBytes)
 	if err != nil {
 		log.Printf("Failed to write info message: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -299,7 +304,13 @@ func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	err = h.manager.WriteMetrics(*u, b)
+	var entryBytes []byte
+	if entryBytes, err = protojson.Marshal(msg); err != nil {
+		log.Printf("Failed to marshal metrics message: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	err = h.manager.WriteMetrics(*u, entryBytes)
 	if err != nil {
 		log.Printf("Failed to write metrics message: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -331,34 +342,32 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	select {
-	case h.logChannel <- b:
-	default:
-	}
 	eveVersion := msg.GetEveVersion()
 	image := msg.GetImage()
-	var buf bytes.Buffer
 	for _, entry := range msg.GetLog() {
 		entry := &common.FullLogEntry{
 			LogEntry:   entry,
 			Image:      image,
 			EveVersion: eveVersion,
 		}
-		// convert the message to bytes
-		entryBytes, err := entry.Json()
-		if err != nil {
-			log.Printf("failed to marshal protobuf message into json: %v", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		var entryBytes []byte
+		if entryBytes, err = entry.Json(); err != nil {
+			log.Printf("Failed to marshal FullLogEntry message: %v", err)
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
 		}
-		buf.Write(entryBytes)
+		select {
+		case h.logChannel <- entryBytes:
+		default:
+		}
+		err = h.manager.WriteLogs(*u, entryBytes)
+		if err != nil {
+			log.Printf("Failed to write log message: %v", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
 	}
 
-	err = h.manager.WriteLogs(*u, buf.Bytes())
-	if err != nil {
-		log.Printf("Failed to write logbundle message: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
 	// send back a 201
 	w.WriteHeader(http.StatusCreated)
 }
@@ -397,17 +406,17 @@ func (h *apiHandler) newLogs(w http.ResponseWriter, r *http.Request) {
 			Image:      msg.GetImage(),
 			EveVersion: msg.GetEveVersion(),
 		}
-		var b []byte
-		if b, err = proto.Marshal(entry); err != nil {
+		var entryBytes []byte
+		if entryBytes, err = entry.Json(); err != nil {
 			log.Printf("Failed to marshal FullLogEntry message: %v", err)
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
 		select {
-		case h.logChannel <- b:
+		case h.logChannel <- entryBytes:
 		default:
 		}
-		err = h.manager.WriteLogs(*u, b)
+		err = h.manager.WriteLogs(*u, entryBytes)
 		if err != nil {
 			log.Printf("Failed to write logbundle message: %v", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -451,7 +460,7 @@ func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, le := range msg.Log {
 		var b []byte
-		if b, err = proto.Marshal(le); err != nil {
+		if b, err = protojson.Marshal(le); err != nil {
 			log.Printf("Failed to marshal LogEntry message: %v", err)
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
@@ -506,7 +515,7 @@ func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var b []byte
-		if b, err = proto.Marshal(le); err != nil {
+		if b, err = protojson.Marshal(le); err != nil {
 			log.Printf("Failed to marshal LogEntry message: %v", err)
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
