@@ -21,6 +21,6 @@ jobs:
       - name: unit tests
         run: go test ./...
       - name: fmt
-        run: test -z "$(gofmt -l -e -s $(find . -name '*.go'))"
+        run: test -z "$( gofmt -l -e -s $(find . -name '*.go') | tee /dev/stderr )"
       - name: build
         run: go build .
