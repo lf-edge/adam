@@ -301,7 +301,7 @@ func (d *DeviceManager) DeviceClear() error {
 		{deviceCertsHash},
 		{deviceOnboardCertsHash}}
 
-	for u, _ := range d.devices {
+	for u := range d.devices {
 		streams = append(streams,
 			[]string{deviceMetricsStream + u.String()},
 			[]string{deviceLogsStream + u.String()},
