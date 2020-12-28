@@ -69,6 +69,24 @@ func (h *apiHandler) recordClient(u *uuid.UUID, r *http.Request) {
 	h.manager.WriteRequest(*u, b)
 }
 
+func (h *apiHandler) checkCertAndRecord(w http.ResponseWriter, r *http.Request) *uuid.UUID {
+	// only uses the device cert
+	cert := getClientCert(r)
+	u, err := h.manager.DeviceCheckCert(cert)
+	if err != nil {
+		log.Printf("error checking device cert: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return nil
+	}
+	if u == nil {
+		log.Printf("unknown device cert")
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return nil
+	}
+	h.recordClient(u, r)
+	return u
+}
+
 func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 	// get the onboard cert and unpack the message to:
 	//  - get the serial
@@ -144,34 +162,18 @@ func (h *apiHandler) probe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) ping(w http.ResponseWriter, r *http.Request) {
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	if devID := h.checkCertAndRecord(w, r); devID == nil {
 		return
 	}
-	h.recordClient(u, r)
 	// now just return a 200
 	w.WriteHeader(http.StatusOK)
 }
 
 func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
+	u := h.checkCertAndRecord(w, r)
 	if u == nil {
-		log.Printf("unknown device cert")
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	h.recordClient(u, r)
 	conf, err := h.manager.GetConfig(*u)
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
@@ -215,20 +217,10 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
+	u := h.checkCertAndRecord(w, r)
 	if u == nil {
-		log.Printf("unknown device cert")
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	h.recordClient(u, r)
 	config, err := h.manager.GetConfig(*u)
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
@@ -241,15 +233,10 @@ func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
 		return
 	}
-	h.recordClient(u, r)
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
@@ -283,15 +270,10 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
 		return
 	}
-	h.recordClient(u, r)
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("error reading request body: %v", err)
@@ -321,15 +303,10 @@ func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
 		return
 	}
-	h.recordClient(u, r)
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
@@ -373,14 +350,10 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) newLogs(w http.ResponseWriter, r *http.Request) {
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
 		return
 	}
-	h.recordClient(u, r)
 	gr, err := gzip.NewReader(r.Body)
 	if err != nil {
 		log.Printf("error gzip.NewReader: %v", err)
@@ -427,25 +400,15 @@ func (h *apiHandler) newLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
+		return
+	}
 	uid, err := uuid.FromString(mux.Vars(r)["uuid"])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if u == nil {
-		log.Printf("unknown device cert")
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
-	h.recordClient(u, r)
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
@@ -481,25 +444,15 @@ func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
+		return
+	}
 	uid, err := uuid.FromString(mux.Vars(r)["uuid"])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if u == nil {
-		log.Printf("unknown device cert")
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
-	h.recordClient(u, r)
 	gr, err := gzip.NewReader(r.Body)
 	if err != nil {
 		log.Printf("error gzip.NewReader: %v", err)
