@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -233,8 +234,7 @@ func (d *DeviceManager) OnboardList() ([]string, error) {
 
 // OnboardRemove remove an onboard certificate based on Common Name
 func (d *DeviceManager) OnboardRemove(cn string) (result error) {
-	result = d.transactionDrop([][]string{{onboardSerialsHash, cn},
-		{onboardCertsHash, cn}})
+	result = d.transactionDrop([][]string{{onboardCertsHash, cn}, {onboardSerialsHash, cn}})
 	if result == nil {
 		result = d.refreshCache()
 	}
@@ -669,12 +669,14 @@ func (d *DeviceManager) refreshCache() error {
 			return fmt.Errorf("unable to convert data from %s to onboard certificate: %v", c, err)
 		}
 		certStr := string(cert.Raw)
-		onboardCerts[certStr] = make(map[string]bool)
 
 		v, err := d.client.HGet(onboardSerialsHash, u).Result()
 		if err != nil {
-			return fmt.Errorf("unabled to get a serial for %s: %v", u, err)
+			log.Printf("unabled to get a serial for %s: %v", u, err)
+			continue
 		}
+
+		onboardCerts[certStr] = make(map[string]bool)
 
 		var serials []string
 		err = msgpack.Unmarshal([]byte(v), &serials)
