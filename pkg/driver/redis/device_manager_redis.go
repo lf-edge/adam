@@ -271,7 +271,7 @@ func (d *DeviceManager) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, err
 // DeviceRemove remove a device
 func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 	k := u.String()
-	err := d.transactionDrop([][]string{
+	streams := [][]string{
 		{deviceCertsHash, k},
 		{deviceConfigsHash, k},
 		{deviceOnboardCertsHash, k},
@@ -280,7 +280,11 @@ func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 		{deviceLogsStream + k},
 		{deviceMetricsStream + k},
 		{deviceRequestsStream + k},
-	})
+	}
+	for appUUID := range d.devices[*u].AppLogs {
+		streams = append(streams, []string{deviceAppLogsStream + k + "_" + appUUID.String()})
+	}
+	err := d.transactionDrop(streams)
 
 	if err != nil {
 		return fmt.Errorf("unable to remove the device %s %v", k, err)
@@ -301,13 +305,15 @@ func (d *DeviceManager) DeviceClear() error {
 		{deviceCertsHash},
 		{deviceOnboardCertsHash}}
 
-	for u := range d.devices {
+	for u, dev := range d.devices {
 		streams = append(streams,
 			[]string{deviceMetricsStream + u.String()},
 			[]string{deviceLogsStream + u.String()},
 			[]string{deviceInfoStream + u.String()},
 			[]string{deviceRequestsStream + u.String()})
-
+		for appUUID := range dev.AppLogs {
+			streams = append(streams, []string{deviceAppLogsStream + u.String() + "_" + appUUID.String()})
+		}
 	}
 
 	err := d.transactionDrop(streams)
@@ -763,6 +769,24 @@ func (d *DeviceManager) refreshCache() error {
 		devItem := devices[u]
 		devItem.Serial = s
 		devices[u] = devItem
+	}
+
+	for deviceID, device := range devices {
+		prefix := deviceAppLogsStream + deviceID.String() + "_"
+		appLogKeys, err := d.client.Keys(prefix + "*").Result()
+		if err != nil {
+			return fmt.Errorf("failed to retrieve device app logs streams %v", err)
+		}
+		for _, el := range appLogKeys {
+			instanceID, err := uuid.FromString(strings.TrimPrefix(el, prefix))
+			if err != nil {
+				return fmt.Errorf("cannot parse device app logs stream %v", err)
+			}
+			device.AppLogs[instanceID] = &ManagedStream{
+				name:   prefix + instanceID.String(),
+				client: d.client,
+			}
+		}
 	}
 	// replace the existing device cache
 	d.devices = devices
