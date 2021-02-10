@@ -164,8 +164,6 @@ func TestConfigRedis(t *testing.T) {
 	assert.Equal(t, UUID.String(), msg.GetId().Uuid)
 	assert.Equal(t, "4", msg.GetId().Version)
 
-	msg.Enterprise = "foo"
-
 	// convert to bytes
 	conf, err = protojson.Marshal(&msg)
 	if err != nil {
@@ -183,7 +181,6 @@ func TestConfigRedis(t *testing.T) {
 	assert.Equal(t, nil, err)
 	assert.Equal(t, UUID.String(), msg.GetId().Uuid)
 	assert.Equal(t, "4", msg.GetId().Version)
-	assert.Equal(t, "foo", msg.GetEnterprise())
 }
 
 func TestStreamsRedis(t *testing.T) {
