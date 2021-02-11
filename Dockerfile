@@ -18,7 +18,7 @@ RUN go mod download
 COPY . /adam/src
 
 ARG GOOS=linux
-ARG GOARCH=amd64
+# ARG GOARCH=amd64
 
 RUN go build -o /adam/bin/adam main.go
 
