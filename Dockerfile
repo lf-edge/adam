@@ -1,7 +1,7 @@
 # Copyright (c) 2019 Zededa, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM golang:1.12.5-alpine3.9 AS build
+FROM golang:1.15.3-alpine AS build
 
 ENV CGO_ENABLED=0
 ENV GO111MODULE=on
