@@ -6,6 +6,7 @@ package driver
 import (
 	"github.com/lf-edge/adam/pkg/driver/file"
 	"github.com/lf-edge/adam/pkg/driver/memory"
+	"github.com/lf-edge/adam/pkg/driver/postgres"
 	"github.com/lf-edge/adam/pkg/driver/redis"
 )
 
@@ -17,6 +18,7 @@ func GetDeviceManagers() []DeviceManager {
 	return []DeviceManager{
 		&memory.DeviceManager{},
 		&redis.DeviceManager{},
+		&postgres.DeviceManager{},
 		&file.DeviceManager{}, // this needs to be the last catch-all one
 	}
 }
