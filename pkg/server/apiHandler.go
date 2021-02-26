@@ -46,6 +46,12 @@ type apiHandler struct {
 	infoChannel chan []byte
 }
 
+// GetUser godoc
+// @Summary Retrieves user based on given ID
+// @Produce json
+// @Param id path integer true "User ID"
+// @Success 200 {object} models.User
+// @Router /users/{id} [get]
 func (h *apiHandler) recordClient(u *uuid.UUID, r *http.Request) {
 	if u == nil {
 		// we ignore non-device-specific requests for now

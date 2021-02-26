@@ -47,6 +47,9 @@ func (s *Server) Start() {
 	router := mux.NewRouter()
 	router.NotFoundHandler = http.HandlerFunc(notFound)
 
+	sh := http.StripPrefix("/swaggerui/", http.FileServer(http.Dir("/swaggerui/")))
+	router.PathPrefix("/swaggerui/").Handler(sh)
+
 	// to pass logs and info around
 	logChannel := make(chan []byte)
 	infoChannel := make(chan []byte)
@@ -58,7 +61,7 @@ func (s *Server) Start() {
 		infoChannel: infoChannel,
 	}
 
-	router.HandleFunc("/", api.probe).Methods("GET")
+	//router.HandleFunc("/", api.probe).Methods("GET")
 
 	ed := router.PathPrefix("/api/v1/edgedevice").Subrouter()
 	ed.Use(ensureMTLS)
@@ -82,6 +85,21 @@ func (s *Server) Start() {
 	}
 
 	ad := router.PathPrefix("/admin").Subrouter()
+	// swagger:operation GET /onboard onboard
+	//
+	//
+	// Onboards EVE
+	//
+	// The EVE should connect first
+	//
+	// ---
+	// produces:
+	// - application/json
+	// tags:
+	// - admin
+	// responses:
+	//   '200':
+	//     description: successful operation
 	ad.HandleFunc("/onboard", admin.onboardList).Methods("GET")
 	ad.HandleFunc("/onboard/{cn}", admin.onboardGet).Methods("GET")
 	ad.HandleFunc("/onboard", admin.onboardAdd).Methods("POST")

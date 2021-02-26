@@ -36,8 +36,17 @@ type adminHandler struct {
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
+// swagger:parameters onboard
 type OnboardCert struct {
-	Cert   []byte
+	// a Cert for onboarding
+	//
+	// unique: true
+	// in: query
+	Cert []byte
+	// a Serial for onboarding
+	//
+	// unique: true
+	// in: query
 	Serial string
 }
 
