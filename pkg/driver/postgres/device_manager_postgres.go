@@ -58,18 +58,19 @@ func (m *ManagedStream) Write(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
 	}
-	u, err := uuid.NewV4()
-	if err != nil {
-		return 0, err
-	}
-	notification, err := json.Marshal(map[string]string{"id": u.String(), "ref": m.id.String()})
-	if err != nil {
-		return 0, err
-	}
 	switch m.variant {
 	case DBTypeLog, DBTypeInfo, DBTypeMetric, DBTypeRequest, DBTypeAppLog:
-		if _, err := m.client.Exec(context.Background(),
-			fmt.Sprintf("INSERT INTO %s (id, ref, data) VALUES($1, $2, $3)", m.variant), u.String(), m.id.String(), b); err != nil {
+		row := m.client.QueryRow(context.Background(),
+			fmt.Sprintf("INSERT INTO %s (ref, data) VALUES($1, $2) RETURNING id", m.variant), m.id.String(), b)
+		if row == nil {
+			return 0, fmt.Errorf("cannot insert row: %s", m.variant)
+		}
+		var id uint32
+		if err := row.Scan(&id); err != nil {
+			return 0, fmt.Errorf("cannot scan id: %s", err)
+		}
+		notification, err := json.Marshal(map[string]string{"id": fmt.Sprint(id), "ref": m.id.String()})
+		if err != nil {
 			return 0, err
 		}
 		if _, err := m.client.Exec(context.Background(),
@@ -182,7 +183,7 @@ CONSTRAINT fk_app
 	}
 	for _, el := range []DBType{DBTypeLog, DBTypeInfo, DBTypeMetric, DBTypeRequest} {
 		if _, err := db.Exec(context.Background(), fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s
-(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), 
+(id SERIAL PRIMARY KEY, 
 ref uuid,
 data jsonb,
 CONSTRAINT fk_%s
@@ -193,7 +194,7 @@ CONSTRAINT fk_%s
 		}
 	}
 	if _, err := db.Exec(context.Background(), `CREATE TABLE IF NOT EXISTS applog
-(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), 
+(id SERIAL PRIMARY KEY, 
 ref uuid,
 data jsonb,
 CONSTRAINT fk_applog
