@@ -85,12 +85,49 @@ Finally, you can embed Adam container into an EVE root filesystem creating an EV
      net: host
 ```
 
+## Controlling Adam
+
+Adam provides a CLI management interface and Web UI, both of which wrap an open management API.
+
+### CLI
+
+Adam can be run in CLI mode, connecting to a local or remote Adam instance. The CLI does not
+manipulate the backend in any hidden way. It just sends REST commands over the well-defined
+management API.
+
+To run Adam's CLI:
+
+```
+adam admin
+```
+
+Follow the options from there.
+
+### Web UI
+
+Adam currently features a basic Web UI, which is under active development. To access the Web UI,
+go to the main page for Adam, e.g. https://localhost:8080, which is the default.
+
+Adam's Web server embeds all of its static files inside the binary, by default. There is an option
+to run Adam serving its files from the local filesystem. To do so, run:
+
+```
+adam server --web-dir <path-to-files>
+```
+
+For more information on developing the Web UI, see [this document](./docs/web.md).
+
+### Management API
+
+The management API is available at `/admin`. It currently is undocumented other than in the source code,
+but swagger is under development for it. Follow [this issue](https://github.com/lf-edge/adam/issues/28).
+
 ## Building Adam
 
 Building Adam is straightforward:
 
 1. Clone this repo
-2. Ensure you have installed either go >= 1.11, or docker
+2. Ensure you have installed either **go >= 1.16**, or docker
 3. Build
 
 There are several options for building:

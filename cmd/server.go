@@ -7,11 +7,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/lf-edge/adam/pkg/driver/common"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
+
+	"github.com/lf-edge/adam/pkg/driver/common"
 
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/server"
@@ -40,6 +41,7 @@ var (
 	maxRequestsSize int
 	maxAppLogsSize  int
 	autoCert        bool
+	localWebFiles   string
 	deviceManagers  = driver.GetDeviceManagers()
 )
 
@@ -165,6 +167,7 @@ var serverCmd = &cobra.Command{
 			KeyPath:       serverKey,
 			DeviceManager: mgr,
 			CertRefresh:   certRefresh,
+			WebDir:        localWebFiles,
 		}
 		s.Start()
 	},
@@ -199,4 +202,5 @@ func serverInit() {
 	serverCmd.Flags().IntVar(&maxMetricSize, "max-metric-size", 0, fmt.Sprintf("the maximum size of the metrics before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultMetricSizes))
 	serverCmd.Flags().IntVar(&maxRequestsSize, "max-requests-size", 0, fmt.Sprintf("the maximum size of the request logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultRequestsSizes))
 	serverCmd.Flags().IntVar(&maxAppLogsSize, "max-app-logs-size", 0, fmt.Sprintf("the maximum size of the app logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultAppLogsSizes))
+	serverCmd.Flags().StringVar(&localWebFiles, "web-dir", "", "path to static files on the local filesystem for the web server; if empty, will use those embedded in the Adam binary")
 }
