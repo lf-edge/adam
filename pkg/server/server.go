@@ -4,15 +4,20 @@
 package server
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io/fs"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
+	"github.com/lf-edge/adam/web"
 )
 
 // Server an adam server
@@ -23,6 +28,8 @@ type Server struct {
 	KeyPath       string
 	DeviceManager driver.DeviceManager
 	CertRefresh   int
+	// WebDir path to webfiles to serve. If empty, use embedded
+	WebDir string
 }
 
 // Start start the server
@@ -61,7 +68,7 @@ func (s *Server) Start() {
 		infoChannel: infoChannel,
 	}
 
-	//router.HandleFunc("/", api.probe).Methods("GET")
+	router.HandleFunc("/probe", api.probe).Methods("GET")
 
 	ed := router.PathPrefix("/api/v1/edgedevice").Subrouter()
 	ed.Use(ensureMTLS)
@@ -116,6 +123,41 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device", admin.deviceClear).Methods("DELETE")
 	ad.HandleFunc("/device/{uuid}", admin.deviceRemove).Methods("DELETE")
 
+	var (
+		//index  []byte
+		httpFS        fs.FS
+		stripPrefix   string
+		indexFilename string
+	)
+	if s.WebDir != "" {
+		httpFS = os.DirFS(s.WebDir)
+		stripPrefix = "/static/"
+		indexFilename = "index.html"
+	} else {
+		httpFS = web.StaticFiles
+		stripPrefix = "/"
+		indexFilename = "static/index.html"
+	}
+	indexHandler := func(w http.ResponseWriter, r *http.Request) {
+		filename := "index.html"
+		f, err := httpFS.Open(indexFilename)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		}
+		defer f.Close()
+		content, err := ioutil.ReadAll(f)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		}
+		http.ServeContent(w, r, filename, time.Now(), bytes.NewReader(content))
+	}
+	// / and /index.html go to the root
+	router.HandleFunc("/", indexHandler).Methods("GET")
+	router.HandleFunc("/index.html", indexHandler).Methods("GET")
+	router.PathPrefix("/static/").Handler(http.StripPrefix(stripPrefix, http.FileServer(http.FS(httpFS))))
+
 	tlsConfig := &tls.Config{
 		ClientAuth: tls.RequestClientCert,
 		ClientCAs:  nil,
@@ -127,7 +169,7 @@ func (s *Server) Start() {
 		TLSConfig: tlsConfig,
 	}
 	log.Println("Starting adam:")
-	log.Printf("\tIP:Port: %s:%s\n", s.Address, s.Port)
+	log.Printf("\tURL: https://%s:%s\n", s.Address, s.Port)
 	log.Printf("\tstorage: %s\n", s.DeviceManager.Name())
 	log.Printf("\tdatabase: %s\n", s.DeviceManager.Database())
 	log.Printf("\tserver cert: %s\n", s.CertPath)

@@ -1,6 +1,6 @@
 module github.com/lf-edge/adam
 
-go 1.12
+go 1.16
 
 require (
 	github.com/go-openapi/errors v0.20.0 // indirect
