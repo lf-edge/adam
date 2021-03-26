@@ -53,22 +53,26 @@ func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get(contentType)
 	if contentType != mimeJSON {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
 	}
 	decoder := json.NewDecoder(r.Body)
 	var t OnboardCert
 	err := decoder.Decode(&t)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	serials := strings.Split(t.Serial, ",")
 	cert, err := ax.ParseCert(t.Cert)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	err = h.manager.OnboardRegister(cert, serials)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusCreated)
 }
