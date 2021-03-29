@@ -20,12 +20,19 @@ COPY . /adam/src
 ARG GOOS=linux
 # ARG GOARCH=amd64
 
+
 RUN go build -o /out/bin/adam main.go
 COPY scripts/ /out/bin/
 COPY samples/ /out/adam/
+RUN go get -u github.com/go-swagger/go-swagger/cmd/swagger
+RUN mkdir /adam/swaggerui
+RUN GO111MODULE=off swagger generate spec -o /adam/swaggerui/swagger.json
+
 
 FROM scratch
 
 COPY --from=build /out/ /
+ADD swaggerui ./swaggerui/
+COPY --from=build /adam/swaggerui/swagger.json ./swaggerui/swagger.json
 WORKDIR /adam
 ENTRYPOINT ["/bin/adam"]
