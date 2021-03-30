@@ -24,9 +24,9 @@ ARG GOOS=linux
 RUN go build -o /out/bin/adam main.go
 COPY scripts/ /out/bin/
 COPY samples/ /out/adam/
-RUN go get -u github.com/go-swagger/go-swagger/cmd/swagger
+RUN go install github.com/go-swagger/go-swagger/cmd/swagger
 RUN mkdir /adam/swaggerui
-RUN GO111MODULE=off swagger generate spec -o /adam/swaggerui/swagger.json
+RUN /root/go/bin/swagger generate spec -o /adam/swaggerui/swagger.json
 
 
 FROM scratch
