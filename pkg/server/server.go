@@ -67,6 +67,11 @@ func (s *Server) Start() {
 		logChannel:  logChannel,
 		infoChannel: infoChannel,
 	}
+	apiv2 := &apiHandlerv2{
+		manager:     s.DeviceManager,
+		logChannel:  logChannel,
+		infoChannel: infoChannel,
+	}
 
 	router.HandleFunc("/probe", api.probe).Methods("GET")
 
@@ -83,6 +88,20 @@ func (s *Server) Start() {
 	ed.HandleFunc("/newlogs", api.newLogs).Methods("POST")
 	ed.HandleFunc("/apps/instances/id/{uuid}/logs", api.appLogs).Methods("POST")
 	ed.HandleFunc("/apps/instanceid/id/{uuid}/newlogs", api.newAppLogs).Methods("POST")
+
+	edv2 := router.PathPrefix("/api/v2/edgedevice").Subrouter()
+	edv2.Use(ensureMTLS)
+	edv2.Use(logRequest)
+	edv2.HandleFunc("/register", apiv2.register).Methods("POST")
+	edv2.HandleFunc("/ping", apiv2.ping).Methods("GET")
+	edv2.HandleFunc("/config", apiv2.config).Methods("GET")
+	edv2.HandleFunc("/config", apiv2.configPost).Methods("POST")
+	edv2.HandleFunc("/info", apiv2.info).Methods("POST")
+	edv2.HandleFunc("/metrics", apiv2.metrics).Methods("POST")
+	edv2.HandleFunc("/logs", apiv2.logs).Methods("POST")
+	edv2.HandleFunc("/newlogs", apiv2.newLogs).Methods("POST")
+	edv2.HandleFunc("/apps/instances/id/{uuid}/logs", apiv2.appLogs).Methods("POST")
+	edv2.HandleFunc("/apps/instanceid/id/{uuid}/newlogs", apiv2.newAppLogs).Methods("POST")
 
 	// admin endpoint - custom, used to manage adam
 	admin := &adminHandler{
