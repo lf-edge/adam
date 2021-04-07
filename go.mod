@@ -9,7 +9,7 @@ require (
 	github.com/go-swagger/go-swagger v0.26.1 // indirect
 	github.com/golang/protobuf v1.4.3
 	github.com/gorilla/mux v1.7.2
-	github.com/lf-edge/eve/api/go v0.0.0-20210219053903-a52e3a1e37f9
+	github.com/lf-edge/eve/api/go v0.0.0-20210407113608-9d4a03cb9820
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/onsi/ginkgo v1.12.0 // indirect
 	github.com/onsi/gomega v1.10.0 // indirect
