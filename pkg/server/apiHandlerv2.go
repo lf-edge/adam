@@ -26,6 +26,8 @@ import (
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
+	"github.com/lf-edge/eve/api/go/auth"
+	"github.com/lf-edge/eve/pkg/pillar/zedcloud"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -92,6 +94,66 @@ func (h *apiHandlerv2) checkCertAndRecord(w http.ResponseWriter, r *http.Request
 	h.recordClient(u, r)
 	return u
 }
+
+func verifyAuthentication(ctx *ZedCloudContext, c []byte, skipVerify bool) ([]byte, types.SenderResult, error) {
+	senderSt := types.SenderStatusNone
+	sm := &zauth.AuthContainer{}
+	err := proto.Unmarshal(c, sm)
+	if err != nil {
+		ctx.log.Errorf("verifyAuthentication: can not unmarshal authen content, %v\n", err)
+		return nil, senderSt, err
+	}
+
+	data := sm.ProtectedPayload.GetPayload()
+	if !skipVerify { // no verify for /certs itself
+		if len(sm.GetSenderCertHash()) != hashSha256Len16 &&
+			len(sm.GetSenderCertHash()) != hashSha256Len32 {
+			ctx.log.Errorf("verifyAuthentication: senderCertHash length %d\n",
+				len(sm.GetSenderCertHash()))
+			err := fmt.Errorf("verifyAuthentication: senderCertHash length error")
+			return nil, types.SenderStatusHashSizeError, err
+		}
+
+		if ctx.serverSigningCert == nil {
+			err := getServerSigingCert(ctx)
+			if err != nil {
+				ctx.log.Errorf("verifyAuthentication: can not get server cert, %v\n", err)
+				return nil, senderSt, err
+			}
+		}
+
+		switch sm.Algo {
+		case zcommon.HashAlgorithm_HASH_ALGORITHM_SHA256_32BYTES:
+			if bytes.Compare(sm.GetSenderCertHash(), ctx.serverSigningCertHash) != 0 {
+				err := fmt.Errorf("verifyAuthentication: local server cert hash 32bytes does not match in authen")
+				ctx.log.Errorf("verifyAuthentication: local server cert hash(%d) does not match in authen (%d) %v, %v",
+					len(ctx.serverSigningCertHash), len(sm.GetSenderCertHash()), ctx.serverSigningCertHash, sm.GetSenderCertHash())
+				return nil, types.SenderStatusCertMiss, err
+			}
+		case zcommon.HashAlgorithm_HASH_ALGORITHM_SHA256_16BYTES:
+			if bytes.Compare(sm.GetSenderCertHash(), ctx.serverSigningCertHash[:hashSha256Len16]) != 0 {
+				err := fmt.Errorf("verifyAuthentication: local server cert hash 16bytes does not match in authen")
+				ctx.log.Errorf("verifyAuthentication: local server cert hash(%d) does not match in authen (%d) %v, %v",
+					len(ctx.serverSigningCertHash), len(sm.GetSenderCertHash()), ctx.serverSigningCertHash, sm.GetSenderCertHash())
+				return nil, types.SenderStatusCertMiss, err
+			}
+		default:
+			ctx.log.Errorf("verifyAuthentication: hash algorithm is not supported\n")
+			err := fmt.Errorf("verifyAuthentication: hash algorithm is not supported")
+			return nil, types.SenderStatusAlgoFail, err
+		}
+
+		hash := ComputeSha(data)
+		err = verifyAuthSig(ctx, sm.GetSignatureHash(), ctx.serverSigningCert, hash)
+		if err != nil {
+			ctx.log.Errorf("verifyAuthentication: verifyAuthSig error %v\n", err)
+			return nil, types.SenderStatusSignVerifyFail, err
+		}
+		ctx.log.Tracef("verifyAuthentication: ok\n")
+	}
+	return data, senderSt, nil
+}
+
 
 func (h *apiHandlerv2) register(w http.ResponseWriter, r *http.Request) {
 	// get the onboard cert and unpack the message to:
@@ -232,7 +294,7 @@ func (h *apiHandlerv2) config(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error getting device config: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
-	}
+	
 	w.Header().Add(contentType, mimeProto)
 	w.WriteHeader(http.StatusOK)
 	w.Write(config)
