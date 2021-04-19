@@ -36,4 +36,5 @@ jobs:
           tags: |
             ${{env.IMAGE_NAME}}:${{github.sha}}
             ${{env.IMAGE_NAME}}:0.0.${{github.run_number}}
+            ${{env.IMAGE_NAME}}:snapshot
 
