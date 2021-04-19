@@ -17,6 +17,22 @@ $ adam <cmd>
 $ docker run <cmd>
 ```
 
+### Image Tagging
+
+Every commit to the `master` branch of Adam releases an image to docker hub. These are tagged with the git commit. In addition, the most recent
+commit is tagged with `snapshot`, i.e. `lfedge/adam:snapshot`.
+
+Adam regularly releases proper [semantic versioned](https://semver.org) releases, with images tagged as `vx.y.z`, e.g. `v1.2.3`. The highest numbered,
+most recent release is tagged with `latest`.
+
+* `lfedge/adam:latest` (or just `lfedge/adam`) - most recent release
+* `lfedge/adam:v1.2.3` - release 1.2.3
+* `lfedge/adam:snapshot` - most recent commit to mainline branch
+* `lfedge/adam:6aa76a1ac3ee46aefd96525190e4bd4eb4f5d828` - build from commit `6aa76a1ac3ee46aefd96525190e4bd4eb4f5d828`
+
+For all of the sample commands in this guide, we use simply `lfedge/adam`, equivalent to `lfedge/adam:latest`. You should feel free to
+replace `latest` with whichever tag is appropriate for your use case.
+
 ## Pre-Requisites
 
 In addition to adam itself - as a local binary or docker container - you need the following:

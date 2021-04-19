@@ -32,4 +32,5 @@ jobs:
           push: true
           tags: |
             ${{env.IMAGE_NAME}}:${{env.GITHUB_REF#refs/tags/}}
+            ${{env.IMAGE_NAME}}:latest
 
