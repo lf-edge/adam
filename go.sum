@@ -484,6 +484,8 @@ github.com/lf-edge/eve/api/go v0.0.0-20210219053903-a52e3a1e37f9 h1:81+YS5FLSbmX
 github.com/lf-edge/eve/api/go v0.0.0-20210219053903-a52e3a1e37f9/go.mod h1:DuAv0PyTTzmd3n25iHJ/Hx2SrbON4hf3I0oXfnUH4d8=
 github.com/lf-edge/eve/api/go v0.0.0-20210407113608-9d4a03cb9820 h1:Bq5yyEqQ89qgtyjWlElKODVQgqcj73mAFVXpjKquP54=
 github.com/lf-edge/eve/api/go v0.0.0-20210407113608-9d4a03cb9820/go.mod h1:DuAv0PyTTzmd3n25iHJ/Hx2SrbON4hf3I0oXfnUH4d8=
+github.com/lf-edge/eve/api/go v0.0.0-20210418030103-667a6fac1d0d h1:0DEGJd2Lfc/3Cc7X4AadOvUHW6IsZqx8DVuHZhKSTOc=
+github.com/lf-edge/eve/api/go v0.0.0-20210418030103-667a6fac1d0d/go.mod h1:DuAv0PyTTzmd3n25iHJ/Hx2SrbON4hf3I0oXfnUH4d8=
 github.com/magiconair/properties v1.8.0 h1:LLgXmsheXeRoUOBOjtwPQCWIYqM/LU1ayDtDePerRcY=
 github.com/magiconair/properties v1.8.0/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
 github.com/magiconair/properties v1.8.1/go.mod h1:PppfXfuXeibc/6YijjN8zIbojt8czPbwD3XqdrwzmxQ=
