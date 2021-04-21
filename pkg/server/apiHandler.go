@@ -168,11 +168,29 @@ func (h *apiHandler) probe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandler) ping(w http.ResponseWriter, r *http.Request) {
-	if devID := h.checkCertAndRecord(w, r); devID == nil {
+	cert := getClientCert(r)
+	u, err := h.manager.DeviceCheckCert(cert)
+	if err != nil {
+		log.Printf("error checking device cert: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	// now just return a 200
-	w.WriteHeader(http.StatusOK)
+	if u != nil {
+		h.recordClient(u, r)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	//process onboard cert before registration
+	onboardCert, _, err := h.manager.OnboardGet(cert.Subject.CommonName)
+	if err != nil || onboardCert == nil {
+		//here we have no onboard/device cert
+		log.Printf("unknown onboard/device cert: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+	log.Printf("unknown device cert, known onboard cert")
+	http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+	return
 }
 
 func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
