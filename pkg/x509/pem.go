@@ -27,3 +27,19 @@ func PemEncodeKey(key *rsa.PrivateKey) []byte {
 	copy(b, out.Bytes())
 	return b
 }
+
+//ParseCertFromBlock process pem certificates
+func ParseCertFromBlock(b []byte) ([]*x509.Certificate, error) {
+	var certsSlice []*x509.Certificate
+	for block, rest := pem.Decode(b); block != nil; block, rest = pem.Decode(rest) {
+		if block.Type == "CERTIFICATE" {
+			c, e := x509.ParseCertificates(block.Bytes)
+			if e != nil {
+				continue
+			}
+			certsSlice = append(certsSlice, c...)
+		}
+	}
+
+	return certsSlice, nil
+}

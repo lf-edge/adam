@@ -22,12 +22,16 @@ import (
 
 // Server an adam server
 type Server struct {
-	Port          string
-	Address       string
-	CertPath      string
-	KeyPath       string
-	DeviceManager driver.DeviceManager
-	CertRefresh   int
+	Port            string
+	Address         string
+	CertPath        string
+	KeyPath         string
+	SigningCertPath string
+	SigningKeyPath  string
+	EncryptCertPath string
+	EncryptKeyPath  string
+	DeviceManager   driver.DeviceManager
+	CertRefresh     int
 	// WebDir path to webfiles to serve. If empty, use embedded
 	WebDir string
 }
@@ -42,6 +46,28 @@ func (s *Server) Start() {
 	_, err = os.Stat(s.KeyPath)
 	if err != nil {
 		log.Fatalf("server key %s does not exist", s.KeyPath)
+	}
+	//we need certificates to work under apiV2
+	hasApiV2 := true
+	_, err = os.Stat(s.SigningCertPath)
+	if err != nil {
+		hasApiV2 = false
+		log.Printf("signing cert %s does not exist", s.CertPath)
+	}
+	_, err = os.Stat(s.SigningKeyPath)
+	if hasApiV2 && err != nil {
+		hasApiV2 = false
+		log.Printf("signing key %s does not exist", s.KeyPath)
+	}
+	_, err = os.Stat(s.EncryptCertPath)
+	if hasApiV2 && err != nil {
+		hasApiV2 = false
+		log.Printf("encrypt cert %s does not exist", s.CertPath)
+	}
+	_, err = os.Stat(s.EncryptKeyPath)
+	if hasApiV2 && err != nil {
+		hasApiV2 = false
+		log.Printf("encrypt key %s does not exist", s.KeyPath)
 	}
 
 	if s.DeviceManager == nil {
@@ -60,12 +86,14 @@ func (s *Server) Start() {
 	// to pass logs and info around
 	logChannel := make(chan []byte)
 	infoChannel := make(chan []byte)
+	metricChannel := make(chan []byte)
 
 	// edgedevice endpoint - fully compliant with EVE open API
 	api := &apiHandler{
-		manager:     s.DeviceManager,
-		logChannel:  logChannel,
-		infoChannel: infoChannel,
+		manager:       s.DeviceManager,
+		logChannel:    logChannel,
+		infoChannel:   infoChannel,
+		metricChannel: metricChannel,
 	}
 
 	router.HandleFunc("/probe", api.probe).Methods("GET")
@@ -83,6 +111,38 @@ func (s *Server) Start() {
 	ed.HandleFunc("/newlogs", api.newLogs).Methods("POST")
 	ed.HandleFunc("/apps/instances/id/{uuid}/logs", api.appLogs).Methods("POST")
 	ed.HandleFunc("/apps/instanceid/id/{uuid}/newlogs", api.newAppLogs).Methods("POST")
+
+	if hasApiV2 {
+		apiv2 := &apiHandlerv2{
+			manager:         s.DeviceManager,
+			logChannel:      logChannel,
+			infoChannel:     infoChannel,
+			metricChannel:   metricChannel,
+			signingCertPath: s.SigningCertPath,
+			signingKeyPath:  s.SigningKeyPath,
+			encryptCertPath: s.EncryptCertPath,
+			encryptKeyPath:  s.EncryptKeyPath,
+		}
+
+		edv2 := router.PathPrefix("/api/v2/edgedevice").Subrouter()
+		edv2.Use(ensureMTLS)
+		edv2.Use(logRequest)
+		edv2.HandleFunc("/certs", apiv2.certs).Methods("GET")
+		edv2.HandleFunc("/certs", apiv2.certs).Methods("POST")
+		edv2.HandleFunc("/register", apiv2.register).Methods("POST")
+		edv2.HandleFunc("/ping", apiv2.ping).Methods("GET")
+		edv2.HandleFunc("/config", apiv2.config).Methods("GET")
+		edv2.HandleFunc("/config", apiv2.configPost).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/config", apiv2.config).Methods("GET")
+		edv2.HandleFunc("/id/{uuid}/config", apiv2.configPost).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/attest", apiv2.attest).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/info", apiv2.info).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/metrics", apiv2.metrics).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/logs", apiv2.logs).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/newlogs", apiv2.newLogs).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/apps/instances/id/{appuuid}/logs", apiv2.appLogs).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/apps/instanceid/{appuuid}/newlogs", apiv2.newAppLogs).Methods("POST")
+	}
 
 	// admin endpoint - custom, used to manage adam
 	admin := &adminHandler{
@@ -119,6 +179,7 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device/{uuid}/logs", admin.deviceLogsGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/info", admin.deviceInfoGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/requests", admin.deviceRequestsGet).Methods("GET")
+	ad.HandleFunc("/device/{uuid}/certs", admin.deviceCertsGet).Methods("GET")
 	ad.HandleFunc("/device", admin.deviceAdd).Methods("POST")
 	ad.HandleFunc("/device", admin.deviceClear).Methods("DELETE")
 	ad.HandleFunc("/device/{uuid}", admin.deviceRemove).Methods("DELETE")

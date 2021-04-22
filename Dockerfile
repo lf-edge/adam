@@ -14,6 +14,7 @@ ENV GO111MODULE=on
 
 RUN mkdir -p /adam/src && mkdir -p /adam/bin
 WORKDIR /adam/src
+RUN go install github.com/go-swagger/go-swagger/cmd/swagger@v0.27.0
 COPY go.mod .
 COPY go.sum .
 RUN go mod download
@@ -28,7 +29,6 @@ ARG GOOS=linux
 RUN go build -o /out/bin/adam main.go
 COPY scripts/ /out/bin/
 COPY samples/ /out/adam/
-RUN go install github.com/go-swagger/go-swagger/cmd/swagger
 RUN mkdir /adam/swaggerui
 RUN /root/go/bin/swagger generate spec -o /adam/swaggerui/swagger.json
 

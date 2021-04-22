@@ -372,6 +372,30 @@ func (d *DeviceManager) WriteMetrics(u uuid.UUID, b []byte) error {
 	return nil
 }
 
+// WriteCerts write an attestation certs information
+func (d *DeviceManager) WriteCerts(u uuid.UUID, b []byte) error {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	if len(b) < 1 {
+		return fmt.Errorf("empty configuration")
+	}
+	dev.ATtestCerts = b
+	return nil
+}
+
+// GetCerts retrieve the attest certs for a particular device
+func (d *DeviceManager) GetCerts(u uuid.UUID) ([]byte, error) {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	return dev.ATtestCerts, nil
+}
+
 // GetConfig retrieve the config for a particular device
 func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 	// look up the device by uuid

@@ -29,11 +29,14 @@ const (
 var (
 	serverCert      string
 	serverKey       string
+	signingCert     string
+	signingKey      string
+	encryptCert     string
+	encryptKey      string
 	certCN          string
 	certHosts       string
 	port            string
 	hostIP          string
-	clientCertPath  string
 	certRefresh     int
 	maxLogSize      int
 	maxInfoSize     int
@@ -85,6 +88,12 @@ var serverCmd = &cobra.Command{
 		serverENVCert, serverENVCertProvided := os.LookupEnv("SERVER_CERT")
 		serverENVKey, serverENVKeyProvided := os.LookupEnv("SERVER_KEY")
 
+		signingENVCert, signingENVCertProvided := os.LookupEnv("SIGNING_CERT")
+		signingENVKey, signingENVKeyProvided := os.LookupEnv("SIGNING_KEY")
+
+		encryptENVCert, encryptENVCertProvided := os.LookupEnv("ENCRYPT_CERT")
+		encryptENVKey, encryptENVKeyProvided := os.LookupEnv("ENCRYPT_KEY")
+
 		// get the directory
 		certDir := path.Dir(serverCert)
 		keyDir := path.Dir(serverKey)
@@ -96,6 +105,8 @@ var serverCmd = &cobra.Command{
 			log.Fatalf("failed to make key directory %s: %v", keyDir, err)
 		}
 
+		// only do it if the files do not exist
+		certForce := false
 		var catls tls.Certificate
 		if serverENVCertProvided && serverENVKeyProvided {
 			catls, err = tls.X509KeyPair([]byte(serverENVCert), []byte(serverENVKey))
@@ -114,8 +125,6 @@ var serverCmd = &cobra.Command{
 				if certCN == certHosts && certCN == "" {
 					log.Fatalf("must specify at least one hostname/IP or CN")
 				}
-				// only do it if the files do not exist
-				certForce := false
 				if err := ax509.GenerateAndWrite(certCN, certHosts, serverCert, serverKey, certForce); err != nil {
 					log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", serverKey, serverCert)
 				} else {
@@ -152,22 +161,80 @@ var serverCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error writing root-certificate.pem file: %v", err)
 		}
+		if signingENVCertProvided && signingENVKeyProvided {
+			_, err = tls.X509KeyPair([]byte(signingENVCert), []byte(signingENVKey))
+			if err != nil {
+				log.Fatalf("error loading signing cert and key from environment variables: %v", err)
+			}
+			if err = ioutil.WriteFile(signingCert, []byte(signingENVCert), 0644); err != nil {
+				log.Fatal(err)
+			}
+			if err = ioutil.WriteFile(signingKey, []byte(signingENVKey), 0600); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			// if we were asked to autoCert, then we do it
+			if autoCert {
+				if certCN == certHosts && certCN == "" {
+					log.Fatalf("must specify at least one hostname/IP or CN")
+				}
+				if err := ax509.GenerateAndWrite(certCN, certHosts, signingCert, signingKey, certForce); err != nil {
+					log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", signingKey, signingCert)
+				} else {
+					log.Printf("saved new signing certificate to %s", signingCert)
+					log.Printf("saved new signing key to %s", signingKey)
+				}
+			}
 
-		// FIXME: this is going away as part of fixing https://github.com/lf-edge/adam/issues/16
-		err = ioutil.WriteFile(path.Join(configDir, "Force-API-V1"), []byte{}, 0644)
-		if err != nil {
-			log.Fatalf("error writing Force-API-V1 file: %v", err)
+			catls, err = tls.LoadX509KeyPair(signingCert, signingKey)
+			if err != nil {
+				log.Printf("Will use APIv1: error loading signing cert %s and signing key %s: %v", signingCert, signingKey, err)
+			}
+		}
+		if encryptENVCertProvided && encryptENVKeyProvided {
+			_, err = tls.X509KeyPair([]byte(encryptENVCert), []byte(encryptENVKey))
+			if err != nil {
+				log.Fatalf("error loading encrypt cert and key from environment variables: %v", err)
+			}
+			if err = ioutil.WriteFile(encryptCert, []byte(encryptENVCert), 0644); err != nil {
+				log.Fatal(err)
+			}
+			if err = ioutil.WriteFile(encryptKey, []byte(encryptENVKey), 0600); err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			// if we were asked to autoCert, then we do it
+			if autoCert {
+				if certCN == certHosts && certCN == "" {
+					log.Fatalf("must specify at least one hostname/IP or CN")
+				}
+				if err := ax509.GenerateAndWrite(certCN, certHosts, encryptCert, encryptKey, certForce); err != nil {
+					log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", encryptKey, encryptCert)
+				} else {
+					log.Printf("saved new encrypt certificate to %s", encryptCert)
+					log.Printf("saved new encrypt key to %s", encryptKey)
+				}
+			}
+
+			catls, err = tls.LoadX509KeyPair(encryptCert, encryptKey)
+			if err != nil {
+				log.Printf("Will use APIv1: error loading encrypt cert %s and encrypt key %s: %v", encryptCert, encryptKey, err)
+			}
 		}
 		log.Printf("EVE-compatible configuration directory output to %s", configDir)
 
 		s := &server.Server{
-			Port:          port,
-			Address:       hostIP,
-			CertPath:      serverCert,
-			KeyPath:       serverKey,
-			DeviceManager: mgr,
-			CertRefresh:   certRefresh,
-			WebDir:        localWebFiles,
+			Port:            port,
+			Address:         hostIP,
+			CertPath:        serverCert,
+			KeyPath:         serverKey,
+			SigningCertPath: signingCert,
+			SigningKeyPath:  signingKey,
+			EncryptCertPath: encryptCert,
+			EncryptKeyPath:  encryptKey,
+			DeviceManager:   mgr,
+			CertRefresh:     certRefresh,
+			WebDir:          localWebFiles,
 		}
 		s.Start()
 	},
@@ -191,6 +258,10 @@ func serverInit() {
 	serverCmd.Flags().StringVar(&hostIP, "ip", defaultIP, "IP address on which to listen")
 	serverCmd.Flags().StringVar(&serverCert, "server-cert", path.Join(defaultDatabaseURL, serverCertFilename), "path to server certificate")
 	serverCmd.Flags().StringVar(&serverKey, "server-key", path.Join(defaultDatabaseURL, serverKeyFilename), "path to server key")
+	serverCmd.Flags().StringVar(&signingCert, "signing-cert", path.Join(defaultDatabaseURL, signingCertFilename), "path to signing certificate")
+	serverCmd.Flags().StringVar(&signingKey, "signing-key", path.Join(defaultDatabaseURL, signingKeyFilename), "path to signing key")
+	serverCmd.Flags().StringVar(&encryptCert, "encrypt-cert", path.Join(defaultDatabaseURL, encryptCertFilename), "path to encrypt certificate")
+	serverCmd.Flags().StringVar(&encryptKey, "encrypt-key", path.Join(defaultDatabaseURL, encryptKeyFilename), "path to encrypt key")
 	serverCmd.Flags().StringVar(&databaseURL, "db-url", defaultDatabaseURL, "path to directory where we will store and find device information, including onboarding certificates, device certificates, config, logs and metrics. See the readme for more details.")
 	serverCmd.Flags().StringVar(&configDir, "conf-dir", defaultConfigDir, "path to directory where running server will output runtime configuration files that can be fed into EVE")
 	serverCmd.Flags().BoolVar(&autoCert, "auto-cert", false, "whether to automatically generate certs, if they do not exist; if they do exist, this will be ignored")

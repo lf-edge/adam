@@ -4,46 +4,24 @@
 package server
 
 import (
-	"bufio"
-	"compress/gzip"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
-	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/info"
-	"github.com/lf-edge/eve/api/go/logs"
-	"github.com/lf-edge/eve/api/go/metrics"
-	"github.com/lf-edge/eve/api/go/register"
 	uuid "github.com/satori/go.uuid"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
-type ApiRequest struct {
-	Timestamp time.Time `json:"timestamp"`
-	UUID      uuid.UUID `json:"uuid,omitempty"`
-	ClientIP  string    `json:"client-ip"`
-	Forwarded string    `json:"forwarded,omitempty"`
-	Method    string    `json:"method"`
-	URL       string    `json:"url"`
-}
-
 type apiHandler struct {
-	manager     driver.DeviceManager
-	logChannel  chan []byte
-	infoChannel chan []byte
+	manager       driver.DeviceManager
+	logChannel    chan []byte
+	infoChannel   chan []byte
+	metricChannel chan []byte
 }
 
 // GetUser godoc
@@ -104,62 +82,13 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	msg := &register.ZRegisterMsg{}
-	if err := proto.Unmarshal(b, msg); err != nil {
-		log.Printf("Failed to parse register message: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-	serial := msg.Serial
-	err = h.manager.OnboardCheck(onboardCert, serial)
+	status, err := registerProcess(h.manager, b, onboardCert)
 	if err != nil {
-		_, invalidCert := err.(*common.InvalidCertError)
-		_, invalidSerial := err.(*common.InvalidSerialError)
-		_, usedSerial := err.(*common.UsedSerialError)
-		switch {
-		case invalidCert, invalidSerial:
-			log.Printf("failed authentication %v", err)
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-		case usedSerial:
-			log.Printf("used serial %v", err)
-			http.Error(w, err.Error(), http.StatusConflict)
-		default:
-			log.Printf("Error checking onboard cert and serial: %v", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		}
+		log.Printf("Failed in registerProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	// the passed cert is base64 encoded PEM. So we need to base64 decode it, and then extract the DER bytes
-	// register the new device cert
-	certPemBytes, err := base64.StdEncoding.DecodeString(string(msg.PemCert))
-	if err != nil {
-		log.Printf("error base64-decoding device certficate from registration: %v", err)
-		http.Error(w, "error base64-decoding device certificate", http.StatusBadRequest)
-		return
-	}
-
-	certDer, _ := pem.Decode(certPemBytes)
-	deviceCert, err := x509.ParseCertificate(certDer.Bytes)
-	if err != nil {
-		log.Printf("unable to convert device cert data from message to x509 certificate: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-	// generate a new uuid
-	unew, err := uuid.NewV4()
-	if err != nil {
-		log.Printf("error generating a new device UUID: %v", err)
-		http.Error(w, fmt.Sprintf("error generating a new device UUID: %v", err), http.StatusBadRequest)
-		return
-	}
-	// we do not keep the uuid or send it back; perhaps a future version of the API will support it
-	if err := h.manager.DeviceRegister(unew, deviceCert, onboardCert, serial, common.CreateBaseConfig(unew)); err != nil {
-		log.Printf("error registering new device: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-	// send back a 201
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 }
 
 func (h *apiHandler) probe(w http.ResponseWriter, r *http.Request) {
@@ -180,46 +109,31 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	conf, err := h.manager.GetConfig(*u)
+	cfg, err := h.manager.GetConfig(*u)
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-
-	// convert config into a protobuf
-	var msg config.EdgeDevConfig
-	if err := protojson.Unmarshal(conf, &msg); err != nil {
-		log.Printf("error reading device config: %v", err)
+	configRequest, err := h.getClientConfigRequest(r)
+	if err != nil {
+		log.Printf("error getting config request: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	response := &config.ConfigResponse{}
-
-	hash := sha256.New()
-	common.ComputeConfigElementSha(hash, &msg)
-	configHash := hash.Sum(nil)
-
-	response.Config = &msg
-	response.ConfigHash = base64.URLEncoding.EncodeToString(configHash)
-
-	configRequest, err := getClientConfigRequest(r)
+	data, code, err := configProcess(configRequest, cfg)
 	if err != nil {
-		log.Printf("error getting config request: %v", err)
-	} else {
-		//compare received config hash with current
-		if strings.Compare(configRequest.ConfigHash, response.ConfigHash) == 0 {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
+		log.Println(err)
+		http.Error(w, http.StatusText(code), code)
+		return
 	}
-	out, err := proto.Marshal(response)
-	if err != nil {
-		log.Printf("error converting config to byte message: %v", err)
+	if code == http.StatusNotModified {
+		w.WriteHeader(code)
+		return
 	}
 	w.Header().Add(contentType, mimeProto)
-	w.WriteHeader(http.StatusOK)
-	w.Write(out)
+	w.WriteHeader(code)
+	w.Write(data)
 }
 
 func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +141,7 @@ func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	config, err := h.manager.GetConfig(*u)
+	cfg, err := h.manager.GetConfig(*u)
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -235,7 +149,7 @@ func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Add(contentType, mimeProto)
 	w.WriteHeader(http.StatusOK)
-	w.Write(config)
+	w.Write(cfg)
 }
 
 func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
@@ -249,30 +163,13 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	msg := &info.ZInfoMsg{}
-	if err := proto.Unmarshal(b, msg); err != nil {
-		log.Printf("Failed to parse info message: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-	var entryBytes []byte
-	if entryBytes, err = protojson.Marshal(msg); err != nil {
-		log.Printf("Failed to marshal info message: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-	select {
-	case h.infoChannel <- entryBytes:
-	default:
-	}
-	err = h.manager.WriteInfo(*u, entryBytes)
+	status, err := infoProcess(h.manager, h.infoChannel, *u, b)
 	if err != nil {
-		log.Printf("Failed to write info message: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Printf("Failed to infoProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	// send back a 201
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 }
 
 func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
@@ -286,26 +183,13 @@ func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	msg := &metrics.ZMetricMsg{}
-	if err := proto.Unmarshal(b, msg); err != nil {
-		log.Printf("Failed to parse metrics message: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-	var entryBytes []byte
-	if entryBytes, err = protojson.Marshal(msg); err != nil {
-		log.Printf("Failed to marshal metrics message: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-	err = h.manager.WriteMetrics(*u, entryBytes)
+	status, err := metricProcess(h.manager, h.metricChannel, *u, b)
 	if err != nil {
-		log.Printf("Failed to write metrics message: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Printf("Failed to metricProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	// send back a 201
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 }
 
 func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
@@ -319,40 +203,14 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	msg := &logs.LogBundle{}
-	if err := proto.Unmarshal(b, msg); err != nil {
-		log.Printf("Failed to parse logbundle message: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+
+	status, err := logsProcess(h.manager, h.logChannel, *u, b)
+	if err != nil {
+		log.Printf("Failed to logsProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	eveVersion := msg.GetEveVersion()
-	image := msg.GetImage()
-	for _, entry := range msg.GetLog() {
-		entry := &common.FullLogEntry{
-			LogEntry:   entry,
-			Image:      image,
-			EveVersion: eveVersion,
-		}
-		var entryBytes []byte
-		if entryBytes, err = entry.Json(); err != nil {
-			log.Printf("Failed to marshal FullLogEntry message: %v", err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		select {
-		case h.logChannel <- entryBytes:
-		default:
-		}
-		err = h.manager.WriteLogs(*u, entryBytes)
-		if err != nil {
-			log.Printf("Failed to write log message: %v", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// send back a 201
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 }
 
 func (h *apiHandler) newLogs(w http.ResponseWriter, r *http.Request) {
@@ -360,49 +218,14 @@ func (h *apiHandler) newLogs(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	gr, err := gzip.NewReader(r.Body)
+
+	status, err := newLogsProcess(h.manager, h.logChannel, *u, r.Body)
 	if err != nil {
-		log.Printf("error gzip.NewReader: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		log.Printf("Failed to logsProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	msg := &logs.LogBundle{}
-	if err := json.Unmarshal([]byte(gr.Comment), msg); err != nil {
-		log.Printf("Failed to parse logbundle from Comment: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-	scanner := bufio.NewScanner(gr)
-	for scanner.Scan() {
-		le := &logs.LogEntry{}
-		if err := json.Unmarshal(scanner.Bytes(), le); err != nil {
-			log.Printf("Failed to parse logentry message: %v", err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		entry := &common.FullLogEntry{
-			LogEntry:   le,
-			Image:      msg.GetImage(),
-			EveVersion: msg.GetEveVersion(),
-		}
-		var entryBytes []byte
-		if entryBytes, err = entry.Json(); err != nil {
-			log.Printf("Failed to marshal FullLogEntry message: %v", err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		select {
-		case h.logChannel <- entryBytes:
-		default:
-		}
-		err = h.manager.WriteLogs(*u, entryBytes)
-		if err != nil {
-			log.Printf("Failed to write logbundle message: %v", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-	}
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 }
 
 func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
@@ -421,32 +244,13 @@ func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	msg := &logs.AppInstanceLogBundle{}
-	if err := proto.Unmarshal(b, msg); err != nil {
-		log.Printf("Failed to parse appinstancelogbundle message: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	status, err := appLogsProcess(h.manager, *u, uid, b)
+	if err != nil {
+		log.Printf("Failed to logsProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	for _, le := range msg.Log {
-		var b []byte
-		if b, err = protojson.Marshal(le); err != nil {
-			log.Printf("Failed to marshal LogEntry message: %v", err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		select {
-		case h.logChannel <- b:
-		default:
-		}
-		err = h.manager.WriteAppInstanceLogs(uid, *u, b)
-		if err != nil {
-			log.Printf("Failed to write appinstancelogbundle message: %v", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-	}
-	// send back a 201
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 }
 
 func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
@@ -459,43 +263,17 @@ func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	gr, err := gzip.NewReader(r.Body)
+	status, err := newAppLogsProcess(h.manager, *u, uid, r.Body)
 	if err != nil {
-		log.Printf("error gzip.NewReader: %v", err)
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		log.Printf("Failed to logsProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
-	scanner := bufio.NewScanner(gr)
-	for scanner.Scan() {
-		le := &logs.LogEntry{}
-		if err := json.Unmarshal(scanner.Bytes(), le); err != nil {
-			log.Printf("Failed to parse logentry message: %v", err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		var b []byte
-		if b, err = protojson.Marshal(le); err != nil {
-			log.Printf("Failed to marshal LogEntry message: %v", err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		select {
-		case h.logChannel <- b:
-		default:
-		}
-		err = h.manager.WriteAppInstanceLogs(uid, *u, b)
-		if err != nil {
-			log.Printf("Failed to write appinstancelogbundle message: %v", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-	}
-	// send back a 201
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(status)
 }
 
 // retrieve the config request
-func getClientConfigRequest(r *http.Request) (*config.ConfigRequest, error) {
+func (h *apiHandler) getClientConfigRequest(r *http.Request) (*config.ConfigRequest, error) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Body read failed: %v", err)

@@ -29,24 +29,25 @@ const (
 	// DeviceCertFilename the location in the device-specific directory that contains the device certificate
 	DeviceCertFilename = "device-certificate.pem"
 	// DeviceOnboardFilename the location in the device-specific directory that contains the onboarding certificate used
-	DeviceOnboardFilename = "onboard-certificate.pem"
-	deviceConfigFilename  = "config.json"
-	deviceSerialFilename  = "serial.txt"
-	onboardCertFilename   = "cert.pem"
-	onboardCertSerials    = "onboard-serials.txt"
-	logDir                = "logs"
-	metricsDir            = "metrics"
-	infoDir               = "info"
-	deviceDir             = "device"
-	onboardDir            = "onboard"
-	requestsDir           = "requests"
-	MB                    = common.MB
-	maxLogSizeFile        = 100 * MB
-	maxInfoSizeFile       = 100 * MB
-	maxMetricSizeFile     = 100 * MB
-	maxRequestsSizeFile   = 100 * MB
-	maxAppLogsSizeFile    = 100 * MB
-	fileSplit             = 10
+	DeviceOnboardFilename     = "onboard-certificate.pem"
+	deviceConfigFilename      = "config.json"
+	deviceAttestCertsFilename = "certs.json"
+	deviceSerialFilename      = "serial.txt"
+	onboardCertFilename       = "cert.pem"
+	onboardCertSerials        = "onboard-serials.txt"
+	logDir                    = "logs"
+	metricsDir                = "metrics"
+	infoDir                   = "info"
+	deviceDir                 = "device"
+	onboardDir                = "onboard"
+	requestsDir               = "requests"
+	MB                        = common.MB
+	maxLogSizeFile            = 100 * MB
+	maxInfoSizeFile           = 100 * MB
+	maxMetricSizeFile         = 100 * MB
+	maxRequestsSizeFile       = 100 * MB
+	maxAppLogsSizeFile        = 100 * MB
+	fileSplit                 = 10
 )
 
 type ManagedFile struct {
@@ -730,6 +731,41 @@ func (d *DeviceManager) WriteMetrics(u uuid.UUID, b []byte) error {
 	}
 	dev := d.devices[u]
 	return dev.AddMetrics(b)
+}
+
+// WriteCerts write an attestation certs information
+func (d *DeviceManager) WriteCerts(u uuid.UUID, b []byte) error {
+	// refresh certs from filesystem, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return fmt.Errorf("unable to refresh certs from filesystem: %v", err)
+	}
+	// look up the device by uuid
+	_, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	if len(b) < 1 {
+		return fmt.Errorf("empty configuration")
+	}
+	// save the base configuration
+	err = d.writeJSONFile(u, "", deviceAttestCertsFilename, b)
+	if err != nil {
+		return fmt.Errorf("error saving attestation to %s: %v", deviceAttestCertsFilename, err)
+	}
+	return nil
+}
+
+// GetCerts retrieve the attest certs for a particular device
+func (d *DeviceManager) GetCerts(u uuid.UUID) ([]byte, error) {
+	// read the config from disk
+	fullAttestPath := path.Join(d.getDevicePath(u), deviceAttestCertsFilename)
+	b, err := ioutil.ReadFile(fullAttestPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not read certificates from %s: %v", fullAttestPath, err)
+	}
+
+	return b, nil
 }
 
 // GetConfig retrieve the config for a particular device

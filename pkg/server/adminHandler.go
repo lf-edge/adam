@@ -433,3 +433,27 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 		}
 	}
 }
+
+func (h *adminHandler) deviceCertsGet(w http.ResponseWriter, r *http.Request) {
+	u := mux.Vars(r)["uuid"]
+	uid, err := uuid.FromString(u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	deviceAttest, err := h.manager.GetCerts(uid)
+	_, isNotFound := err.(*common.NotFoundError)
+	switch {
+	case err != nil && isNotFound:
+		log.Printf("deviceCertsGet: %v", err)
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	case err != nil:
+		log.Printf("deviceCertsGet: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	case deviceAttest == nil:
+		http.Error(w, "found device information, but certs was empty", http.StatusInternalServerError)
+	default:
+		w.WriteHeader(http.StatusOK)
+		w.Write(deviceAttest)
+	}
+}

@@ -8,18 +8,20 @@ import (
 )
 
 const (
-	serverCertFilename = "server.pem"
-	serverKeyFilename  = "server-key.pem"
-	defaultDatabaseURL = "./run/adam"
-	defaultConfigDir   = "./run/config"
-	jsonContentType    = "application/json"
-	textContentType    = "text/plain"
+	serverCertFilename  = "server.pem"
+	serverKeyFilename   = "server-key.pem"
+	signingCertFilename = "signing.pem"
+	signingKeyFilename  = "signing-key.pem"
+	encryptCertFilename = "encrypt.pem"
+	encryptKeyFilename  = "encrypt-key.pem"
+	defaultDatabaseURL  = "./run/adam"
+	defaultConfigDir    = "./run/config"
+	jsonContentType     = "application/json"
 )
 
 var (
 	cn          string
 	certPath    string
-	keyPath     string
 	hosts       string
 	force       bool
 	databaseURL string

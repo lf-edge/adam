@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/lf-edge/eve/api/go/certs"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/logs"
 
@@ -37,22 +38,34 @@ type BigData interface {
 }
 
 type DeviceStorage struct {
-	Cert       *x509.Certificate
-	Info       BigData
-	Metrics    BigData
-	Logs       BigData
-	Requests   BigData
-	AppLogs    map[uuid.UUID]BigData
-	CurrentLog int
-	Config     []byte
-	Serial     string
-	Onboard    *x509.Certificate
+	Cert        *x509.Certificate
+	Info        BigData
+	Metrics     BigData
+	Logs        BigData
+	Requests    BigData
+	Certs       BigData
+	AppLogs     map[uuid.UUID]BigData
+	CurrentLog  int
+	Config      []byte
+	ATtestCerts []byte
+	Serial      string
+	Onboard     *x509.Certificate
+}
+
+type FullCertsEntry struct {
+	*logs.LogEntry
+	Image      string `json:"image,omitempty"`      // SW image the log got emitted from
+	EveVersion string `json:"eveVersion,omitempty"` // EVE software version
 }
 
 type FullLogEntry struct {
 	*logs.LogEntry
 	Image      string `json:"image,omitempty"`      // SW image the log got emitted from
 	EveVersion string `json:"eveVersion,omitempty"` // EVE software version
+}
+
+type Zcerts struct {
+	Certs []*certs.ZCert `json:"certs,omitempty"` // EVE device certs
 }
 
 // Bytes convenience to convert to json bytes
