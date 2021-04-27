@@ -32,6 +32,7 @@ const (
 	deviceOnboardCertsHash = "DEVICE_ONBOARD_CERTS" // UUID -> string (certificate PEM)
 	deviceCertsHash        = "DEVICE_CERTS"         // UUID -> string (certificate PEM)
 	deviceConfigsHash      = "DEVICE_CONFIGS"       // UUID -> json (EVE config json representation)
+	deviceAttestCertsHash  = "DEVICE_ATTEST_CERTS"  //UUID -> json (EVE attest certs request json representation)
 
 	// Logs, info and metrics are managed by Redis streams named after device UUID as in:
 	//    LOGS_EVE_<UUID>
@@ -275,6 +276,7 @@ func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 		{deviceCertsHash, k},
 		{deviceConfigsHash, k},
 		{deviceOnboardCertsHash, k},
+		{deviceAttestCertsHash, k},
 		{deviceSerialsHash, k},
 		{deviceInfoStream + k},
 		{deviceLogsStream + k},
@@ -303,6 +305,7 @@ func (d *DeviceManager) DeviceClear() error {
 		{deviceConfigsHash},
 		{deviceSerialsHash},
 		{deviceCertsHash},
+		{deviceAttestCertsHash},
 		{deviceOnboardCertsHash}}
 
 	for u, dev := range d.devices {
@@ -569,6 +572,47 @@ func (d *DeviceManager) WriteMetrics(u uuid.UUID, b []byte) error {
 		return fmt.Errorf("device not found: %s", u)
 	}
 	return dev.AddMetrics(b)
+}
+
+// WriteCerts write an attestation certs information
+func (d *DeviceManager) WriteCerts(u uuid.UUID, b []byte) error {
+	// pre-flight checks to bail early
+	if len(b) < 1 {
+		return fmt.Errorf("empty configuration")
+	}
+
+	// refresh certs from Redis, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
+	}
+	// look up the device by uuid
+	_, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+
+	if _, err = d.client.HSet(deviceAttestCertsHash, u.String(), string(b)).Result(); err == nil {
+		_, err = d.client.Save().Result()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to save attest certs for %s: %v", u.String(), err)
+	}
+	return nil
+}
+
+// GetCerts retrieve the attest certs for a particular device
+func (d *DeviceManager) GetCerts(u uuid.UUID) ([]byte, error) {
+	// hold our config
+	var b []byte
+	data, err := d.client.HGet(deviceAttestCertsHash, u.String()).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attest for %s: %v", u.String(), err)
+	} else {
+		b = []byte(data)
+	}
+
+	return b, nil
 }
 
 // GetConfig retrieve the config for a particular device

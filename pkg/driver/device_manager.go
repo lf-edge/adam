@@ -63,6 +63,8 @@ type DeviceManager interface {
 	DeviceList() ([]*uuid.UUID, error)
 	// DeviceRegister register a new device certificate, including the onboarding certificate used to register it and its serial
 	DeviceRegister(uuid.UUID, *x509.Certificate, *x509.Certificate, string, []byte) error
+	// WriteCerts write an attestation certs information
+	WriteCerts(uuid.UUID, []byte) error
 	// WriteInfo write an information message
 	WriteInfo(uuid.UUID, []byte) error
 	// WriteLogs write log messages
@@ -83,4 +85,6 @@ type DeviceManager interface {
 	GetInfoReader(u uuid.UUID) (io.Reader, error)
 	// GetRequestsReader get the request logs for a given uuid
 	GetRequestsReader(u uuid.UUID) (io.Reader, error)
+	// GetCerts retrieve the attest certs for a particular device
+	GetCerts(uid uuid.UUID) ([]byte, error)
 }
