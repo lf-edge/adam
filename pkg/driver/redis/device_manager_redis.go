@@ -17,10 +17,12 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/lf-edge/adam/pkg/driver/common"
-	ax "github.com/lf-edge/adam/pkg/x509"
-	uuid "github.com/satori/go.uuid"
 	"github.com/vmihailenco/msgpack/v4"
 	"google.golang.org/protobuf/proto"
+
+	ax "github.com/lf-edge/adam/pkg/x509"
+	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
@@ -950,4 +952,15 @@ func (d *DeviceManager) writeCert(cert []byte, hash string, uuid string, force b
 
 func mkStreamEntry(body []byte) map[string]interface{} {
 	return map[string]interface{}{"version": "1", "object": string(body)}
+}
+
+// GetUUID get UuidResponse for device by uuid
+func (d *DeviceManager) GetUUID(u uuid.UUID) (*eveuuid.UuidResponse, error) {
+	// check that the device actually exists
+	_, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	ur := &eveuuid.UuidResponse{Uuid: u.String()}
+	return ur, nil
 }

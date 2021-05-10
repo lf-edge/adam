@@ -253,6 +253,23 @@ func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(status)
 }
 
+func (h *apiHandler) uuid(w http.ResponseWriter, r *http.Request) {
+	u := h.checkCertAndRecord(w, r)
+	uuidResponce, err := h.manager.GetUUID(*u)
+	if err != nil {
+		log.Printf("error getting device uuidResponce: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	out, err := proto.Marshal(uuidResponce)
+	if err != nil {
+		log.Printf("error converting uuidResponce to byte message: %v", err)
+	}
+	w.Header().Add(contentType, mimeProto)
+	w.WriteHeader(http.StatusOK)
+	w.Write(out)
+}
+
 func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
 	u := h.checkCertAndRecord(w, r)
 	if u == nil {

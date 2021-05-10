@@ -111,6 +111,7 @@ func (s *Server) Start() {
 	ed.HandleFunc("/newlogs", api.newLogs).Methods("POST")
 	ed.HandleFunc("/apps/instances/id/{uuid}/logs", api.appLogs).Methods("POST")
 	ed.HandleFunc("/apps/instanceid/id/{uuid}/newlogs", api.newAppLogs).Methods("POST")
+	ed.HandleFunc("/uuid", api.uuid).Methods("POST")
 
 	if hasApiV2 {
 		apiv2 := &apiHandlerv2{

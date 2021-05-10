@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/lf-edge/adam/pkg/driver/common"
+	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -477,4 +478,15 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
 	return dev.Requests.Reader()
+}
+
+// GetUUID get UuidResponse for device by uuid
+func (d *DeviceManager) GetUUID(u uuid.UUID) (*eveuuid.UuidResponse, error) {
+	// check that the device actually exists
+	_, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	ur := &eveuuid.UuidResponse{Uuid: u.String()}
+	return ur, nil
 }

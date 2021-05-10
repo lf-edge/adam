@@ -20,9 +20,11 @@ import (
 
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/adam/pkg/util"
-	ax "github.com/lf-edge/adam/pkg/x509"
-	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
+
+	ax "github.com/lf-edge/adam/pkg/x509"
+	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 const (
@@ -1114,4 +1116,14 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
 	return d.devices[u].Requests.Reader()
+}
+
+// GetUUID get UuidResponse for device by uuid
+func (d *DeviceManager) GetUUID(u uuid.UUID) (*eveuuid.UuidResponse, error) {
+	// check that the device actually exists
+	if !d.deviceExists(u) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	ur := &eveuuid.UuidResponse{Uuid: u.String()}
+	return ur, nil
 }
