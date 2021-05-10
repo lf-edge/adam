@@ -14,11 +14,11 @@ import (
 
 const (
 	MB                    = common.MB
-	maxLogSizeMemory      = 10 * MB
-	maxInfoSizeMemory     = 10 * MB
-	maxMetricSizeMemory   = 10 * MB
-	maxRequestsSizeMemory = 10 * MB
-	maxAppLogsSizeMemory  = 10 * MB
+	maxLogSizeMemory      = 100 * MB
+	maxInfoSizeMemory     = 100 * MB
+	maxMetricSizeMemory   = 100 * MB
+	maxRequestsSizeMemory = 100 * MB
+	maxAppLogsSizeMemory  = 100 * MB
 )
 
 // DeviceManager implementation of DeviceManager with an ephemeral memory backing store
