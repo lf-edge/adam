@@ -24,11 +24,12 @@ const (
 
 // MaxSizes defines maximum sizes of objects storage
 type MaxSizes struct {
-	MaxLogSize      int
-	MaxInfoSize     int
-	MaxMetricSize   int
-	MaxRequestsSize int
-	MaxAppLogsSize  int
+	MaxLogSize         int
+	MaxInfoSize        int
+	MaxMetricSize      int
+	MaxRequestsSize    int
+	MaxAppLogsSize     int
+	MaxFlowMessageSize int
 }
 
 type BigData interface {
@@ -43,6 +44,7 @@ type DeviceStorage struct {
 	Metrics     BigData
 	Logs        BigData
 	Requests    BigData
+	FlowMessage BigData
 	Certs       BigData
 	AppLogs     map[uuid.UUID]BigData
 	CurrentLog  int
@@ -115,6 +117,15 @@ func (d *DeviceStorage) AddRequest(b []byte) error {
 		return errors.New("AddRequest: Requests struct not yet initialized")
 	}
 	_, err := d.Requests.Write(b)
+	return err
+}
+
+func (d *DeviceStorage) AddFlowRecord(b []byte) error {
+	// what if the device was not initialized yet?
+	if d.FlowMessage == nil {
+		return errors.New("AddFlowRecord: FlowMessage struct not yet initialized")
+	}
+	_, err := d.FlowMessage.Write(b)
 	return err
 }
 

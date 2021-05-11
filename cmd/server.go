@@ -27,25 +27,26 @@ const (
 )
 
 var (
-	serverCert      string
-	serverKey       string
-	signingCert     string
-	signingKey      string
-	encryptCert     string
-	encryptKey      string
-	certCN          string
-	certHosts       string
-	port            string
-	hostIP          string
-	certRefresh     int
-	maxLogSize      int
-	maxInfoSize     int
-	maxMetricSize   int
-	maxRequestsSize int
-	maxAppLogsSize  int
-	autoCert        bool
-	localWebFiles   string
-	deviceManagers  = driver.GetDeviceManagers()
+	serverCert         string
+	serverKey          string
+	signingCert        string
+	signingKey         string
+	encryptCert        string
+	encryptKey         string
+	certCN             string
+	certHosts          string
+	port               string
+	hostIP             string
+	certRefresh        int
+	maxLogSize         int
+	maxInfoSize        int
+	maxMetricSize      int
+	maxRequestsSize    int
+	maxFlowMessageSize int
+	maxAppLogsSize     int
+	autoCert           bool
+	localWebFiles      string
+	deviceManagers     = driver.GetDeviceManagers()
 )
 
 var serverCmd = &cobra.Command{
@@ -57,11 +58,12 @@ var serverCmd = &cobra.Command{
 		// in the future, we may support other device manager types
 		var mgr driver.DeviceManager
 		maxSizes := common.MaxSizes{
-			MaxLogSize:      maxLogSize,
-			MaxInfoSize:     maxInfoSize,
-			MaxMetricSize:   maxMetricSize,
-			MaxRequestsSize: maxRequestsSize,
-			MaxAppLogsSize:  maxAppLogsSize,
+			MaxLogSize:         maxLogSize,
+			MaxInfoSize:        maxInfoSize,
+			MaxMetricSize:      maxMetricSize,
+			MaxRequestsSize:    maxRequestsSize,
+			MaxFlowMessageSize: maxFlowMessageSize,
+			MaxAppLogsSize:     maxAppLogsSize,
 		}
 		for _, m := range deviceManagers {
 			name := m.Name()
@@ -246,12 +248,14 @@ func serverInit() {
 	defaultInfoSizes := []string{}
 	defaultMetricSizes := []string{}
 	defaultRequestsSizes := []string{}
+	defaultFlowMessageSizes := []string{}
 	defaultAppLogsSizes := []string{}
 	for _, m := range deviceManagers {
 		defaultLogSizes = append(defaultLogSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxLogSize()))
 		defaultInfoSizes = append(defaultInfoSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxInfoSize()))
 		defaultMetricSizes = append(defaultMetricSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxMetricSize()))
 		defaultRequestsSizes = append(defaultRequestsSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxRequestsSize()))
+		defaultFlowMessageSizes = append(defaultFlowMessageSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxFlowMessageSize()))
 		defaultAppLogsSizes = append(defaultAppLogsSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxAppLogsSize()))
 	}
 	serverCmd.Flags().StringVar(&port, "port", defaultPort, "port on which to listen")
@@ -272,6 +276,7 @@ func serverInit() {
 	serverCmd.Flags().IntVar(&maxInfoSize, "max-info-size", 0, fmt.Sprintf("the maximum size of the info before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultInfoSizes))
 	serverCmd.Flags().IntVar(&maxMetricSize, "max-metric-size", 0, fmt.Sprintf("the maximum size of the metrics before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultMetricSizes))
 	serverCmd.Flags().IntVar(&maxRequestsSize, "max-requests-size", 0, fmt.Sprintf("the maximum size of the request logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultRequestsSizes))
+	serverCmd.Flags().IntVar(&maxFlowMessageSize, "max-flow-message-size", 0, fmt.Sprintf("the maximum size of the FlowMessage logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultFlowMessageSizes))
 	serverCmd.Flags().IntVar(&maxAppLogsSize, "max-app-logs-size", 0, fmt.Sprintf("the maximum size of the app logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultAppLogsSizes))
 	serverCmd.Flags().StringVar(&localWebFiles, "web-dir", "", "path to static files on the local filesystem for the web server; if empty, will use those embedded in the Adam binary")
 }

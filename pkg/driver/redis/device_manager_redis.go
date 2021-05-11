@@ -41,17 +41,19 @@ const (
 	// with each stream element having a single key pair:
 	//   "object" -> msgpack serialized object
 	// see MkStreamEntry() for details
-	deviceLogsStream     = "LOGS_EVE_"
-	deviceInfoStream     = "INFO_EVE_"
-	deviceMetricsStream  = "METRICS_EVE_"
-	deviceRequestsStream = "REQUESTS_EVE_"
-	deviceAppLogsStream  = "APPS_EVE_"
+	deviceLogsStream        = "LOGS_EVE_"
+	deviceInfoStream        = "INFO_EVE_"
+	deviceMetricsStream     = "METRICS_EVE_"
+	deviceRequestsStream    = "REQUESTS_EVE_"
+	deviceFlowMessageStream = "FLOW_MESSAGE_EVE_"
+	deviceAppLogsStream     = "APPS_EVE_"
 
 	MB                   = common.MB
 	maxLogSizeRedis      = 100 * MB
 	maxInfoSizeRedis     = 100 * MB
 	maxMetricSizeRedis   = 100 * MB
 	maxRequestsSizeRedis = 100 * MB
+	maxFlowMessageRedis  = 100 * MB
 	maxAppLogsSizeRedis  = 100 * MB
 )
 
@@ -132,6 +134,11 @@ func (d *DeviceManager) MaxRequestsSize() int {
 // MaxAppLogsSize return the maximum app logs size in bytes for this device manager
 func (d *DeviceManager) MaxAppLogsSize() int {
 	return maxAppLogsSizeRedis
+}
+
+// MaxFlowMessageSize return the maximum FlowMessage logs size in bytes for this device manager
+func (d *DeviceManager) MaxFlowMessageSize() int {
+	return maxFlowMessageRedis
 }
 
 // Init check if a URL is valid and initialize
@@ -281,6 +288,7 @@ func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 		{deviceInfoStream + k},
 		{deviceLogsStream + k},
 		{deviceMetricsStream + k},
+		{deviceFlowMessageStream + k},
 		{deviceRequestsStream + k},
 	}
 	for appUUID := range d.devices[*u].AppLogs {
@@ -313,6 +321,7 @@ func (d *DeviceManager) DeviceClear() error {
 			[]string{deviceMetricsStream + u.String()},
 			[]string{deviceLogsStream + u.String()},
 			[]string{deviceInfoStream + u.String()},
+			[]string{deviceFlowMessageStream + u.String()},
 			[]string{deviceRequestsStream + u.String()})
 		for appUUID := range dev.AppLogs {
 			streams = append(streams, []string{deviceAppLogsStream + u.String() + "_" + appUUID.String()})
@@ -446,6 +455,10 @@ func (d *DeviceManager) initDevice(u uuid.UUID, onboard *x509.Certificate, seria
 		},
 		Metrics: &ManagedStream{
 			name:   deviceMetricsStream + u.String(),
+			client: d.client,
+		},
+		FlowMessage: &ManagedStream{
+			name:   deviceFlowMessageStream + u.String(),
 			client: d.client,
 		},
 		Requests: &ManagedStream{
@@ -950,4 +963,18 @@ func (d *DeviceManager) writeCert(cert []byte, hash string, uuid string, force b
 
 func mkStreamEntry(body []byte) map[string]interface{} {
 	return map[string]interface{}{"version": "1", "object": string(body)}
+}
+
+// WriteFlowMessage write FlowMessage
+func (d *DeviceManager) WriteFlowMessage(u uuid.UUID, b []byte) error {
+	// make sure it is not nil
+	if len(b) < 1 {
+		return nil
+	}
+	// check that the device actually exists
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("device not found: %s", u)
+	}
+	return dev.AddFlowRecord(b)
 }

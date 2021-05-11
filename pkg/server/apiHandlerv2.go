@@ -610,3 +610,23 @@ func (h *apiHandlerv2) getClientConfigRequest(r *http.Request) (*config.ConfigRe
 	}
 	return configRequest, nil
 }
+
+func (h *apiHandlerv2) flowlog(w http.ResponseWriter, r *http.Request) {
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
+		return
+	}
+	b, err := h.processAuthContainer(r.Body)
+	if err != nil || len(b) == 0 {
+		log.Printf("error processAuthContainer: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	status, err := flowLogProcess(h.manager, *u, b)
+	if err != nil {
+		log.Printf("Failed to logsProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
+		return
+	}
+	w.WriteHeader(status)
+}

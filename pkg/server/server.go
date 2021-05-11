@@ -109,6 +109,7 @@ func (s *Server) Start() {
 	ed.HandleFunc("/metrics", api.metrics).Methods("POST")
 	ed.HandleFunc("/logs", api.logs).Methods("POST")
 	ed.HandleFunc("/newlogs", api.newLogs).Methods("POST")
+	ed.HandleFunc("/flowlog", api.flowLog).Methods("POST")
 	ed.HandleFunc("/apps/instances/id/{uuid}/logs", api.appLogs).Methods("POST")
 	ed.HandleFunc("/apps/instanceid/id/{uuid}/newlogs", api.newAppLogs).Methods("POST")
 
@@ -140,6 +141,7 @@ func (s *Server) Start() {
 		edv2.HandleFunc("/id/{uuid}/metrics", apiv2.metrics).Methods("POST")
 		edv2.HandleFunc("/id/{uuid}/logs", apiv2.logs).Methods("POST")
 		edv2.HandleFunc("/id/{uuid}/newlogs", apiv2.newLogs).Methods("POST")
+		edv2.HandleFunc("/id/{uuid}/flowlog", apiv2.flowlog).Methods("POST")
 		edv2.HandleFunc("/id/{uuid}/apps/instances/id/{appuuid}/logs", apiv2.appLogs).Methods("POST")
 		edv2.HandleFunc("/id/{uuid}/apps/instanceid/{appuuid}/newlogs", apiv2.newAppLogs).Methods("POST")
 	}
