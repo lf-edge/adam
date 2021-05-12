@@ -23,6 +23,7 @@ import (
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve/api/go/attest"
 	"github.com/lf-edge/eve/api/go/config"
+	"github.com/lf-edge/eve/api/go/flowlog"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
 	"github.com/lf-edge/eve/api/go/metrics"
@@ -311,4 +312,22 @@ func attestProcess(manager driver.DeviceManager, u uuid.UUID, b []byte) ([]byte,
 		return nil, http.StatusInternalServerError, fmt.Errorf("error converting config to byte message %v", msg.ReqType)
 	}
 	return out, http.StatusCreated, nil
+}
+
+func flowLogProcess(manager driver.DeviceManager, u uuid.UUID, flowMessage []byte) (int, error) {
+	var err error
+	msg := &flowlog.FlowMessage{}
+	if err := proto.Unmarshal(flowMessage, msg); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("error parsing FlowMessage: %v", err)
+	}
+	var entryBytes []byte
+	if entryBytes, err = protojson.Marshal(msg); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("failed to marshal FlowMessage: %v", err)
+	}
+	err = manager.WriteFlowMessage(u, entryBytes)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to write FlowMessage: %v", err)
+	}
+	// send back a 201
+	return http.StatusCreated, nil
 }

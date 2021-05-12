@@ -287,3 +287,23 @@ func (h *apiHandler) getClientConfigRequest(r *http.Request) (*config.ConfigRequ
 	}
 	return configRequest, nil
 }
+
+func (h *apiHandler) flowLog(w http.ResponseWriter, r *http.Request) {
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
+		return
+	}
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil || len(b) == 0 {
+		log.Printf("error reading request body: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	status, err := flowLogProcess(h.manager, *u, b)
+	if err != nil {
+		log.Printf("Failed to logsProcess: %v", err)
+		http.Error(w, http.StatusText(status), status)
+		return
+	}
+	w.WriteHeader(status)
+}

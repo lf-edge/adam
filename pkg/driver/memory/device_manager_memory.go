@@ -13,24 +13,26 @@ import (
 )
 
 const (
-	MB                    = common.MB
-	maxLogSizeMemory      = 10 * MB
-	maxInfoSizeMemory     = 10 * MB
-	maxMetricSizeMemory   = 10 * MB
-	maxRequestsSizeMemory = 10 * MB
-	maxAppLogsSizeMemory  = 10 * MB
+	MB                       = common.MB
+	maxLogSizeMemory         = 10 * MB
+	maxInfoSizeMemory        = 10 * MB
+	maxMetricSizeMemory      = 10 * MB
+	maxRequestsSizeMemory    = 10 * MB
+	maxFlowMessageSizeMemory = 10 * MB
+	maxAppLogsSizeMemory     = 10 * MB
 )
 
 // DeviceManager implementation of DeviceManager with an ephemeral memory backing store
 type DeviceManager struct {
-	onboardCerts    map[string]map[string]bool
-	deviceCerts     map[string]uuid.UUID
-	devices         map[uuid.UUID]common.DeviceStorage
-	maxLogSize      int
-	maxInfoSize     int
-	maxMetricSize   int
-	maxRequestsSize int
-	maxAppLogsSize  int
+	onboardCerts       map[string]map[string]bool
+	deviceCerts        map[string]uuid.UUID
+	devices            map[uuid.UUID]common.DeviceStorage
+	maxLogSize         int
+	maxInfoSize        int
+	maxMetricSize      int
+	maxRequestsSize    int
+	maxFlowMessageSize int
+	maxAppLogsSize     int
 }
 
 // Name return name
@@ -68,6 +70,11 @@ func (d *DeviceManager) MaxAppLogsSize() int {
 	return maxAppLogsSizeMemory
 }
 
+// MaxFlowMessageSize return the maximum FlowMessage logs size in bytes for this device manager
+func (d *DeviceManager) MaxFlowMessageSize() int {
+	return maxFlowMessageSizeMemory
+}
+
 // Init initialize, valid only with a blank URL
 func (d *DeviceManager) Init(s string, sizes common.MaxSizes) (bool, error) {
 	if s != "" {
@@ -98,6 +105,11 @@ func (d *DeviceManager) Init(s string, sizes common.MaxSizes) (bool, error) {
 		d.maxAppLogsSize = maxAppLogsSizeMemory
 	} else {
 		d.maxAppLogsSize = sizes.MaxAppLogsSize
+	}
+	if sizes.MaxFlowMessageSize == 0 {
+		d.maxFlowMessageSize = maxFlowMessageSizeMemory
+	} else {
+		d.maxFlowMessageSize = sizes.MaxFlowMessageSize
 	}
 	return true, nil
 }
@@ -257,6 +269,9 @@ func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certi
 		},
 		Metrics: &ByteSlice{
 			maxSize: d.maxMetricSize,
+		},
+		FlowMessage: &ByteSlice{
+			maxSize: d.maxFlowMessageSize,
 		},
 		AppLogs: map[uuid.UUID]common.BigData{},
 	}
@@ -477,4 +492,20 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
 	return dev.Requests.Reader()
+}
+
+// WriteFlowMessage write FlowMessage
+func (d *DeviceManager) WriteFlowMessage(u uuid.UUID, b []byte) error {
+	// make sure it is not nil
+	if len(b) < 1 {
+		return nil
+	}
+	// now look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u)
+	}
+	d.devices[u] = dev
+	// append the messages
+	return dev.AddFlowRecord(b)
 }

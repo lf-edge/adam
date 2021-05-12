@@ -41,12 +41,14 @@ const (
 	deviceDir                 = "device"
 	onboardDir                = "onboard"
 	requestsDir               = "requests"
+	flowMessageDir            = "flow_message"
 	MB                        = common.MB
 	maxLogSizeFile            = 100 * MB
 	maxInfoSizeFile           = 100 * MB
 	maxMetricSizeFile         = 100 * MB
 	maxRequestsSizeFile       = 100 * MB
 	maxAppLogsSizeFile        = 100 * MB
+	maxFlowMessageSizeFile    = 100 * MB
 	fileSplit                 = 10
 )
 
@@ -136,6 +138,7 @@ type DeviceManager struct {
 	maxInfoSize             int
 	maxMetricSize           int
 	maxRequestsSize         int
+	maxFlowMessageSize      int
 	maxAppLogsSize          int
 	currentLogFile          *os.File
 	currentInfoFile         *os.File
@@ -180,6 +183,11 @@ func (d *DeviceManager) MaxRequestsSize() int {
 // MaxAppLogsSize return the maximum app logs size in bytes for this device manager
 func (d *DeviceManager) MaxAppLogsSize() int {
 	return maxAppLogsSizeFile
+}
+
+// MaxFlowMessageSize return the maximum FlowMessage logs size in bytes for this device manager
+func (d *DeviceManager) MaxFlowMessageSize() int {
+	return maxFlowMessageSizeFile
 }
 
 // Init check if a URL is valid and initialize
@@ -236,6 +244,11 @@ func (d *DeviceManager) Init(s string, sizes common.MaxSizes) (bool, error) {
 		d.maxAppLogsSize = maxAppLogsSizeFile
 	} else {
 		d.maxAppLogsSize = sizes.MaxAppLogsSize
+	}
+	if sizes.MaxFlowMessageSize == 0 {
+		d.maxFlowMessageSize = maxFlowMessageSizeFile
+	} else {
+		d.maxFlowMessageSize = sizes.MaxFlowMessageSize
 	}
 
 	return true, nil
@@ -533,6 +546,10 @@ func (d *DeviceManager) initDevice(u uuid.UUID) error {
 		Requests: &ManagedFile{
 			dir:     path.Join(devicePath, requestsDir),
 			maxSize: int64(d.maxRequestsSize),
+		},
+		FlowMessage: &ManagedFile{
+			dir:     path.Join(devicePath, flowMessageDir),
+			maxSize: int64(d.maxFlowMessageSize),
 		},
 		AppLogs: map[uuid.UUID]common.BigData{},
 	}
@@ -1114,4 +1131,18 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
 	return d.devices[u].Requests.Reader()
+}
+
+// WriteFlowMessage write FlowMessage
+func (d *DeviceManager) WriteFlowMessage(u uuid.UUID, b []byte) error {
+	// make sure it is not nil
+	if len(b) < 1 {
+		return nil
+	}
+	// check that the device actually exists
+	if !d.deviceExists(u) {
+		return fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	dev := d.devices[u]
+	return dev.AddFlowRecord(b)
 }

@@ -30,6 +30,8 @@ type DeviceManager interface {
 	MaxMetricSize() int
 	// MaxRequestsSize return the default maximum request logs size in bytes for this device manager
 	MaxRequestsSize() int
+	// MaxFlowMessageSize return the default maximum FlowMessage logs size in bytes for this device manager
+	MaxFlowMessageSize() int
 	// MaxAppLogsSize return the default maximum app logs size in bytes for this device manager
 	MaxAppLogsSize() int
 	// Database safe-to-print (without credentials) path to database
@@ -69,6 +71,8 @@ type DeviceManager interface {
 	WriteInfo(uuid.UUID, []byte) error
 	// WriteLogs write log messages
 	WriteLogs(uuid.UUID, []byte) error
+	// WriteFlowMessage write FlowMessage
+	WriteFlowMessage(uuid.UUID, []byte) error
 	// WriteAppInstanceLogs write a AppInstanceLogBundle message for instanceID
 	WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid.UUID, b []byte) error
 	// WriteMetrics write a MetricMsg
