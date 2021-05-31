@@ -33,6 +33,9 @@ func Generate(cn, hosts string) ([]byte, *rsa.PrivateKey, error) {
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate serial number: %v", err)
+	}
 
 	notBefore := time.Now()
 	notAfter := notBefore.Add(oneYear)
