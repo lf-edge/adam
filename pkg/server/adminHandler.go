@@ -62,22 +62,28 @@ func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get(contentType)
 	if contentType != mimeJSON {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
 	}
 	decoder := json.NewDecoder(r.Body)
 	var t OnboardCert
 	err := decoder.Decode(&t)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
 	}
 
 	serials := strings.Split(t.Serial, ",")
 	cert, err := ax.ParseCert(t.Cert)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("onboardAdd: ParseCert error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	err = h.manager.OnboardRegister(cert, serials)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Printf("onboardAdd: OnboardRegister error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusCreated)
 }
@@ -85,10 +91,12 @@ func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
 func (h *adminHandler) onboardList(w http.ResponseWriter, r *http.Request) {
 	cns, err := h.manager.OnboardList()
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("onboardList: OnboardList error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	w.WriteHeader(http.StatusOK)
 	body := strings.Join(cns, "\n")
+	w.WriteHeader(http.StatusOK)
 	w.Header().Add(contentType, mimeTextPlain)
 	w.Write([]byte(body))
 }
@@ -101,17 +109,19 @@ func (h *adminHandler) onboardGet(w http.ResponseWriter, r *http.Request) {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	case err != nil:
+		log.Printf("onboardGet: OnboardGet(%s) error: %v", cn, err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	default:
-		w.WriteHeader(http.StatusOK)
 		body, err := json.Marshal(OnboardCert{
 			Cert:   ax.PemEncodeCert(cert.Raw),
 			Serial: strings.Join(serials, ","),
 		})
 		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		w.Write([]byte(body))
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
 	}
 }
 
@@ -123,7 +133,8 @@ func (h *adminHandler) onboardRemove(w http.ResponseWriter, r *http.Request) {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	case err != nil:
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("OnboardRemove(%s) error: %v", cn, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusOK)
 	}
@@ -132,7 +143,8 @@ func (h *adminHandler) onboardRemove(w http.ResponseWriter, r *http.Request) {
 func (h *adminHandler) onboardClear(w http.ResponseWriter, r *http.Request) {
 	err := h.manager.OnboardClear()
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Printf("onboardClear: OnboardClear error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -141,6 +153,7 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get(contentType)
 	if contentType != mimeTextPlain {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -151,28 +164,36 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 	)
 	err := decoder.Decode(&t)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("deviceAdd: Decode error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	cert, err = ax.ParseCert(t.Cert)
 	if err != nil {
+		log.Printf("deviceAdd: ParseCert device error: %v", err)
 		http.Error(w, fmt.Sprintf("bad device cert: %v", err), http.StatusBadRequest)
+		return
 	}
 	if t.Onboard != nil && len(t.Onboard) > 0 {
 		onboard, err = ax.ParseCert(t.Onboard)
 		if err != nil {
+			log.Printf("deviceAdd: ParseCert onboard error: %v", err)
 			http.Error(w, fmt.Sprintf("bad onboard cert: %v", err), http.StatusBadRequest)
+			return
 		}
 	}
 	// generate a new uuid
 	unew, err := uuid.NewV4()
 	if err != nil {
-		log.Printf("error generating a new device UUID: %v", err)
+		log.Printf("deviceAdd: error generating a new device UUID: %v", err)
 		http.Error(w, fmt.Sprintf("error generating a new device UUID: %v", err), http.StatusBadRequest)
 		return
 	}
 	if err := h.manager.DeviceRegister(unew, cert, onboard, t.Serial, common.CreateBaseConfig(unew)); err != nil {
+		log.Printf("deviceAdd: DeviceRegister error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
 	w.WriteHeader(http.StatusCreated)
 }
@@ -180,7 +201,9 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 func (h *adminHandler) deviceList(w http.ResponseWriter, r *http.Request) {
 	uids, err := h.manager.DeviceList()
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("deviceList: DeviceList error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	// convert the UUIDs
 	ids := make([]string, 0, len(uids))
@@ -208,7 +231,8 @@ func (h *adminHandler) deviceGet(w http.ResponseWriter, r *http.Request) {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	case err != nil:
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("deviceGet: DeviceGet error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	case deviceCert == nil:
 		http.Error(w, "found device information, but cert was empty", http.StatusInternalServerError)
 	default:
@@ -221,7 +245,7 @@ func (h *adminHandler) deviceGet(w http.ResponseWriter, r *http.Request) {
 		}
 		body, err := json.Marshal(dc)
 		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(body))
@@ -241,7 +265,8 @@ func (h *adminHandler) deviceRemove(w http.ResponseWriter, r *http.Request) {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	case err != nil:
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("deviceRemove: DeviceRemove error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusOK)
 	}
@@ -267,7 +292,8 @@ func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	case err != nil:
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("deviceConfigGet: GetConfig error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	case deviceConfig == nil:
 		http.Error(w, "found device information, but cert was empty", http.StatusInternalServerError)
 	default:
@@ -285,11 +311,14 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("bad body: %v", err), http.StatusBadRequest)
+		return
 	}
 	var deviceConfig config.EdgeDevConfig
 	err = json.Unmarshal(body, &deviceConfig)
 	if err != nil {
+		log.Printf("deviceConfigSet: Unmarshal config error: %v", err)
 		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
+		return
 	}
 	// before setting the config, set any necessary defaults
 	// check for UUID and/or version mismatch
@@ -304,6 +333,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("device not found %s", u), http.StatusNotFound)
 		return
 	case err != nil:
+		log.Printf("deviceConfigSet: GetConfig error: %v", err)
 		http.Error(w, fmt.Sprintf("error retrieving existing config for device %s: %v", u, err), http.StatusBadRequest)
 		return
 	case len(existingConfigB) == 0:
@@ -312,6 +342,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	}
 	// convert it to protobuf so we can work with it
 	if err := protojson.Unmarshal(existingConfigB, &existingConfig); err != nil {
+		log.Printf("deviceConfigSet: processing existing config error: %v", err)
 		http.Error(w, fmt.Sprintf("error processing existing config: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -350,6 +381,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 
 	b, err := protojson.Marshal(&deviceConfig)
 	if err != nil {
+		log.Printf("deviceConfigSet: Marshal error: %v", err)
 		http.Error(w, fmt.Sprintf("error processing device config: %v", err), http.StatusBadRequest)
 		return
 	}
@@ -359,7 +391,8 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 	case err != nil:
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Printf("deviceConfigSet: SetConfig error: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusOK)
 	}
@@ -420,6 +453,7 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 		case err != nil && isNotFound:
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		case err != nil:
+			log.Printf("deviceDataGet: readerFunc error: %v", err)
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		case reader == nil:
 			http.Error(w, "found device information, but logs were empty", http.StatusInternalServerError)

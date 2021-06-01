@@ -48,6 +48,9 @@ const (
 	deviceFlowMessageStream = "FLOW_MESSAGE_EVE_"
 	deviceAppLogsStream     = "APPS_EVE_"
 
+	ioTimeout  = 10 * time.Second
+	maxRetries = 5
+
 	MB                   = common.MB
 	maxLogSizeRedis      = 100 * MB
 	maxInfoSizeRedis     = 100 * MB
@@ -164,10 +167,13 @@ func (d *DeviceManager) Init(s string, sizes common.MaxSizes) (bool, error) {
 	}
 
 	d.client = redis.NewClient(&redis.Options{
-		Network:  d.databaseNet,
-		Addr:     d.databaseURL,
-		Password: URL.User.Username(), // yes, I know!
-		DB:       d.databaseID,
+		Network:      d.databaseNet,
+		Addr:         d.databaseURL,
+		Password:     URL.User.Username(), // yes, I know!
+		DB:           d.databaseID,
+		ReadTimeout:  ioTimeout,
+		WriteTimeout: ioTimeout,
+		MaxRetries:   maxRetries,
 	})
 
 	return true, nil
@@ -348,16 +354,19 @@ func (d *DeviceManager) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certif
 	// first lets get the device certificate
 	cert, err := d.readCert(deviceCertsHash, u.String())
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", fmt.Errorf("error reading device certificate for %s: %v", u.String(), err)
 	}
 
 	// now lets get the device onboarding certificate
 	onboard, err := d.readCert(deviceOnboardCertsHash, u.String())
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", fmt.Errorf("error reading onboarding certificate for %s: %v", u.String(), err)
 	}
 
 	serial, err := d.client.HGet(deviceSerialsHash, u.String()).Result()
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("error reading device serial for %s: %v", u.String(), err)
+	}
 	// somehow device serials are best effort
 	return cert, onboard, serial, nil
 }
@@ -478,7 +487,7 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 	cn := common.GetOnboardCertName(cert.Subject.CommonName)
 
 	if err := d.writeCert(cert.Raw, onboardCertsHash, cn, true); err != nil {
-		return err
+		return fmt.Errorf("failed to write onboardCertsHash %v: %v", cn, err)
 	}
 
 	v, err := msgpack.Marshal(&serial)
@@ -509,7 +518,9 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 // WriteRequest record a request
 func (d *DeviceManager) WriteRequest(u uuid.UUID, b []byte) error {
 	if dev, ok := d.devices[u]; ok {
-		dev.AddRequest(b)
+		if err := dev.AddRequest(b); err != nil {
+			return fmt.Errorf("AddRequest error: %s", err)
+		}
 		return nil
 	}
 	return fmt.Errorf("device not found: %s", u)
@@ -712,6 +723,10 @@ func (d *DeviceManager) refreshCache() error {
 	now := time.Now()
 	if now.Sub(d.lastUpdate).Seconds() < float64(d.cacheTimeout) {
 		return nil
+	}
+	stats := d.client.PoolStats()
+	if stats.Timeouts > 0 {
+		log.Printf("Pool timeouts: %d", stats.Timeouts)
 	}
 
 	// create new vars to hold while we load

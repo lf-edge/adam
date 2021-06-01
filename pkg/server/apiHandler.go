@@ -123,7 +123,7 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 	}
 	data, code, err := configProcess(configRequest, cfg)
 	if err != nil {
-		log.Println(err)
+		log.Printf("error configProcess: %v", err)
 		http.Error(w, http.StatusText(code), code)
 		return
 	}
