@@ -86,16 +86,24 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 	serial := msg.Serial
 	err := manager.OnboardCheck(onboardCert, serial)
 	if err != nil {
-		_, invalidCert := err.(*common.InvalidCertError)
-		_, invalidSerial := err.(*common.InvalidSerialError)
-		_, usedSerial := err.(*common.UsedSerialError)
-		switch {
-		case invalidCert, invalidSerial:
-			return http.StatusUnauthorized, fmt.Errorf("failed authentication %v", err)
-		case usedSerial:
-			return http.StatusConflict, fmt.Errorf("used serial %v", err)
+		log.Printf("failed to onboard with serial: %s", err)
+		if msg.SoftSerial != "" {
+			log.Println("will retry with soft serial")
+			serial = msg.SoftSerial
+			err = manager.OnboardCheck(onboardCert, serial)
 		}
-		return http.StatusInternalServerError, fmt.Errorf("error checking onboard cert and serial: %v", err)
+		if err != nil {
+			_, invalidCert := err.(*common.InvalidCertError)
+			_, invalidSerial := err.(*common.InvalidSerialError)
+			_, usedSerial := err.(*common.UsedSerialError)
+			switch {
+			case invalidCert, invalidSerial:
+				return http.StatusUnauthorized, fmt.Errorf("failed authentication %v", err)
+			case usedSerial:
+				return http.StatusConflict, fmt.Errorf("used serial %v", err)
+			}
+			return http.StatusInternalServerError, fmt.Errorf("error checking onboard cert and serial: %v", err)
+		}
 	}
 	// the passed cert is base64 encoded PEM. So we need to base64 decode it, and then extract the DER bytes
 	// register the new device cert
