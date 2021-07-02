@@ -6,7 +6,7 @@ ENV BUILD_PKGS go git
 RUN eve-alpine-deploy.sh
 
 # FIXME: integrate go 1.16 into eve-alpine
-RUN wget https://dl-cdn.alpinelinux.org/alpine/edge/community/$(uname -m)/go-1.16.4-r0.apk -O go.apk &&\
+RUN wget https://dl-cdn.alpinelinux.org/alpine/edge/community/$(uname -m)/go-1.16.5-r0.apk -O go.apk &&\
     apk add ./go.apk
 
 ENV CGO_ENABLED=0
