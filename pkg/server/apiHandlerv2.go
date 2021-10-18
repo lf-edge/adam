@@ -630,3 +630,26 @@ func (h *apiHandlerv2) flowlog(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(status)
 }
+
+func (h *apiHandlerv2) uuid(w http.ResponseWriter, r *http.Request) {
+	u := h.checkCertAndRecord(w, r)
+	if u == nil {
+		return
+	}
+	uuidResponce, err := h.manager.GetUUID(*u)
+	if err != nil {
+		log.Printf("error getting device uuidResponce: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	cloudEnvelope, eErr := h.prepareEnvelope(uuidResponce)
+	if eErr != nil {
+		msg := fmt.Sprintf("Error occurred while creating envelope: %v", eErr)
+		log.Print(msg)
+		http.Error(w, msg, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Add(contentType, mimeProto)
+	w.WriteHeader(http.StatusOK)
+	w.Write(cloudEnvelope)
+}

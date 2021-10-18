@@ -21,6 +21,7 @@ import (
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/adam/pkg/util"
 	ax "github.com/lf-edge/adam/pkg/x509"
+	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )
@@ -1145,4 +1146,14 @@ func (d *DeviceManager) WriteFlowMessage(u uuid.UUID, b []byte) error {
 	}
 	dev := d.devices[u]
 	return dev.AddFlowRecord(b)
+}
+
+// GetUUID get UuidResponse for device by uuid
+func (d *DeviceManager) GetUUID(u uuid.UUID) ([]byte, error) {
+	// check that the device actually exists
+	if !d.deviceExists(u) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	ur := &eveuuid.UuidResponse{Uuid: u.String()}
+	return proto.Marshal(ur)
 }

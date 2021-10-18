@@ -83,6 +83,8 @@ type DeviceManager interface {
 	GetConfig(uuid.UUID) ([]byte, error)
 	// SetConfig set the config for a given uuid
 	SetConfig(uuid.UUID, []byte) error
+	// GetUUID get the UuidResponse for a given uuid
+	GetUUID(uuid.UUID) ([]byte, error)
 	// GetLogsReader get the logs for a given uuid
 	GetLogsReader(u uuid.UUID) (io.Reader, error)
 	// GetInfoReader get the info for a given uuid

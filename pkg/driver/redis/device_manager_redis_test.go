@@ -11,11 +11,13 @@ import (
 	"github.com/lf-edge/adam/pkg/util"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/config"
+	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
 	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/metrics"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestInit(t *testing.T) {
@@ -106,13 +108,21 @@ func TestDeviceRedis(t *testing.T) {
 	assert.Equal(t, nil, err)
 	UUID, err := r.DeviceCheckCert(cert)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, UUID1, UUID)
+	assert.Equal(t, UUID1, *UUID)
 
 	certBack, certOnboardBack, serial, err := r.DeviceGet(UUID)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, "123456", serial)
 	assert.Equal(t, cert, certBack)
 	assert.Equal(t, certOnboard, certOnboardBack)
+
+	uuidResponse, err := r.GetUUID(*UUID)
+	assert.Equal(t, nil, err)
+
+	var ur eveuuid.UuidResponse
+	err = proto.Unmarshal(uuidResponse, &ur)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, ur.GetUuid(), UUID.String())
 
 	UUIDs, err := r.DeviceList()
 	assert.Equal(t, nil, err)
