@@ -71,6 +71,9 @@ func ParseCert(b []byte) (*x509.Certificate, error) {
 		cert    *x509.Certificate
 	)
 	certPem, _ = pem.Decode(b)
+	if certPem == nil {
+		return nil, fmt.Errorf("unable to decode pem")
+	}
 	cert, err = x509.ParseCertificate(certPem.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("unable to convert data to certificate: %v", err)

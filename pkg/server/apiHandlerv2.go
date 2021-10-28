@@ -11,11 +11,16 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/asn1"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	uuid2 "github.com/lf-edge/eve/api/go/eveuuid"
 	"io"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -78,22 +83,51 @@ func (h *apiHandlerv2) recordClient(u *uuid.UUID, r *http.Request) {
 	h.manager.WriteRequest(*u, b)
 }
 
-func (h *apiHandlerv2) checkCertAndRecord(w http.ResponseWriter, r *http.Request) *uuid.UUID {
-	// only uses the device cert
-	cert := getClientCert(r)
-	u, err := h.manager.DeviceCheckCert(cert)
-	if err != nil {
-		log.Printf("error checking device cert: %v", err)
+//validateAuthContainerAndRecord processes http.Request extracts AuthContainer and do its validation
+//against registered devices:
+// checks for certs hash in AuthContainer and go through saved certs to check auth state
+// it verifies Signature of AuthContainer payload against saved cert
+// returns ProtectedPayload and device uuid
+func (h *apiHandlerv2) validateAuthContainerAndRecord(w http.ResponseWriter, r *http.Request) ([]byte, *uuid.UUID) {
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil || len(b) == 0 {
+		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return nil
+		return nil, nil
 	}
-	if u == nil {
-		log.Printf("unknown device cert")
+	sm := &auth.AuthContainer{}
+	if err := proto.Unmarshal(b, sm); err != nil {
+		log.Printf("error reading request body: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return nil, nil
+	}
+	if len(sm.SenderCertHash) == 0 {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return nil
+		return nil, nil
+	}
+	u, err := h.manager.DeviceCheckCertHash(sm.SenderCertHash)
+	if err != nil {
+		log.Printf("error checking DeviceCheckCertHash: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return nil, nil
+	}
+	devCert, _, _, err := h.manager.DeviceGet(u)
+	if err != nil {
+		log.Printf("error getting DeviceCerts: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return nil, nil
+	}
+	payload := sm.ProtectedPayload.GetPayload()
+	hashedPayload := sha256.Sum256(payload)
+	// validate signature with the certificate.
+	svErr := verifySignature(sm.SignatureHash, hashedPayload[:], devCert)
+	if svErr != nil {
+		log.Printf("signature verification failed: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return nil, nil
 	}
 	h.recordClient(u, r)
-	return u
+	return payload, u
 }
 
 //getAllCerts process certificates files and return structure with them
@@ -120,6 +154,51 @@ func (h *apiHandlerv2) getAllCerts() (map[string]*certs.ZCert, error) {
 	}
 
 	return allCerts, nil
+}
+
+func verifySignature(signature, payloadHash []byte, cert *x509.Certificate) error {
+
+	switch pub := cert.PublicKey.(type) {
+	case *rsa.PublicKey:
+		err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, payloadHash, signature)
+		if err != nil {
+			return fmt.Errorf("rsa signature verification failed: %s", err)
+		}
+
+	case *ecdsa.PublicKey:
+
+		sigHalfLen, err := ecdsakeyBytes(pub)
+		if err != nil {
+			return err
+		}
+
+		rbytes := signature[0:sigHalfLen]
+		sbytes := signature[sigHalfLen:]
+		r := new(big.Int)
+		s := new(big.Int)
+		r.SetBytes(rbytes)
+		s.SetBytes(sbytes)
+
+		var esig struct {
+			R, S *big.Int
+		}
+
+		_, uErr := asn1.Unmarshal(signature, &esig)
+		if uErr != nil {
+			ok := ecdsa.Verify(pub, payloadHash, r, s)
+			if !ok {
+				return fmt.Errorf("ecdsa signature verification failed")
+			}
+		} else {
+			ok := ecdsa.Verify(pub, payloadHash, esig.R, esig.S)
+			if !ok {
+				return fmt.Errorf("ecdsa signature verification failed")
+			}
+		}
+	default:
+		return fmt.Errorf("unknown type of public key")
+	}
+	return nil
 }
 
 func getCertChain(certPath string, certType certs.ZCertType) (*common.Zcerts, error) {
@@ -319,18 +398,46 @@ func (h *apiHandlerv2) prepareEnvelope(payload []byte) ([]byte, error) {
 	return proto.Marshal(zcloudMsg)
 }
 
+func (h *apiHandlerv2) processAuthContainer(reader io.Reader) (*auth.AuthContainer, error) {
+	b, err := ioutil.ReadAll(reader)
+	if err != nil || len(b) == 0 {
+		return nil, fmt.Errorf("error reading request body: %v", err)
+	}
+	sm := &auth.AuthContainer{}
+	if err := proto.Unmarshal(b, sm); err != nil {
+		return nil, fmt.Errorf("error unmarshal AuthContainer: %v", err)
+	}
+	return sm, nil
+}
+
 func (h *apiHandlerv2) register(w http.ResponseWriter, r *http.Request) {
 	// get the onboard cert and unpack the message to:
 	//  - get the serial
 	//  - get the device cert
-	onboardCert := getClientCert(r)
 	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
+	if err != nil || b.ProtectedPayload == nil || len(b.ProtectedPayload.GetPayload()) == 0 {
 		log.Printf("error processAuthContainer: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := registerProcess(h.manager, b, onboardCert)
+	onBoardCertDecoded, err := base64.StdEncoding.DecodeString(string(b.GetSenderCert()))
+	if err != nil {
+		log.Printf("error decoding SenderCert: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	onboardCert, err := x509Pem.ParseCertFromBlock(onBoardCertDecoded)
+	if err != nil {
+		log.Printf("error parsing SenderCert: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if len(onboardCert) == 0 {
+		log.Println("no certificates parsed from SenderCert")
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	status, err := registerProcess(h.manager, b.ProtectedPayload.GetPayload(), onboardCert[0])
 	if err != nil {
 		log.Printf("Failed in registerProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -345,15 +452,13 @@ func (h *apiHandlerv2) probe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandlerv2) ping(w http.ResponseWriter, r *http.Request) {
-	if devID := h.checkCertAndRecord(w, r); devID == nil {
-		return
-	}
+	log.Printf("%s requested ping", r.RemoteAddr)
 	// now just return a 200
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *apiHandlerv2) configPost(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+func (h *apiHandlerv2) config(w http.ResponseWriter, r *http.Request) {
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
 		return
 	}
@@ -364,7 +469,7 @@ func (h *apiHandlerv2) configPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	configRequest, err := h.getClientConfigRequest(r)
+	configRequest, err := h.getClientConfigRequest(b)
 	if err != nil {
 		log.Printf("error getting config request: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -392,50 +497,9 @@ func (h *apiHandlerv2) configPost(w http.ResponseWriter, r *http.Request) {
 	w.Write(cloudEnvelope)
 }
 
-func (h *apiHandlerv2) config(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
-	if u == nil {
-		return
-	}
-	cfg, err := h.manager.GetConfig(*u)
-	if err != nil {
-		log.Printf("error getting device config: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-	cloudEnvelope, eErr := h.prepareEnvelope(cfg)
-	if eErr != nil {
-		msg := fmt.Sprintf("Error occurred while creating envelope: %v", eErr)
-		log.Print(msg)
-		http.Error(w, msg, http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set(contentType, mimeProto)
-	w.WriteHeader(http.StatusOK)
-	w.Write(cloudEnvelope)
-}
-
-func (h *apiHandlerv2) processAuthContainer(reader io.Reader) ([]byte, error) {
-	b, err := ioutil.ReadAll(reader)
-	if err != nil || len(b) == 0 {
-		return nil, fmt.Errorf("error reading request body: %v", err)
-	}
-	sm := &auth.AuthContainer{}
-	if err := proto.Unmarshal(b, sm); err != nil {
-		return nil, fmt.Errorf("error reading request body: %v", err)
-	}
-	return sm.ProtectedPayload.GetPayload(), nil
-}
-
 func (h *apiHandlerv2) attest(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
-		return
-	}
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
-		log.Printf("error processAuthContainer: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	out, status, err := attestProcess(h.manager, *u, b)
@@ -457,14 +521,8 @@ func (h *apiHandlerv2) attest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandlerv2) info(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
-		return
-	}
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
-		log.Printf("error processAuthContainer: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	status, err := infoProcess(h.manager, h.infoChannel, *u, b)
@@ -477,14 +535,8 @@ func (h *apiHandlerv2) info(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandlerv2) metrics(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
-		return
-	}
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
-		log.Printf("error processAuthContainer: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	status, err := metricProcess(h.manager, h.metricChannel, *u, b)
@@ -497,14 +549,8 @@ func (h *apiHandlerv2) metrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandlerv2) logs(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
-		return
-	}
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
-		log.Printf("error processAuthContainer: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
@@ -518,14 +564,8 @@ func (h *apiHandlerv2) logs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandlerv2) newLogs(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
-		return
-	}
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
-		log.Printf("error processAuthContainer: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
@@ -539,19 +579,13 @@ func (h *apiHandlerv2) newLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandlerv2) appLogs(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
 		return
 	}
 	uid, err := uuid.FromString(mux.Vars(r)["appuuid"])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
-		log.Printf("error processAuthContainer: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	status, err := appLogsProcess(h.manager, *u, uid, b)
@@ -564,19 +598,13 @@ func (h *apiHandlerv2) appLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandlerv2) newAppLogs(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
 		return
 	}
 	uid, err := uuid.FromString(mux.Vars(r)["appuuid"])
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
-		log.Printf("error processAuthContainer: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	status, err := newAppLogsProcess(h.manager, *u, uid, bytes.NewReader(b))
@@ -589,21 +617,9 @@ func (h *apiHandlerv2) newAppLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 // retrieve the config request
-func (h *apiHandlerv2) getClientConfigRequest(r *http.Request) (*config.ConfigRequest, error) {
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error processAuthContainer: %v", err)
-	}
-	if len(b) == 0 {
-		return nil, nil
-	}
-	body, err := ioutil.ReadAll(bytes.NewReader(b))
-	if err != nil {
-		log.Printf("Body read failed: %v", err)
-		return nil, err
-	}
+func (h *apiHandlerv2) getClientConfigRequest(body []byte) (*config.ConfigRequest, error) {
 	configRequest := &config.ConfigRequest{}
-	err = proto.Unmarshal(body, configRequest)
+	err := proto.Unmarshal(body, configRequest)
 	if err != nil {
 		log.Printf("Unmarshalling failed: %v", err)
 		return nil, err
@@ -612,14 +628,8 @@ func (h *apiHandlerv2) getClientConfigRequest(r *http.Request) (*config.ConfigRe
 }
 
 func (h *apiHandlerv2) flowlog(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
-		return
-	}
-	b, err := h.processAuthContainer(r.Body)
-	if err != nil || len(b) == 0 {
-		log.Printf("error processAuthContainer: %v", err)
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	status, err := flowLogProcess(h.manager, *u, b)
@@ -632,10 +642,19 @@ func (h *apiHandlerv2) flowlog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *apiHandlerv2) uuid(w http.ResponseWriter, r *http.Request) {
-	u := h.checkCertAndRecord(w, r)
+	b, u := h.validateAuthContainerAndRecord(w, r)
 	if u == nil {
 		return
 	}
+
+	var req uuid2.UuidRequest
+	err := proto.Unmarshal(b, &req)
+	if err != nil {
+		log.Printf("error unmarshalling uuidRequest: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	uuidResponce, err := h.manager.GetUUID(*u)
 	if err != nil {
 		log.Printf("error getting device uuidResponce: %v", err)
