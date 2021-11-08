@@ -5,6 +5,7 @@ package memory
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 	"strings"
@@ -252,7 +253,7 @@ func TestDeviceManager(t *testing.T) {
 		}
 	})
 
-	t.Run("TestDeviceCheckCert", func(t *testing.T) {
+	t.Run("TestDeviceCheckCertAndHash", func(t *testing.T) {
 		cn := "CN=abcdefg"
 		hosts := "localhost,127.0.0.1"
 		u, _ := uuid.NewV4()
@@ -262,10 +263,11 @@ func TestDeviceManager(t *testing.T) {
 			certExists bool
 			u          *uuid.UUID
 			err        error
+			errHash    error
 		}{
-			{false, false, nil, fmt.Errorf("invalid nil certificate")},
-			{true, false, nil, nil},
-			{true, true, &u, nil},
+			{false, false, nil, fmt.Errorf("invalid nil certificate"), fmt.Errorf("invalid empty hash")},
+			{true, false, nil, nil, fmt.Errorf("cert hash not found")},
+			{true, true, &u, nil, nil},
 		}
 
 		for i, tt := range tests {
@@ -297,6 +299,18 @@ func TestDeviceManager(t *testing.T) {
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
+			case (devu != nil && tt.u == nil) || (devu == nil && tt.u != nil) || (devu != nil && tt.u != nil && tt.u.String() != devu.String()):
+				t.Errorf("%d: mismatched uuid, actual %v, expected %v", i, devu, tt.u)
+			}
+			var hash []byte
+			if cert != nil {
+				hashArray := sha256.Sum256(cert.Raw)
+				hash = hashArray[:]
+			}
+			devu, err = dm.DeviceCheckCertHash(hash)
+			switch {
+			case (err != nil && tt.errHash == nil) || (err == nil && tt.errHash != nil) || (err != nil && tt.errHash != nil && !strings.HasPrefix(err.Error(), tt.errHash.Error())):
+				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.errHash)
 			case (devu != nil && tt.u == nil) || (devu == nil && tt.u != nil) || (devu != nil && tt.u != nil && tt.u.String() != devu.String()):
 				t.Errorf("%d: mismatched uuid, actual %v, expected %v", i, devu, tt.u)
 			}

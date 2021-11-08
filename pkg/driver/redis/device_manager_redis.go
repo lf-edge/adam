@@ -4,6 +4,8 @@
 package redis
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -281,6 +283,25 @@ func (d *DeviceManager) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, err
 		return &u, nil
 	}
 	return nil, nil
+}
+
+// DeviceCheckCertHash see if a particular certificate hash is a valid registered device certificate
+func (d *DeviceManager) DeviceCheckCertHash(hash []byte) (*uuid.UUID, error) {
+	if hash == nil {
+		return nil, fmt.Errorf("invalid empty hash")
+	}
+	// refresh certs from Redis, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
+	}
+	for k, u := range d.deviceCerts {
+		s := sha256.Sum256([]byte(k))
+		if bytes.Equal(hash, s[:]) {
+			return &u, nil
+		}
+	}
+	return nil, fmt.Errorf("cert hash not found")
 }
 
 // DeviceRemove remove a device

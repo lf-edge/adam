@@ -342,8 +342,8 @@ func TestDeviceManager(t *testing.T) {
 		}
 	})
 
-	// DeviceCheckCert for file is identical to Memory, since it just uses the cache, so no testing here
-	t.Run("TestDeviceCheckCert", func(t *testing.T) {
+	// DeviceCheckCert and DeviceCheckCertHash for file is identical to Memory, since it just uses the cache, so no testing here
+	t.Run("TestDeviceCheckCertAndHash", func(t *testing.T) {
 	})
 
 	t.Run("TestDeviceRemove", func(t *testing.T) {

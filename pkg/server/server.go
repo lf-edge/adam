@@ -127,16 +127,13 @@ func (s *Server) Start() {
 		}
 
 		edv2 := router.PathPrefix("/api/v2/edgedevice").Subrouter()
-		edv2.Use(ensureMTLS)
 		edv2.Use(logRequest)
 		edv2.HandleFunc("/certs", apiv2.certs).Methods("GET")
 		edv2.HandleFunc("/certs", apiv2.certs).Methods("POST")
 		edv2.HandleFunc("/register", apiv2.register).Methods("POST")
 		edv2.HandleFunc("/ping", apiv2.ping).Methods("GET")
-		edv2.HandleFunc("/config", apiv2.config).Methods("GET")
-		edv2.HandleFunc("/config", apiv2.configPost).Methods("POST")
-		edv2.HandleFunc("/id/{uuid}/config", apiv2.config).Methods("GET")
-		edv2.HandleFunc("/id/{uuid}/config", apiv2.configPost).Methods("POST")
+		edv2.HandleFunc("/config", apiv2.config).Methods("GET", "POST")
+		edv2.HandleFunc("/id/{uuid}/config", apiv2.config).Methods("GET", "POST")
 		edv2.HandleFunc("/id/{uuid}/attest", apiv2.attest).Methods("POST")
 		edv2.HandleFunc("/id/{uuid}/info", apiv2.info).Methods("POST")
 		edv2.HandleFunc("/id/{uuid}/metrics", apiv2.metrics).Methods("POST")
@@ -264,13 +261,20 @@ func ensureMTLS(next http.Handler) http.Handler {
 func logRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cert := getClientCert(r)
-		log.Printf("%s requested %s", cert.Subject.String(), r.URL.Path)
+		if cert != nil {
+			log.Printf("%s (%s) requested %s", r.RemoteAddr, cert.Subject.String(), r.URL.Path)
+		} else {
+			log.Printf("%s requested %s", r.RemoteAddr, r.URL.Path)
+		}
 		next.ServeHTTP(w, r)
 	})
 }
 
 // retrieve the client cert
 func getClientCert(r *http.Request) *x509.Certificate {
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+		return nil
+	}
 	return r.TLS.PeerCertificates[0]
 }
 

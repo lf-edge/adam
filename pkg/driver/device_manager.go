@@ -55,6 +55,8 @@ type DeviceManager interface {
 	OnboardRegister(*x509.Certificate, []string) error
 	// DeviceCheckCert check if a certificate is valid to use for a device
 	DeviceCheckCert(*x509.Certificate) (*uuid.UUID, error)
+	// DeviceCheckCertHash check if a certificate hash is valid to use for a device
+	DeviceCheckCertHash([]byte) (*uuid.UUID, error)
 	// DeviceRemove remove a device
 	DeviceRemove(*uuid.UUID) error
 	// DeviceClear remove all devices
