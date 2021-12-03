@@ -35,6 +35,7 @@ const (
 	DeviceOnboardFilename     = "onboard-certificate.pem"
 	deviceConfigFilename      = "config.json"
 	deviceAttestCertsFilename = "certs.json"
+	deviceStorageKeysFilename = "storage-keys.json"
 	deviceSerialFilename      = "serial.txt"
 	onboardCertFilename       = "cert.pem"
 	onboardCertSerials        = "onboard-serials.txt"
@@ -802,6 +803,40 @@ func (d *DeviceManager) GetCerts(u uuid.UUID) ([]byte, error) {
 	b, err := ioutil.ReadFile(fullAttestPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read certificates from %s: %v", fullAttestPath, err)
+	}
+
+	return b, nil
+}
+
+// WriteStorageKeys write storage keys information
+func (d *DeviceManager) WriteStorageKeys(u uuid.UUID, b []byte) error {
+	// refresh cache from filesystem, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return fmt.Errorf("unable to refresh cache from filesystem: %v", err)
+	}
+	// look up the device by uuid
+	_, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	if len(b) < 1 {
+		return fmt.Errorf("empty configuration")
+	}
+	err = d.writeJSONFile(u, "", deviceStorageKeysFilename, b)
+	if err != nil {
+		return fmt.Errorf("error saving storage keys to %s: %v", deviceStorageKeysFilename, err)
+	}
+	return nil
+}
+
+// GetStorageKeys retrieve storage keys for a particular device
+func (d *DeviceManager) GetStorageKeys(u uuid.UUID) ([]byte, error) {
+	// read storage keys from disk
+	fullStorageKeysPath := path.Join(d.getDevicePath(u), deviceStorageKeysFilename)
+	b, err := ioutil.ReadFile(fullStorageKeysPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not read storage keys from %s: %v", fullStorageKeysPath, err)
 	}
 
 	return b, nil

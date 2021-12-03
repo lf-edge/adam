@@ -5,6 +5,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"crypto/x509"
@@ -308,10 +309,40 @@ func attestProcess(manager driver.DeviceManager, u uuid.UUID, b []byte) ([]byte,
 		}
 		response.RespType = attest.ZAttestRespType_ATTEST_RESP_CERT
 	case attest.ZAttestReqType_ATTEST_REQ_QUOTE:
+		var keys []*attest.AttestVolumeKey
+		b, err := manager.GetStorageKeys(u)
+		if err == nil && len(b) > 0 {
+			var storageKeys attest.AttestStorageKeys
+			err = json.Unmarshal(b, &storageKeys)
+			if err != nil {
+				log.Printf("cannot unmarshal storage keys: %s", err)
+			} else {
+				keys = storageKeys.GetKeys()
+			}
+		}
 		response.RespType = attest.ZAttestRespType_ATTEST_RESP_QUOTE_RESP
 		response.QuoteResp = &attest.ZAttestQuoteResp{
 			IntegrityToken: []byte(integrityToken),
-			Response:       attest.ZAttestResponseCode_Z_ATTEST_RESPONSE_CODE_SUCCESS}
+			Keys:           keys,
+			Response:       attest.ZAttestResponseCode_Z_ATTEST_RESPONSE_CODE_SUCCESS,
+		}
+	case attest.ZAttestReqType_Z_ATTEST_REQ_TYPE_STORE_KEYS:
+		if !bytes.Equal(msg.StorageKeys.IntegrityToken, []byte(integrityToken)) {
+			return nil, http.StatusUnauthorized, fmt.Errorf("wrong integrity token")
+		}
+		storageKeys := msg.StorageKeys
+		b, err := json.Marshal(storageKeys)
+		if err != nil {
+			return nil, http.StatusBadRequest, fmt.Errorf("failed to marshal storage keys: %s", err)
+		}
+		err = manager.WriteStorageKeys(u, b)
+		if err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("failed to write storage keys message: %v", err)
+		}
+		response.RespType = attest.ZAttestRespType_Z_ATTEST_RESP_TYPE_STORE_KEYS
+		response.StorageKeysResp = &attest.AttestStorageKeysResp{
+			Response: attest.AttestStorageKeysResponseCode_ATTEST_STORAGE_KEYS_RESPONSE_CODE_SUCCESS,
+		}
 	default:
 		return nil, http.StatusBadRequest, fmt.Errorf("failed to process attest request: not implemented for type %v", msg.ReqType)
 	}

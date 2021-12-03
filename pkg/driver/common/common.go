@@ -50,6 +50,7 @@ type DeviceStorage struct {
 	CurrentLog  int
 	Config      []byte
 	ATtestCerts []byte
+	StorageKeys []byte
 	Serial      string
 	Onboard     *x509.Certificate
 }
