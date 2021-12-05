@@ -69,6 +69,8 @@ type DeviceManager interface {
 	DeviceRegister(uuid.UUID, *x509.Certificate, *x509.Certificate, string, []byte) error
 	// WriteCerts write an attestation certs information
 	WriteCerts(uuid.UUID, []byte) error
+	// WriteStorageKeys write storage keys information
+	WriteStorageKeys(uuid.UUID, []byte) error
 	// WriteInfo write an information message
 	WriteInfo(uuid.UUID, []byte) error
 	// WriteLogs write log messages
@@ -95,4 +97,6 @@ type DeviceManager interface {
 	GetRequestsReader(u uuid.UUID) (io.Reader, error)
 	// GetCerts retrieve the attest certs for a particular device
 	GetCerts(uid uuid.UUID) ([]byte, error)
+	// GetStorageKeys retrieve storage keys for a particular device
+	GetStorageKeys(uid uuid.UUID) ([]byte, error)
 }

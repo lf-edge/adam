@@ -429,6 +429,30 @@ func (d *DeviceManager) GetCerts(u uuid.UUID) ([]byte, error) {
 	return dev.ATtestCerts, nil
 }
 
+// WriteStorageKeys write storage keys information
+func (d *DeviceManager) WriteStorageKeys(u uuid.UUID, b []byte) error {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	if len(b) < 1 {
+		return fmt.Errorf("empty configuration")
+	}
+	dev.StorageKeys = b
+	return nil
+}
+
+// GetStorageKeys retrieve storage keys for a particular device
+func (d *DeviceManager) GetStorageKeys(u uuid.UUID) ([]byte, error) {
+	// look up the device by uuid
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	return dev.StorageKeys, nil
+}
+
 // GetConfig retrieve the config for a particular device
 func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 	// look up the device by uuid
