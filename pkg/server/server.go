@@ -184,6 +184,10 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device", admin.deviceAdd).Methods("POST")
 	ad.HandleFunc("/device", admin.deviceClear).Methods("DELETE")
 	ad.HandleFunc("/device/{uuid}", admin.deviceRemove).Methods("DELETE")
+	ad.HandleFunc("/device/{uuid}/options", admin.deviceOptionsGet).Methods("GET")
+	ad.HandleFunc("/device/{uuid}/options", admin.deviceOptionsSet).Methods("PUT")
+	ad.HandleFunc("/options", admin.globalOptionsGet).Methods("GET")
+	ad.HandleFunc("/options", admin.globalOptionsSet).Methods("PUT")
 
 	var (
 		//index  []byte

@@ -83,6 +83,10 @@ type DeviceManager interface {
 	WriteMetrics(uuid.UUID, []byte) error
 	// WriteRequest record a request that was made, including the remote IP, x-forwarded-for header, and path
 	WriteRequest(uuid.UUID, []byte) error
+	// SetDeviceOptions stores device options for a particular device
+	SetDeviceOptions(uuid.UUID, []byte) error
+	// SetGlobalOptions stores global options
+	SetGlobalOptions([]byte) error
 	// GetConfig get the config for a given uuid
 	GetConfig(uuid.UUID) ([]byte, error)
 	// SetConfig set the config for a given uuid
@@ -99,4 +103,8 @@ type DeviceManager interface {
 	GetCerts(uid uuid.UUID) ([]byte, error)
 	// GetStorageKeys retrieve storage keys for a particular device
 	GetStorageKeys(uid uuid.UUID) ([]byte, error)
+	// GetDeviceOptions retrieve device options for a particular device
+	GetDeviceOptions(uuid.UUID) ([]byte, error)
+	// GetGlobalOptions retrieve global options
+	GetGlobalOptions() ([]byte, error)
 }

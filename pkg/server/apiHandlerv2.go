@@ -16,7 +16,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	uuid2 "github.com/lf-edge/eve/api/go/eveuuid"
 	"io"
 	"io/ioutil"
 	"log"
@@ -35,6 +34,7 @@ import (
 	"github.com/lf-edge/eve/api/go/certs"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/evecommon"
+	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -50,8 +50,8 @@ type apiHandlerv2 struct {
 }
 
 const (
-	nonce          = "dummy_nonce"
-	integrityToken = "dummy_integrity_token"
+	nonceSize          = 12
+	integrityTokenSize = 128
 )
 
 // GetUser godoc
@@ -66,7 +66,7 @@ func (h *apiHandlerv2) recordClient(u *uuid.UUID, r *http.Request) {
 		log.Printf("error saving request for device without UUID")
 		return
 	}
-	req := ApiRequest{
+	req := common.ApiRequest{
 		Timestamp: time.Now(),
 		UUID:      *u,
 		ClientIP:  r.RemoteAddr,
@@ -475,7 +475,7 @@ func (h *apiHandlerv2) config(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	data, code, err := configProcess(configRequest, cfg)
+	data, code, err := configProcess(h.manager, *u, configRequest, cfg, true)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, http.StatusText(code), code)
@@ -647,7 +647,7 @@ func (h *apiHandlerv2) uuid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req uuid2.UuidRequest
+	var req eveuuid.UuidRequest
 	err := proto.Unmarshal(b, &req)
 	if err != nil {
 		log.Printf("error unmarshalling uuidRequest: %v", err)

@@ -37,6 +37,7 @@ type DeviceManager struct {
 	maxRequestsSize    int
 	maxFlowMessageSize int
 	maxAppLogsSize     int
+	globalOptions      []byte
 }
 
 // Name return name
@@ -415,7 +416,7 @@ func (d *DeviceManager) WriteCerts(u uuid.UUID, b []byte) error {
 	if len(b) < 1 {
 		return fmt.Errorf("empty configuration")
 	}
-	dev.ATtestCerts = b
+	dev.AttestCerts = b
 	return nil
 }
 
@@ -426,7 +427,7 @@ func (d *DeviceManager) GetCerts(u uuid.UUID) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
-	return dev.ATtestCerts, nil
+	return dev.AttestCerts, nil
 }
 
 // WriteStorageKeys write storage keys information
@@ -561,4 +562,46 @@ func (d *DeviceManager) GetUUID(u uuid.UUID) ([]byte, error) {
 	}
 	ur := &eveuuid.UuidResponse{Uuid: u.String()}
 	return proto.Marshal(ur)
+}
+
+func (d *DeviceManager) SetDeviceOptions(u uuid.UUID, b []byte) error {
+	if len(b) < 1 {
+		return fmt.Errorf("empty options")
+	}
+	dev, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("no device UUID %s", u)
+	}
+	dev.Options = b
+	return nil
+}
+
+func (d *DeviceManager) GetDeviceOptions(u uuid.UUID) ([]byte, error) {
+	dev, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("no device UUID %s", u)
+	}
+	if dev.Options == nil {
+		cfg := common.CreateBaseDeviceOptions(u)
+		err := d.SetDeviceOptions(u, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("cannot set default options for %s: %s", u, err)
+		}
+	}
+	return dev.Options, nil
+}
+
+func (d *DeviceManager) SetGlobalOptions(b []byte) error {
+	d.globalOptions = b
+	return nil
+}
+
+func (d *DeviceManager) GetGlobalOptions() ([]byte, error) {
+	if d.globalOptions == nil {
+		err := d.SetGlobalOptions(common.CreateBaseGlobalOptions())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return d.globalOptions, nil
 }

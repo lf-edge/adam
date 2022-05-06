@@ -39,6 +39,8 @@ const (
 	deviceSerialFilename      = "serial.txt"
 	onboardCertFilename       = "cert.pem"
 	onboardCertSerials        = "onboard-serials.txt"
+	deviceOptionsFilename     = "options.json"
+	globalOptionsFilename     = "global-options.json"
 	logDir                    = "logs"
 	metricsDir                = "metrics"
 	infoDir                   = "info"
@@ -1212,4 +1214,50 @@ func (d *DeviceManager) GetUUID(u uuid.UUID) ([]byte, error) {
 	}
 	ur := &eveuuid.UuidResponse{Uuid: u.String()}
 	return proto.Marshal(ur)
+}
+
+func (d *DeviceManager) SetDeviceOptions(u uuid.UUID, b []byte) error {
+	if len(b) < 1 {
+		return fmt.Errorf("empty options")
+	}
+	if !d.deviceExists(u) {
+		return fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	// save the device configuration
+	err := d.writeJSONFile(u, "", deviceOptionsFilename, b)
+	if err != nil {
+		return fmt.Errorf("error saving options to %s: %v", deviceOptionsFilename, err)
+	}
+	return nil
+}
+
+func (d *DeviceManager) GetDeviceOptions(u uuid.UUID) ([]byte, error) {
+	if !d.deviceExists(u) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	// read options from disk
+	fullOptionsPath := path.Join(d.getDevicePath(u), deviceOptionsFilename)
+	b, err := ioutil.ReadFile(fullOptionsPath)
+	if err != nil {
+		// if error another than not exists than return
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("could not read options from %s: %v", fullOptionsPath, err)
+		}
+		// if is not exists, try to create default options
+		cfg := common.CreateBaseDeviceOptions(u)
+		err = d.SetDeviceOptions(u, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("cannot set default options for %s: %s", u, err)
+		}
+		return cfg, nil
+	}
+	return b, nil
+}
+
+func (d *DeviceManager) SetGlobalOptions(b []byte) error {
+	return ioutil.WriteFile(filepath.Join(d.databasePath, globalOptionsFilename), b, 0666)
+}
+
+func (d *DeviceManager) GetGlobalOptions() ([]byte, error) {
+	return ioutil.ReadFile(filepath.Join(d.databasePath, globalOptionsFilename))
 }

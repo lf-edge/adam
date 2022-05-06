@@ -37,6 +37,8 @@ const (
 	deviceConfigsHash      = "DEVICE_CONFIGS"       // UUID -> json (EVE config json representation)
 	deviceAttestCertsHash  = "DEVICE_ATTEST_CERTS"  //UUID -> json (EVE attest certs request json representation)
 	deviceStorageKeysHash  = "DEVICE_STORAGE_KEYS"  //UUID -> json (EVE storage keys json representation)
+	deviceOptionsHash      = "DEVICE_OPTIONS"       //UUID -> json (options json representation)
+	globalOptionsHash      = "GLOBAL_OPTIONS"       //GLOBAL_OPTIONS -> json (options json representation)
 
 	// Logs, info and metrics are managed by Redis streams named after device UUID as in:
 	//    LOGS_EVE_<UUID>
@@ -314,6 +316,7 @@ func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 		{deviceOnboardCertsHash, k},
 		{deviceAttestCertsHash, k},
 		{deviceStorageKeysHash, k},
+		{deviceOptionsHash, k},
 		{deviceSerialsHash, k},
 		{deviceInfoStream + k},
 		{deviceLogsStream + k},
@@ -345,7 +348,8 @@ func (d *DeviceManager) DeviceClear() error {
 		{deviceCertsHash},
 		{deviceAttestCertsHash},
 		{deviceStorageKeysHash},
-		{deviceOnboardCertsHash}}
+		{deviceOnboardCertsHash},
+		{deviceOptionsHash}}
 
 	for u, dev := range d.devices {
 		streams = append(streams,
@@ -1069,4 +1073,83 @@ func (d *DeviceManager) GetUUID(u uuid.UUID) ([]byte, error) {
 	}
 	ur := &eveuuid.UuidResponse{Uuid: u.String()}
 	return proto.Marshal(ur)
+}
+
+func (d *DeviceManager) SetDeviceOptions(u uuid.UUID, b []byte) error {
+	// pre-flight checks to bail early
+	if len(b) < 1 {
+		return fmt.Errorf("empty options")
+	}
+
+	// refresh cache from Redis, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return fmt.Errorf("unable to refresh from Redis: %v", err)
+	}
+	// look up the device by uuid
+	_, ok := d.devices[u]
+	if !ok {
+		return fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+
+	if _, err = d.client.HSet(deviceOptionsHash, u.String(), string(b)).Result(); err == nil {
+		_, err = d.client.Save().Result()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to save options for %s: %v", u.String(), err)
+	}
+	return nil
+}
+
+func (d *DeviceManager) GetDeviceOptions(u uuid.UUID) ([]byte, error) {
+	// refresh cache from Redis, if needed - includes checking if necessary based on timer
+	err := d.refreshCache()
+	if err != nil {
+		return nil, fmt.Errorf("unable to refresh from Redis: %v", err)
+	}
+	// look up the device by uuid
+	_, ok := d.devices[u]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
+	}
+	data, err := d.client.HGet(deviceOptionsHash, u.String()).Result()
+	if err != nil {
+		cfg := common.CreateBaseDeviceOptions(u)
+		err = d.SetDeviceOptions(u, cfg)
+		if err == nil {
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("failed to get options for %s: %v", u.String(), err)
+	} else {
+		return []byte(data), nil
+	}
+}
+
+func (d *DeviceManager) SetGlobalOptions(b []byte) error {
+	// pre-flight checks to bail early
+	if len(b) < 1 {
+		return fmt.Errorf("empty options")
+	}
+	var err error
+	if _, err = d.client.HSet(globalOptionsHash, globalOptionsHash, string(b)).Result(); err == nil {
+		_, err = d.client.Save().Result()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to save options for %s: %v", globalOptionsHash, err)
+	}
+	return nil
+}
+
+func (d *DeviceManager) GetGlobalOptions() ([]byte, error) {
+	data, err := d.client.HGet(globalOptionsHash, globalOptionsHash).Result()
+	if err != nil {
+		cfg := common.CreateBaseGlobalOptions()
+		err = d.SetGlobalOptions(cfg)
+		if err == nil {
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("failed to get options for %s: %v", globalOptionsHash, err)
+	} else {
+		return []byte(data), nil
+	}
 }
