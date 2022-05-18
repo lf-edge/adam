@@ -491,3 +491,95 @@ func (h *adminHandler) deviceCertsGet(w http.ResponseWriter, r *http.Request) {
 		w.Write(deviceAttest)
 	}
 }
+
+func (h *adminHandler) deviceOptionsGet(w http.ResponseWriter, r *http.Request) {
+	u := mux.Vars(r)["uuid"]
+	uid, err := uuid.FromString(u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	deviceOptions, err := h.manager.GetDeviceOptions(uid)
+	_, isNotFound := err.(*common.NotFoundError)
+	switch {
+	case err != nil && isNotFound:
+		log.Printf("deviceOptionsGet: %v", err)
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	case err != nil:
+		log.Printf("deviceOptionsGet: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	case deviceOptions == nil:
+		http.Error(w, "found device information, but options was empty", http.StatusInternalServerError)
+	default:
+		w.WriteHeader(http.StatusOK)
+		w.Write(deviceOptions)
+	}
+}
+
+func (h *adminHandler) deviceOptionsSet(w http.ResponseWriter, r *http.Request) {
+	u := mux.Vars(r)["uuid"]
+	uid, err := uuid.FromString(u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("bad body: %v", err), http.StatusBadRequest)
+		return
+	}
+	var deviceOptions common.DeviceOptions
+	err = json.Unmarshal(body, &deviceOptions)
+	if err != nil {
+		log.Printf("deviceOptionsSet: Unmarshal options error: %v", err)
+		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
+		return
+	}
+	err = h.manager.SetDeviceOptions(uid, body)
+	if err != nil {
+		log.Printf("deviceOptionsSet: %s", err)
+		http.Error(w, fmt.Sprintf("failed to set device options: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *adminHandler) globalOptionsGet(w http.ResponseWriter, _ *http.Request) {
+	globalOptions, err := h.manager.GetGlobalOptions()
+	_, isNotFound := err.(*common.NotFoundError)
+	switch {
+	case err != nil && isNotFound:
+		log.Printf("globalOptionsGet: %v", err)
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	case err != nil:
+		log.Printf("globalOptionsGet: %v", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	case globalOptions == nil:
+		http.Error(w, "found information, but options was empty", http.StatusInternalServerError)
+	default:
+		w.WriteHeader(http.StatusOK)
+		w.Write(globalOptions)
+	}
+}
+
+func (h *adminHandler) globalOptionsSet(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("bad body: %v", err), http.StatusBadRequest)
+		return
+	}
+	var globalOptions common.GlobalOptions
+	err = json.Unmarshal(body, &globalOptions)
+	if err != nil {
+		log.Printf("globalOptionsSet: Unmarshal options error: %v", err)
+		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
+		return
+	}
+	err = h.manager.SetGlobalOptions(body)
+	if err != nil {
+		log.Printf("globalOptionsSet: %s", err)
+		http.Error(w, fmt.Sprintf("failed to set global options: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}

@@ -25,6 +25,10 @@ The following are the admin endpoints:
 * `POST /device` - create a new device
 * `DELETE /device` - delete all devices
 * `DELETE /device/{uuid}` - delete one specific device
+* `GET /device/{uuid}/options` - set options for one device
+* `PUT /device/{uuid}/options` - update options for one device
+* `GET /options` - set global options
+* `PUT /options` - update global options
 
 ## Adam Admin
 

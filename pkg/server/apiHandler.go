@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
+	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve/api/go/config"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
@@ -36,7 +37,7 @@ func (h *apiHandler) recordClient(u *uuid.UUID, r *http.Request) {
 		log.Printf("error saving request for device without UUID")
 		return
 	}
-	req := ApiRequest{
+	req := common.ApiRequest{
 		Timestamp: time.Now(),
 		UUID:      *u,
 		ClientIP:  r.RemoteAddr,
@@ -121,7 +122,7 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	data, code, err := configProcess(configRequest, cfg)
+	data, code, err := configProcess(h.manager, *u, configRequest, cfg, false)
 	if err != nil {
 		log.Printf("error configProcess: %v", err)
 		http.Error(w, http.StatusText(code), code)

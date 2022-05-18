@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -22,7 +23,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
-	"github.com/lf-edge/eve/api/go/attest"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/flowlog"
 	"github.com/lf-edge/eve/api/go/info"
@@ -40,17 +40,16 @@ const (
 	mimeJSON      = "application/json"
 )
 
-//ApiRequest stores information about requests from EVE
-type ApiRequest struct {
-	Timestamp time.Time `json:"timestamp"`
-	UUID      uuid.UUID `json:"uuid,omitempty"`
-	ClientIP  string    `json:"client-ip"`
-	Forwarded string    `json:"forwarded,omitempty"`
-	Method    string    `json:"method"`
-	URL       string    `json:"url"`
-}
-
-func configProcess(configRequest *config.ConfigRequest, conf []byte) ([]byte, int, error) {
+func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *config.ConfigRequest, conf []byte, enforceIntegrityCheck bool) ([]byte, int, error) {
+	deviceOptions, err := getDeviceOptions(manager, u)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get device options: %v", err)
+	}
+	if enforceIntegrityCheck {
+		if len(configRequest.IntegrityToken) == 0 || !bytes.Equal(configRequest.IntegrityToken, []byte(deviceOptions.IntegrityToken)) {
+			return nil, http.StatusForbidden, fmt.Errorf("integrity token missmatch")
+		}
+	}
 	// convert config into a protobuf
 	var msg config.EdgeDevConfig
 	if err := protojson.Unmarshal(conf, &msg); err != nil {
@@ -287,70 +286,43 @@ func newAppLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, reader 
 	return http.StatusCreated, nil
 }
 
-func attestProcess(manager driver.DeviceManager, u uuid.UUID, b []byte) ([]byte, int, error) {
-	msg := &attest.ZAttestReq{}
-	if err := proto.Unmarshal(b, msg); err != nil {
-		return nil, http.StatusBadRequest, fmt.Errorf("failed to parse attest request: %v", err)
-	}
-	response := &attest.ZAttestResponse{}
-	switch msg.ReqType {
-	case attest.ZAttestReqType_ATTEST_REQ_NONCE:
-		response.RespType = attest.ZAttestRespType_ATTEST_RESP_NONCE
-		response.Nonce = &attest.ZAttestNonceResp{Nonce: []byte(nonce)}
-	case attest.ZAttestReqType_ATTEST_REQ_CERT:
-		certsData := &common.Zcerts{Certs: msg.Certs}
-		b, err := json.Marshal(certsData)
-		if err != nil {
-			return nil, http.StatusBadRequest, fmt.Errorf("failed to marshal attest message: %v", err)
-		}
-		err = manager.WriteCerts(u, b)
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("failed to write attest certs message: %v", err)
-		}
-		response.RespType = attest.ZAttestRespType_ATTEST_RESP_CERT
-	case attest.ZAttestReqType_ATTEST_REQ_QUOTE:
-		var keys []*attest.AttestVolumeKey
-		b, err := manager.GetStorageKeys(u)
-		if err == nil && len(b) > 0 {
-			var storageKeys attest.AttestStorageKeys
-			err = json.Unmarshal(b, &storageKeys)
-			if err != nil {
-				log.Printf("cannot unmarshal storage keys: %s", err)
-			} else {
-				keys = storageKeys.GetKeys()
-			}
-		}
-		response.RespType = attest.ZAttestRespType_ATTEST_RESP_QUOTE_RESP
-		response.QuoteResp = &attest.ZAttestQuoteResp{
-			IntegrityToken: []byte(integrityToken),
-			Keys:           keys,
-			Response:       attest.ZAttestResponseCode_Z_ATTEST_RESPONSE_CODE_SUCCESS,
-		}
-	case attest.ZAttestReqType_Z_ATTEST_REQ_TYPE_STORE_KEYS:
-		if !bytes.Equal(msg.StorageKeys.IntegrityToken, []byte(integrityToken)) {
-			return nil, http.StatusUnauthorized, fmt.Errorf("wrong integrity token")
-		}
-		storageKeys := msg.StorageKeys
-		b, err := json.Marshal(storageKeys)
-		if err != nil {
-			return nil, http.StatusBadRequest, fmt.Errorf("failed to marshal storage keys: %s", err)
-		}
-		err = manager.WriteStorageKeys(u, b)
-		if err != nil {
-			return nil, http.StatusInternalServerError, fmt.Errorf("failed to write storage keys message: %v", err)
-		}
-		response.RespType = attest.ZAttestRespType_Z_ATTEST_RESP_TYPE_STORE_KEYS
-		response.StorageKeysResp = &attest.AttestStorageKeysResp{
-			Response: attest.AttestStorageKeysResponseCode_ATTEST_STORAGE_KEYS_RESPONSE_CODE_SUCCESS,
-		}
-	default:
-		return nil, http.StatusBadRequest, fmt.Errorf("failed to process attest request: not implemented for type %v", msg.ReqType)
-	}
-	out, err := proto.Marshal(response)
+func setDeviceOptions(manager driver.DeviceManager, u uuid.UUID, deviceOptions *common.DeviceOptions) error {
+	b, err := json.Marshal(deviceOptions)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error converting config to byte message %v", msg.ReqType)
+		return fmt.Errorf("cannot marshal device options: %s", err)
 	}
-	return out, http.StatusCreated, nil
+	return manager.SetDeviceOptions(u, b)
+}
+
+func getDeviceOptions(manager driver.DeviceManager, u uuid.UUID) (*common.DeviceOptions, error) {
+	deviceOptionsBytes, err := manager.GetDeviceOptions(u)
+	if err != nil {
+		return nil, fmt.Errorf("getDeviceOptions failed to get from manager: %s", err)
+	}
+	var deviceOptions common.DeviceOptions
+	if err := json.Unmarshal(deviceOptionsBytes, &deviceOptions); err != nil {
+		return nil, fmt.Errorf("getDeviceOptions failed to unmarshal: %s", err)
+	}
+	return &deviceOptions, nil
+}
+
+func getGlobalOptions(manager driver.DeviceManager) (*common.GlobalOptions, error) {
+	globalOptionsBytes, err := manager.GetGlobalOptions()
+	if err != nil {
+		return nil, fmt.Errorf("getGlobalOptions failed to get from manager: %s", err)
+	}
+	var globalOptions common.GlobalOptions
+	if err := json.Unmarshal(globalOptionsBytes, &globalOptions); err != nil {
+		return nil, fmt.Errorf("getGlobalOptions failed to unmarshal: %s", err)
+	}
+	return &globalOptions, nil
+}
+
+func randomString(length int) string {
+	rand.Seed(time.Now().UnixNano())
+	b := make([]byte, length)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)[:length]
 }
 
 func flowLogProcess(manager driver.DeviceManager, u uuid.UUID, flowMessage []byte) (int, error) {
