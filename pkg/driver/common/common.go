@@ -108,6 +108,7 @@ type DeviceOptions struct {
 	Nonce               string       `json:"nonce"`
 	IntegrityToken      string       `json:"integrityToken"`
 	ReceivedPCRTemplate *PCRTemplate `json:"receivedPCRTemplate"`
+	Attested            bool         `json:"attested"`
 }
 
 // Bytes convenience to convert to json bytes
