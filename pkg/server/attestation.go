@@ -151,6 +151,7 @@ func templateAttest(manager driver.DeviceManager, u uuid.UUID, quote *attest.ZAt
 	}
 	attestTemplate := extractQuoteAttestTemplate(quote)
 	deviceOptions.ReceivedPCRTemplate = attestTemplate
+	deviceOptions.EventLog = quote.EventLog
 	err = setDeviceOptions(manager, u, deviceOptions)
 	if err != nil {
 		return err
