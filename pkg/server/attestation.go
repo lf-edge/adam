@@ -151,6 +151,7 @@ func templateAttest(manager driver.DeviceManager, u uuid.UUID, quote *attest.ZAt
 	}
 	attestTemplate := extractQuoteAttestTemplate(quote)
 	deviceOptions.ReceivedPCRTemplate = attestTemplate
+	deviceOptions.EventLog = quote.EventLog
 	err = setDeviceOptions(manager, u, deviceOptions)
 	if err != nil {
 		return err
@@ -231,6 +232,8 @@ func attestProcess(manager driver.DeviceManager, u uuid.UUID, b []byte) ([]byte,
 		response.RespType = attest.ZAttestRespType_ATTEST_RESP_NONCE
 		nonce := randomString(nonceSize)
 		deviceOptions.Nonce = nonce
+		//new attestation process
+		deviceOptions.Attested = false
 		if err := setDeviceOptions(manager, u, deviceOptions); err != nil {
 			log.Printf("Cannot store device options: %s", err)
 		}
@@ -276,6 +279,12 @@ func attestProcess(manager driver.DeviceManager, u uuid.UUID, b []byte) ([]byte,
 		// no data provided, assume that TPM disabled
 		if msg.Quote == nil || len(msg.Quote.GetPcrValues()) == 0 {
 			response.QuoteResp.Keys = nil
+			if !deviceOptions.Attested {
+				deviceOptions.Attested = true
+				if err := setDeviceOptions(manager, u, deviceOptions); err != nil {
+					log.Printf("Cannot store device options: %s", err)
+				}
+			}
 			break
 		}
 
@@ -294,6 +303,13 @@ func attestProcess(manager driver.DeviceManager, u uuid.UUID, b []byte) ([]byte,
 				response.QuoteResp.Keys = nil
 				log.Printf("templateAttest failed: %s, %s", response.QuoteResp.Response, err)
 				break
+			}
+		}
+
+		if !deviceOptions.Attested {
+			deviceOptions.Attested = true
+			if err := setDeviceOptions(manager, u, deviceOptions); err != nil {
+				log.Printf("Cannot store device options: %s", err)
 			}
 		}
 
