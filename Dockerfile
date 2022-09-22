@@ -1,13 +1,9 @@
 # Copyright (c) 2019 Zededa, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM lfedge/eve-alpine:6.2.0 AS build
+FROM lfedge/eve-alpine:8.11.0 AS build
 ENV BUILD_PKGS go git
 RUN eve-alpine-deploy.sh
-
-# FIXME: integrate go 1.16 into eve-alpine
-RUN apk --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/v3.14/community add -U --upgrade go &&\
-    go version
 
 ENV CGO_ENABLED=0
 ENV GO111MODULE=on
