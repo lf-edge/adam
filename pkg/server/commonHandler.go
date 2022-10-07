@@ -33,6 +33,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+type commonHandler interface {
+	Manager() driver.DeviceManager
+	ProtoFormat() bool
+}
+
 const (
 	contentType   = "Content-Type"
 	mimeProto     = "application/x-proto-binary"
@@ -40,8 +45,8 @@ const (
 	mimeJSON      = "application/json"
 )
 
-func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *config.ConfigRequest, conf []byte, enforceIntegrityCheck bool) ([]byte, int, error) {
-	deviceOptions, err := getDeviceOptions(manager, u)
+func configProcess(h commonHandler, u uuid.UUID, configRequest *config.ConfigRequest, conf []byte, enforceIntegrityCheck bool) ([]byte, int, error) {
+	deviceOptions, err := getDeviceOptions(h.Manager(), u)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get device options: %v", err)
 	}
@@ -50,19 +55,26 @@ func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *con
 			return nil, http.StatusForbidden, fmt.Errorf("integrity token missmatch")
 		}
 	}
-	// convert config into a protobuf
 	var msg config.EdgeDevConfig
-	if err := protojson.Unmarshal(conf, &msg); err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("error reading device config: %v", err)
+	var configHash string
+	// convert config into a protobuf
+	if h.ProtoFormat() {
+		if err := proto.Unmarshal(conf, &msg); err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("error reading device config: %v", err)
+		}
+		configHash = base64.URLEncoding.EncodeToString(sha256.New().Sum(conf))
+	} else {
+		if err := protojson.Unmarshal(conf, &msg); err != nil {
+			return nil, http.StatusInternalServerError, fmt.Errorf("error reading device config: %v", err)
+		}
+		hash := sha256.New()
+		common.ComputeConfigElementSha(hash, &msg)
+		configHash = base64.URLEncoding.EncodeToString(hash.Sum(nil))
 	}
 	response := &config.ConfigResponse{}
 
-	hash := sha256.New()
-	common.ComputeConfigElementSha(hash, &msg)
-	configHash := hash.Sum(nil)
-
 	response.Config = &msg
-	response.ConfigHash = base64.URLEncoding.EncodeToString(configHash)
+	response.ConfigHash = configHash
 
 	if configRequest != nil {
 		//compare received config hash with current
@@ -78,19 +90,19 @@ func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *con
 	return out, http.StatusOK, nil
 }
 
-func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboardCert *x509.Certificate) (int, error) {
+func registerProcess(handler commonHandler, registerMessage []byte, onboardCert *x509.Certificate) (int, error) {
 	msg := &register.ZRegisterMsg{}
 	if err := proto.Unmarshal(registerMessage, msg); err != nil {
 		return http.StatusBadRequest, fmt.Errorf("failed to parse register message: %v", err)
 	}
 	serial := msg.Serial
-	err := manager.OnboardCheck(onboardCert, serial)
+	err := handler.Manager().OnboardCheck(onboardCert, serial)
 	if err != nil {
 		log.Printf("failed to onboard with serial: %s", err)
 		if msg.SoftSerial != "" {
 			log.Println("will retry with soft serial")
 			serial = msg.SoftSerial
-			err = manager.OnboardCheck(onboardCert, serial)
+			err = handler.Manager().OnboardCheck(onboardCert, serial)
 		}
 		if err != nil {
 			_, invalidCert := err.(*common.InvalidCertError)
@@ -123,28 +135,34 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 		return http.StatusBadRequest, fmt.Errorf("error generating a new device UUID: %v", err)
 	}
 	// we do not keep the uuid or send it back; perhaps a future version of the API will support it
-	if err := manager.DeviceRegister(unew, deviceCert, onboardCert, serial, common.CreateBaseConfig(unew)); err != nil {
+	if err := handler.Manager().DeviceRegister(unew, deviceCert, onboardCert, serial, common.CreateBaseConfig(unew, handler.ProtoFormat())); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("error registering new device: %v", err)
 	}
 	// send back a 201
 	return http.StatusCreated, nil
 }
 
-func infoProcess(manager driver.DeviceManager, infoChannel chan []byte, u uuid.UUID, infoMessage []byte) (int, error) {
+func infoProcess(handler commonHandler, infoChannel chan []byte, u uuid.UUID, infoMessage []byte) (int, error) {
 	var err error
 	msg := &info.ZInfoMsg{}
 	if err := proto.Unmarshal(infoMessage, msg); err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error parsing info message: %v", err)
 	}
 	var entryBytes []byte
-	if entryBytes, err = protojson.Marshal(msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("failed to marshal info message: %v", err)
+	if handler.ProtoFormat() {
+		if entryBytes, err = proto.Marshal(msg); err != nil {
+			return http.StatusBadRequest, fmt.Errorf("failed to marshal info message: %v", err)
+		}
+	} else {
+		if entryBytes, err = protojson.Marshal(msg); err != nil {
+			return http.StatusBadRequest, fmt.Errorf("failed to marshal info message: %v", err)
+		}
 	}
 	select {
 	case infoChannel <- entryBytes:
 	default:
 	}
-	err = manager.WriteInfo(u, entryBytes)
+	err = handler.Manager().WriteInfo(u, entryBytes)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write info message: %v", err)
 	}
@@ -152,21 +170,27 @@ func infoProcess(manager driver.DeviceManager, infoChannel chan []byte, u uuid.U
 	return http.StatusCreated, nil
 }
 
-func metricProcess(manager driver.DeviceManager, metricChannel chan []byte, u uuid.UUID, metricMessage []byte) (int, error) {
+func metricProcess(handler commonHandler, metricChannel chan []byte, u uuid.UUID, metricMessage []byte) (int, error) {
 	var err error
 	msg := &metrics.ZMetricMsg{}
 	if err := proto.Unmarshal(metricMessage, msg); err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error parsing metric message: %v", err)
 	}
 	var entryBytes []byte
-	if entryBytes, err = protojson.Marshal(msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("failed to marshal metric message: %v", err)
+	if handler.ProtoFormat() {
+		if entryBytes, err = proto.Marshal(msg); err != nil {
+			return http.StatusBadRequest, fmt.Errorf("failed to marshal metric message: %v", err)
+		}
+	} else {
+		if entryBytes, err = protojson.Marshal(msg); err != nil {
+			return http.StatusBadRequest, fmt.Errorf("failed to marshal metric message: %v", err)
+		}
 	}
 	select {
 	case metricChannel <- entryBytes:
 	default:
 	}
-	err = manager.WriteMetrics(u, entryBytes)
+	err = handler.Manager().WriteMetrics(u, entryBytes)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write metric message: %v", err)
 	}
@@ -174,7 +198,7 @@ func metricProcess(manager driver.DeviceManager, metricChannel chan []byte, u uu
 	return http.StatusCreated, nil
 }
 
-func logsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uuid.UUID, logsMessage []byte) (int, error) {
+func logsProcess(handler commonHandler, logsChannel chan []byte, u uuid.UUID, logsMessage []byte) (int, error) {
 	var err error
 	msg := &logs.LogBundle{}
 	if err := proto.Unmarshal(logsMessage, msg); err != nil {
@@ -189,14 +213,20 @@ func logsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uuid.U
 			EveVersion: eveVersion,
 		}
 		var entryBytes []byte
-		if entryBytes, err = entry.Json(); err != nil {
-			return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
+		if handler.ProtoFormat() {
+			if entryBytes, err = entry.Proto(); err != nil {
+				return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
+			}
+		} else {
+			if entryBytes, err = entry.Json(); err != nil {
+				return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
+			}
 		}
 		select {
 		case logsChannel <- entryBytes:
 		default:
 		}
-		err = manager.WriteLogs(u, entryBytes)
+		err = handler.Manager().WriteLogs(u, entryBytes)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
 		}
@@ -205,7 +235,7 @@ func logsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uuid.U
 	return http.StatusCreated, nil
 }
 
-func newLogsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uuid.UUID, reader io.Reader) (int, error) {
+func newLogsProcess(handler commonHandler, logsChannel chan []byte, u uuid.UUID, reader io.Reader) (int, error) {
 	gr, err := gzip.NewReader(reader)
 	if err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error gzip.NewReader: %v", err)
@@ -226,14 +256,20 @@ func newLogsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uui
 			EveVersion: msg.GetEveVersion(),
 		}
 		var entryBytes []byte
-		if entryBytes, err = entry.Json(); err != nil {
-			return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
+		if handler.ProtoFormat() {
+			if entryBytes, err = entry.Proto(); err != nil {
+				return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
+			}
+		} else {
+			if entryBytes, err = entry.Json(); err != nil {
+				return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
+			}
 		}
 		select {
 		case logsChannel <- entryBytes:
 		default:
 		}
-		err = manager.WriteLogs(u, entryBytes)
+		err = handler.Manager().WriteLogs(u, entryBytes)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
 		}
@@ -242,7 +278,7 @@ func newLogsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uui
 	return http.StatusCreated, nil
 }
 
-func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessage []byte) (int, error) {
+func appLogsProcess(handler commonHandler, u, appID uuid.UUID, logsMessage []byte) (int, error) {
 	msg := &logs.AppInstanceLogBundle{}
 	if err := proto.Unmarshal(logsMessage, msg); err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error parsing appinstancelogbundle message: %v", err)
@@ -250,10 +286,16 @@ func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessag
 	for _, le := range msg.Log {
 		var err error
 		var b []byte
-		if b, err = protojson.Marshal(le); err != nil {
-			return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
+		if handler.ProtoFormat() {
+			if b, err = proto.Marshal(le); err != nil {
+				return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
+			}
+		} else {
+			if b, err = protojson.Marshal(le); err != nil {
+				return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
+			}
 		}
-		err = manager.WriteAppInstanceLogs(appID, u, b)
+		err = handler.Manager().WriteAppInstanceLogs(appID, u, b)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write appinstancelogbundle message: %v", err)
 		}
@@ -262,22 +304,24 @@ func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessag
 	return http.StatusCreated, nil
 }
 
-func newAppLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, reader io.Reader) (int, error) {
+func newAppLogsProcess(handler commonHandler, u, appID uuid.UUID, reader io.Reader) (int, error) {
 	gr, err := gzip.NewReader(reader)
 	if err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error gzip.NewReader: %v", err)
 	}
 	scanner := bufio.NewScanner(gr)
 	for scanner.Scan() {
-		le := &logs.LogEntry{}
-		if err := json.Unmarshal(scanner.Bytes(), le); err != nil {
-			return http.StatusBadRequest, fmt.Errorf("failed to parse logentry message: %v", err)
+		b := scanner.Bytes()
+		if !handler.ProtoFormat() {
+			le := &logs.LogEntry{}
+			if err := json.Unmarshal(b, le); err != nil {
+				return http.StatusBadRequest, fmt.Errorf("failed to parse logentry message: %v", err)
+			}
+			if b, err = protojson.Marshal(le); err != nil {
+				return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
+			}
 		}
-		var b []byte
-		if b, err = protojson.Marshal(le); err != nil {
-			return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
-		}
-		err = manager.WriteAppInstanceLogs(appID, u, b)
+		err = handler.Manager().WriteAppInstanceLogs(appID, u, b)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
 		}
@@ -325,17 +369,18 @@ func randomString(length int) string {
 	return fmt.Sprintf("%x", b)[:length]
 }
 
-func flowLogProcess(manager driver.DeviceManager, u uuid.UUID, flowMessage []byte) (int, error) {
+func flowLogProcess(handler commonHandler, u uuid.UUID, flowMessage []byte) (int, error) {
 	var err error
-	msg := &flowlog.FlowMessage{}
-	if err := proto.Unmarshal(flowMessage, msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("error parsing FlowMessage: %v", err)
+	if !handler.ProtoFormat() {
+		msg := &flowlog.FlowMessage{}
+		if err := proto.Unmarshal(flowMessage, msg); err != nil {
+			return http.StatusBadRequest, fmt.Errorf("error parsing FlowMessage: %v", err)
+		}
+		if flowMessage, err = protojson.Marshal(msg); err != nil {
+			return http.StatusBadRequest, fmt.Errorf("failed to marshal FlowMessage: %v", err)
+		}
 	}
-	var entryBytes []byte
-	if entryBytes, err = protojson.Marshal(msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("failed to marshal FlowMessage: %v", err)
-	}
-	err = manager.WriteFlowMessage(u, entryBytes)
+	err = handler.Manager().WriteFlowMessage(u, flowMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write FlowMessage: %v", err)
 	}

@@ -710,13 +710,13 @@ func (d *DeviceManager) GetStorageKeys(u uuid.UUID) ([]byte, error) {
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
+func (d *DeviceManager) GetConfig(u uuid.UUID, handler common.CreateBaseConfigHandler) ([]byte, error) {
 	// hold our config
 	var b []byte
 	data, err := d.client.HGet(deviceConfigsHash, u.String()).Result()
 	if err != nil {
 		// if config doesn't exist - create an empty one
-		b = common.CreateBaseConfig(u)
+		b = handler(u)
 		if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(b)).Result(); err == nil {
 			_, err = d.client.Save().Result()
 		}

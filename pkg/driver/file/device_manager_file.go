@@ -845,14 +845,14 @@ func (d *DeviceManager) GetStorageKeys(u uuid.UUID) ([]byte, error) {
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
+func (d *DeviceManager) GetConfig(u uuid.UUID, handler common.CreateBaseConfigHandler) ([]byte, error) {
 	// read the config from disk
 	fullConfigPath := path.Join(d.getDevicePath(u), deviceConfigFilename)
 	b, err := ioutil.ReadFile(fullConfigPath)
 	switch {
 	case err != nil && os.IsNotExist(err):
 		// create the base file if it does not exist
-		b = common.CreateBaseConfig(u)
+		b = handler(u)
 		err = d.writeJSONFile(u, "", deviceConfigFilename, b)
 		if err != nil {
 			return nil, fmt.Errorf("error saving device config to %s: %v", deviceConfigFilename, err)

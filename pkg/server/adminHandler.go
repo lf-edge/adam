@@ -21,6 +21,7 @@ import (
 	"github.com/lf-edge/eve/api/go/config"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -33,6 +34,7 @@ type adminHandler struct {
 	logChannel      chan []byte
 	infoChannel     chan []byte
 	requestsChannel chan []byte
+	protoFormat     bool
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
@@ -55,6 +57,14 @@ type DeviceCert struct {
 	Cert    []byte
 	Onboard []byte
 	Serial  string
+}
+
+func (h *adminHandler) Manager() driver.DeviceManager {
+	return h.manager
+}
+
+func (h *adminHandler) ProtoFormat() bool {
+	return h.protoFormat
 }
 
 func (h *adminHandler) onboardAdd(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +200,7 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("error generating a new device UUID: %v", err), http.StatusBadRequest)
 		return
 	}
-	if err := h.manager.DeviceRegister(unew, cert, onboard, t.Serial, common.CreateBaseConfig(unew)); err != nil {
+	if err := h.manager.DeviceRegister(unew, cert, onboard, t.Serial, common.CreateBaseConfig(unew, h.ProtoFormat())); err != nil {
 		log.Printf("deviceAdd: DeviceRegister error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -286,7 +296,7 @@ func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	deviceConfig, err := h.manager.GetConfig(uid)
+	deviceConfig, err := h.manager.GetConfig(uid, common.GetCreateBaseConfigHandler(h.ProtoFormat()))
 	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
@@ -314,11 +324,18 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var deviceConfig config.EdgeDevConfig
-	err = json.Unmarshal(body, &deviceConfig)
-	if err != nil {
-		log.Printf("deviceConfigSet: Unmarshal config error: %v", err)
-		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
-		return
+	if h.ProtoFormat() {
+		if err = proto.Unmarshal(body, &deviceConfig); err != nil {
+			log.Printf("deviceConfigSet: Unmarshal config error: %v", err)
+			http.Error(w, fmt.Sprintf("failed to marshal proto message: %v", err), http.StatusBadRequest)
+			return
+		}
+	} else {
+		if err = json.Unmarshal(body, &deviceConfig); err != nil {
+			log.Printf("deviceConfigSet: Unmarshal config error: %v", err)
+			http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
+			return
+		}
 	}
 	// before setting the config, set any necessary defaults
 	// check for UUID and/or version mismatch
@@ -326,7 +343,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		existingId     *config.UUIDandVersion
 		existingConfig config.EdgeDevConfig
 	)
-	existingConfigB, err := h.manager.GetConfig(uid)
+	existingConfigB, err := h.manager.GetConfig(uid, common.GetCreateBaseConfigHandler(h.ProtoFormat()))
 	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
@@ -341,10 +358,18 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// convert it to protobuf so we can work with it
-	if err := protojson.Unmarshal(existingConfigB, &existingConfig); err != nil {
-		log.Printf("deviceConfigSet: processing existing config error: %v", err)
-		http.Error(w, fmt.Sprintf("error processing existing config: %v", err), http.StatusInternalServerError)
-		return
+	if h.ProtoFormat() {
+		if err := proto.Unmarshal(existingConfigB, &existingConfig); err != nil {
+			log.Printf("deviceConfigSet: processing existing config error: %v", err)
+			http.Error(w, fmt.Sprintf("error processing existing config: %v", err), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := protojson.Unmarshal(existingConfigB, &existingConfig); err != nil {
+			log.Printf("deviceConfigSet: processing existing config error: %v", err)
+			http.Error(w, fmt.Sprintf("error processing existing config: %v", err), http.StatusInternalServerError)
+			return
+		}
 	}
 	existingId = existingConfig.Id
 
@@ -379,11 +404,21 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	b, err := protojson.Marshal(&deviceConfig)
-	if err != nil {
-		log.Printf("deviceConfigSet: Marshal error: %v", err)
-		http.Error(w, fmt.Sprintf("error processing device config: %v", err), http.StatusBadRequest)
-		return
+	var b []byte
+	if h.ProtoFormat() {
+		b, err = proto.Marshal(&deviceConfig)
+		if err != nil {
+			log.Printf("deviceConfigSet: Marshal error: %v", err)
+			http.Error(w, fmt.Sprintf("error processing device config: %v", err), http.StatusBadRequest)
+			return
+		}
+	} else {
+		b, err = protojson.Marshal(&deviceConfig)
+		if err != nil {
+			log.Printf("deviceConfigSet: Marshal error: %v", err)
+			http.Error(w, fmt.Sprintf("error processing device config: %v", err), http.StatusBadRequest)
+			return
+		}
 	}
 	err = h.manager.SetConfig(uid, b)
 	_, isNotFound = err.(*common.NotFoundError)

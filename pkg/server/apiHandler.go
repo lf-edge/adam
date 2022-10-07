@@ -23,6 +23,15 @@ type apiHandler struct {
 	logChannel    chan []byte
 	infoChannel   chan []byte
 	metricChannel chan []byte
+	protoFormat   bool
+}
+
+func (h *apiHandler) Manager() driver.DeviceManager {
+	return h.manager
+}
+
+func (h *apiHandler) ProtoFormat() bool {
+	return h.protoFormat
 }
 
 // GetUser godoc
@@ -83,7 +92,7 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := registerProcess(h.manager, b, onboardCert)
+	status, err := registerProcess(h, b, onboardCert)
 	if err != nil {
 		log.Printf("Failed in registerProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -110,7 +119,7 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	cfg, err := h.manager.GetConfig(*u)
+	cfg, err := h.manager.GetConfig(*u, common.GetCreateBaseConfigHandler(h.ProtoFormat()))
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -122,7 +131,7 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	data, code, err := configProcess(h.manager, *u, configRequest, cfg, false)
+	data, code, err := configProcess(h, *u, configRequest, cfg, false)
 	if err != nil {
 		log.Printf("error configProcess: %v", err)
 		http.Error(w, http.StatusText(code), code)
@@ -142,7 +151,7 @@ func (h *apiHandler) config(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	cfg, err := h.manager.GetConfig(*u)
+	cfg, err := h.manager.GetConfig(*u, common.GetCreateBaseConfigHandler(h.ProtoFormat()))
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -164,7 +173,7 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := infoProcess(h.manager, h.infoChannel, *u, b)
+	status, err := infoProcess(h, h.infoChannel, *u, b)
 	if err != nil {
 		log.Printf("Failed to infoProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -184,7 +193,7 @@ func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := metricProcess(h.manager, h.metricChannel, *u, b)
+	status, err := metricProcess(h, h.metricChannel, *u, b)
 	if err != nil {
 		log.Printf("Failed to metricProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -205,7 +214,7 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, err := logsProcess(h.manager, h.logChannel, *u, b)
+	status, err := logsProcess(h, h.logChannel, *u, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -220,7 +229,7 @@ func (h *apiHandler) newLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, err := newLogsProcess(h.manager, h.logChannel, *u, r.Body)
+	status, err := newLogsProcess(h, h.logChannel, *u, r.Body)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -245,7 +254,7 @@ func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := appLogsProcess(h.manager, *u, uid, b)
+	status, err := appLogsProcess(h, *u, uid, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -280,7 +289,7 @@ func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	status, err := newAppLogsProcess(h.manager, *u, uid, r.Body)
+	status, err := newAppLogsProcess(h, *u, uid, r.Body)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -316,7 +325,7 @@ func (h *apiHandler) flowLog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := flowLogProcess(h.manager, *u, b)
+	status, err := flowLogProcess(h, *u, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)

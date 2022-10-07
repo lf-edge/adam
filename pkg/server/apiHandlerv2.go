@@ -47,6 +47,15 @@ type apiHandlerv2 struct {
 	signingKeyPath  string
 	encryptCertPath string
 	encryptKeyPath  string
+	protoFormat     bool
+}
+
+func (h *apiHandlerv2) Manager() driver.DeviceManager {
+	return h.manager
+}
+
+func (h *apiHandlerv2) ProtoFormat() bool {
+	return h.protoFormat
 }
 
 const (
@@ -437,7 +446,7 @@ func (h *apiHandlerv2) register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := registerProcess(h.manager, b.ProtectedPayload.GetPayload(), onboardCert[0])
+	status, err := registerProcess(h, b.ProtectedPayload.GetPayload(), onboardCert[0])
 	if err != nil {
 		log.Printf("Failed in registerProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -462,7 +471,7 @@ func (h *apiHandlerv2) config(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	cfg, err := h.manager.GetConfig(*u)
+	cfg, err := h.manager.GetConfig(*u, common.GetCreateBaseConfigHandler(h.ProtoFormat()))
 	if err != nil {
 		log.Printf("error getting device config: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -475,7 +484,7 @@ func (h *apiHandlerv2) config(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	data, code, err := configProcess(h.manager, *u, configRequest, cfg, true)
+	data, code, err := configProcess(h, *u, configRequest, cfg, true)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, http.StatusText(code), code)
@@ -525,7 +534,7 @@ func (h *apiHandlerv2) info(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	status, err := infoProcess(h.manager, h.infoChannel, *u, b)
+	status, err := infoProcess(h, h.infoChannel, *u, b)
 	if err != nil {
 		log.Printf("Failed to infoProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -539,7 +548,7 @@ func (h *apiHandlerv2) metrics(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	status, err := metricProcess(h.manager, h.metricChannel, *u, b)
+	status, err := metricProcess(h, h.metricChannel, *u, b)
 	if err != nil {
 		log.Printf("Failed to metricProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -554,7 +563,7 @@ func (h *apiHandlerv2) logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, err := logsProcess(h.manager, h.logChannel, *u, b)
+	status, err := logsProcess(h, h.logChannel, *u, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -569,7 +578,7 @@ func (h *apiHandlerv2) newLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, err := newLogsProcess(h.manager, h.logChannel, *u, bytes.NewReader(b))
+	status, err := newLogsProcess(h, h.logChannel, *u, bytes.NewReader(b))
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -588,7 +597,7 @@ func (h *apiHandlerv2) appLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	status, err := appLogsProcess(h.manager, *u, uid, b)
+	status, err := appLogsProcess(h, *u, uid, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -607,7 +616,7 @@ func (h *apiHandlerv2) newAppLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	status, err := newAppLogsProcess(h.manager, *u, uid, bytes.NewReader(b))
+	status, err := newAppLogsProcess(h, *u, uid, bytes.NewReader(b))
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -632,7 +641,7 @@ func (h *apiHandlerv2) flowlog(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	status, err := flowLogProcess(h.manager, *u, b)
+	status, err := flowLogProcess(h, *u, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)

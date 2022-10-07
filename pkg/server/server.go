@@ -33,7 +33,8 @@ type Server struct {
 	DeviceManager   driver.DeviceManager
 	CertRefresh     int
 	// WebDir path to webfiles to serve. If empty, use embedded
-	WebDir string
+	WebDir      string
+	ProtoFormat bool
 }
 
 // Start start the server
@@ -94,6 +95,7 @@ func (s *Server) Start() {
 		logChannel:    logChannel,
 		infoChannel:   infoChannel,
 		metricChannel: metricChannel,
+		protoFormat:   s.ProtoFormat,
 	}
 
 	router.HandleFunc("/probe", api.probe).Methods("GET")
@@ -124,6 +126,7 @@ func (s *Server) Start() {
 			signingKeyPath:  s.SigningKeyPath,
 			encryptCertPath: s.EncryptCertPath,
 			encryptKeyPath:  s.EncryptKeyPath,
+			protoFormat:     s.ProtoFormat,
 		}
 
 		edv2 := router.PathPrefix("/api/v2/edgedevice").Subrouter()
@@ -150,6 +153,7 @@ func (s *Server) Start() {
 		manager:     s.DeviceManager,
 		logChannel:  logChannel,
 		infoChannel: infoChannel,
+		protoFormat: s.ProtoFormat,
 	}
 
 	ad := router.PathPrefix("/admin").Subrouter()

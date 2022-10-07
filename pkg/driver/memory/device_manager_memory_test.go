@@ -629,7 +629,7 @@ func TestDeviceManager(t *testing.T) {
 			if err != nil {
 				t.Fatalf("error generating a new device UUID: %v", err)
 			}
-			err = d.DeviceRegister(u, deviceCert, onboard, serial, common.CreateBaseConfig(u))
+			err = d.DeviceRegister(u, deviceCert, onboard, serial, common.CreateBaseConfig(u, false))
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)

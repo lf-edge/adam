@@ -455,7 +455,7 @@ func (d *DeviceManager) GetStorageKeys(u uuid.UUID) ([]byte, error) {
 }
 
 // GetConfig retrieve the config for a particular device
-func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
+func (d *DeviceManager) GetConfig(u uuid.UUID, _ common.CreateBaseConfigHandler) ([]byte, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {

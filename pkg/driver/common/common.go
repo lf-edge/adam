@@ -17,6 +17,7 @@ import (
 	"github.com/lf-edge/eve/api/go/logs"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -113,9 +114,14 @@ type DeviceOptions struct {
 	EventLog            []*attest.TpmEventLogEntry `json:"eventLog,omitempty"`
 }
 
-// Bytes convenience to convert to json bytes
+// Json format of FullLogEntry
 func (f FullLogEntry) Json() ([]byte, error) {
 	return protojson.Marshal(f)
+}
+
+// Proto format of FullLogEntry
+func (f FullLogEntry) Proto() ([]byte, error) {
+	return proto.Marshal(f)
 }
 
 func (d *DeviceStorage) AddLogs(b []byte) error {
@@ -172,7 +178,15 @@ func (d *DeviceStorage) AddFlowRecord(b []byte) error {
 	return err
 }
 
-func CreateBaseConfig(u uuid.UUID) []byte {
+type CreateBaseConfigHandler func(u uuid.UUID) []byte
+
+func GetCreateBaseConfigHandler(protoFormat bool) CreateBaseConfigHandler {
+	return func(u uuid.UUID) []byte {
+		return CreateBaseConfig(u, protoFormat)
+	}
+}
+
+func CreateBaseConfig(u uuid.UUID, protoFormat bool) []byte {
 	conf := &config.EdgeDevConfig{
 		Id: &config.UUIDandVersion{
 			Uuid:    u.String(),
@@ -182,7 +196,12 @@ func CreateBaseConfig(u uuid.UUID) []byte {
 	// we ignore the error because it is tightly controlled
 	// we probably should handle it, but then we have to do it with everything downstream
 	// eventually
-	b, _ := protojson.Marshal(conf)
+	var b []byte
+	if protoFormat {
+		b, _ = proto.Marshal(conf)
+	} else {
+		b, _ = protojson.Marshal(conf)
+	}
 	return b
 }
 

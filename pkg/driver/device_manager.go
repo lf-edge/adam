@@ -88,7 +88,8 @@ type DeviceManager interface {
 	// SetGlobalOptions stores global options
 	SetGlobalOptions([]byte) error
 	// GetConfig get the config for a given uuid
-	GetConfig(uuid.UUID) ([]byte, error)
+	// if not found will use handler to populate
+	GetConfig(uuid.UUID, common.CreateBaseConfigHandler) ([]byte, error)
 	// SetConfig set the config for a given uuid
 	SetConfig(uuid.UUID, []byte) error
 	// GetUUID get the UuidResponse for a given uuid

@@ -45,6 +45,7 @@ var (
 	maxFlowMessageSize int
 	maxAppLogsSize     int
 	autoCert           bool
+	protoFormat        bool
 	localWebFiles      string
 	deviceManagers     = driver.GetDeviceManagers()
 )
@@ -237,6 +238,7 @@ var serverCmd = &cobra.Command{
 			DeviceManager:   mgr,
 			CertRefresh:     certRefresh,
 			WebDir:          localWebFiles,
+			ProtoFormat:     protoFormat,
 		}
 		s.Start()
 	},
@@ -279,4 +281,5 @@ func serverInit() {
 	serverCmd.Flags().IntVar(&maxFlowMessageSize, "max-flow-message-size", 0, fmt.Sprintf("the maximum size of the FlowMessage logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultFlowMessageSizes))
 	serverCmd.Flags().IntVar(&maxAppLogsSize, "max-app-logs-size", 0, fmt.Sprintf("the maximum size of the app logs before rotating. A setting of 0 means to use the default for the particular driver. Those are: %v", defaultAppLogsSizes))
 	serverCmd.Flags().StringVar(&localWebFiles, "web-dir", "", "path to static files on the local filesystem for the web server; if empty, will use those embedded in the Adam binary")
+	serverCmd.Flags().BoolVar(&protoFormat, "proto-format", false, "Use proto format to store data in managers, it reduces readability, but help us to not update api package on every change")
 }

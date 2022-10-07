@@ -91,20 +91,20 @@ func TestDeviceRedis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to generate new UUID: %v", err)
 	}
-	err = r.DeviceRegister(UUID2, cert2, certOnboard, "------", common.CreateBaseConfig(UUID2))
+	err = r.DeviceRegister(UUID2, cert2, certOnboard, "------", common.CreateBaseConfig(UUID2, false))
 	assert.Equal(t, nil, err)
 	UUID3, err := uuid.NewV4()
 	if err != nil {
 		t.Fatalf("unable to generate new UUID: %v", err)
 	}
-	err = r.DeviceRegister(UUID3, cert3, certOnboard, "------", common.CreateBaseConfig(UUID3))
+	err = r.DeviceRegister(UUID3, cert3, certOnboard, "------", common.CreateBaseConfig(UUID3, false))
 	assert.Equal(t, nil, err)
 
 	UUID1, err := uuid.NewV4()
 	if err != nil {
 		t.Fatalf("unable to generate new UUID: %v", err)
 	}
-	err = r.DeviceRegister(UUID1, cert, certOnboard, "123456", common.CreateBaseConfig(UUID1))
+	err = r.DeviceRegister(UUID1, cert, certOnboard, "123456", common.CreateBaseConfig(UUID1, false))
 	assert.Equal(t, nil, err)
 	UUID, err := r.DeviceCheckCert(cert)
 	assert.Equal(t, nil, err)
@@ -160,10 +160,10 @@ func TestConfigRedis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to generate new UUID: %v", err)
 	}
-	err = r.DeviceRegister(UUID, cert, certOnboard, "123456", common.CreateBaseConfig(UUID))
+	err = r.DeviceRegister(UUID, cert, certOnboard, "123456", common.CreateBaseConfig(UUID, false))
 	assert.Equal(t, nil, err)
 
-	conf, err := r.GetConfig(UUID)
+	conf, err := r.GetConfig(UUID, common.GetCreateBaseConfigHandler(false))
 	assert.Equal(t, nil, err)
 	// convert to struct
 	var msg config.EdgeDevConfig
@@ -182,7 +182,7 @@ func TestConfigRedis(t *testing.T) {
 
 	assert.Equal(t, nil, r.SetConfig(UUID, conf))
 
-	conf, err = r.GetConfig(UUID)
+	conf, err = r.GetConfig(UUID, common.GetCreateBaseConfigHandler(false))
 	// convert to struct
 	if err := protojson.Unmarshal(conf, &msg); err != nil {
 		t.Fatalf("error converting device config bytes to struct: %v", err)
