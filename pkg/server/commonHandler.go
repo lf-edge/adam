@@ -35,6 +35,7 @@ import (
 
 const (
 	contentType   = "Content-Type"
+	accept        = "Accept"
 	mimeProto     = "application/x-proto-binary"
 	mimeTextPlain = "text/plain"
 	mimeJSON      = "application/json"
@@ -52,7 +53,7 @@ func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *con
 	}
 	// convert config into a protobuf
 	var msg config.EdgeDevConfig
-	if err := protojson.Unmarshal(conf, &msg); err != nil {
+	if err := proto.Unmarshal(conf, &msg); err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error reading device config: %v", err)
 	}
 	response := &config.ConfigResponse{}

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aohorodnyk/mimeheader"
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
@@ -21,6 +22,7 @@ import (
 	"github.com/lf-edge/eve/api/go/config"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -297,6 +299,23 @@ func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
 	case deviceConfig == nil:
 		http.Error(w, "found device information, but cert was empty", http.StatusInternalServerError)
 	default:
+		ah := mimeheader.ParseAcceptHeader(r.Header.Get(accept))
+		// if Accept header match mime application/json or not match application/x-proto-binary do conversion to JSON
+		if ah.Match(mimeJSON) || !ah.Match(mimeProto) {
+			var deviceConfigObj config.EdgeDevConfig
+			err = proto.Unmarshal(deviceConfig, &deviceConfigObj)
+			if err != nil {
+				log.Printf("deviceConfigGet: Unmarshal error: %v", err)
+				http.Error(w, "cannot unmarshal stored EdgeDevConfig", http.StatusInternalServerError)
+				return
+			}
+			deviceConfig, err = protojson.Marshal(&deviceConfigObj)
+			if err != nil {
+				log.Printf("deviceConfigGet: Marshal error: %v", err)
+				http.Error(w, "cannot marshal stored EdgeDevConfig", http.StatusInternalServerError)
+				return
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 		w.Write(deviceConfig)
 	}
@@ -314,7 +333,14 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var deviceConfig config.EdgeDevConfig
-	err = json.Unmarshal(body, &deviceConfig)
+	switch r.Header.Get(contentType) {
+	case mimeProto:
+		err = proto.Unmarshal(body, &deviceConfig)
+	case mimeJSON:
+		fallthrough
+	default:
+		err = json.Unmarshal(body, &deviceConfig)
+	}
 	if err != nil {
 		log.Printf("deviceConfigSet: Unmarshal config error: %v", err)
 		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
@@ -341,7 +367,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// convert it to protobuf so we can work with it
-	if err := protojson.Unmarshal(existingConfigB, &existingConfig); err != nil {
+	if err := proto.Unmarshal(existingConfigB, &existingConfig); err != nil {
 		log.Printf("deviceConfigSet: processing existing config error: %v", err)
 		http.Error(w, fmt.Sprintf("error processing existing config: %v", err), http.StatusInternalServerError)
 		return
@@ -379,7 +405,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	b, err := protojson.Marshal(&deviceConfig)
+	b, err := proto.Marshal(&deviceConfig)
 	if err != nil {
 		log.Printf("deviceConfigSet: Marshal error: %v", err)
 		http.Error(w, fmt.Sprintf("error processing device config: %v", err), http.StatusBadRequest)

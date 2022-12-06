@@ -17,6 +17,7 @@ import (
 	"github.com/lf-edge/eve/api/go/logs"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -182,7 +183,7 @@ func CreateBaseConfig(u uuid.UUID) []byte {
 	// we ignore the error because it is tightly controlled
 	// we probably should handle it, but then we have to do it with everything downstream
 	// eventually
-	b, _ := protojson.Marshal(conf)
+	b, _ := proto.Marshal(conf)
 	return b
 }
 
