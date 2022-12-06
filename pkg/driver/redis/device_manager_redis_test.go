@@ -167,7 +167,7 @@ func TestConfigRedis(t *testing.T) {
 	assert.Equal(t, nil, err)
 	// convert to struct
 	var msg config.EdgeDevConfig
-	if err := protojson.Unmarshal(conf, &msg); err != nil {
+	if err := proto.Unmarshal(conf, &msg); err != nil {
 		t.Fatalf("error converting device config bytes to struct: %v", err)
 	}
 
@@ -205,6 +205,12 @@ func TestStreamsRedis(t *testing.T) {
 	if err != nil {
 		return
 	}
+
+	cert := generateCert(t, "cert", "host")
+	certOnboard := generateCert(t, "onboard", "host")
+
+	err = r.DeviceRegister(u, cert, certOnboard, "123456", common.CreateBaseConfig(u))
+	assert.Equal(t, nil, err)
 
 	var (
 		b      []byte
@@ -244,19 +250,31 @@ func TestStreamsRedis(t *testing.T) {
 	assert.Equal(t, nil, r.WriteMetrics(u, metric))
 	assert.Equal(t, nil, r.WriteInfo(u, infos))
 
-	lr, err := r.GetLogsReader(u)
+	chunkReader, err := r.GetLogsReader(u)
 	assert.Equal(t, nil, err)
-	for _, i := range []int{103, 1, 103, 1, 0} {
+	for {
+		lr, s, err := chunkReader.NextChunkReader()
+		if lr == nil {
+			break
+		}
+		assert.Equal(t, nil, err)
 		l, err := lr.Read(buffer)
 		assert.Equal(t, nil, err)
-		assert.Equal(t, i, l)
+		assert.Equal(t, int64(l), s)
 	}
 
-	lr, err = r.GetInfoReader(u)
+	chunkReader, err = r.GetInfoReader(u)
 	assert.Equal(t, nil, err)
-	l, err := lr.Read(buffer)
-	assert.Equal(t, nil, err)
-	assert.Equal(t, 96, l)
+	for {
+		lr, s, err := chunkReader.NextChunkReader()
+		if lr == nil {
+			break
+		}
+		assert.Equal(t, nil, err)
+		l, err := lr.Read(buffer)
+		assert.Equal(t, nil, err)
+		assert.Equal(t, int64(l), s)
+	}
 
 	r.transactionDrop([][]string{
 		{deviceInfoStream + u.String()},

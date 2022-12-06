@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/url"
 	"strconv"
@@ -88,12 +87,12 @@ func (m *ManagedStream) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (m *ManagedStream) Reader() (io.Reader, error) {
-	return &RedisStreamReader{
-		Client:   m.client,
-		Stream:   m.name,
-		LineFeed: true,
-	}, nil
+func (m *ManagedStream) Reader() (common.ChunkReader, error) {
+	r := &RedisStreamReader{
+		Client: m.client,
+		Stream: m.name,
+	}
+	return r, nil
 }
 
 // DeviceManager implementation of DeviceManager interface with a Redis DB as the backing store
@@ -758,7 +757,7 @@ func (d *DeviceManager) SetConfig(u uuid.UUID, b []byte) error {
 }
 
 // GetLogsReader get the logs for a given uuid
-func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetLogsReader(u uuid.UUID) (common.ChunkReader, error) {
 	// check that the device actually exists
 	dev, ok := d.devices[u]
 	if !ok {
@@ -768,7 +767,7 @@ func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 }
 
 // GetInfoReader get the info for a given uuid
-func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetInfoReader(u uuid.UUID) (common.ChunkReader, error) {
 	// check that the device actually exists
 	dev, ok := d.devices[u]
 	if !ok {
@@ -778,7 +777,7 @@ func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 }
 
 // GetRequestsReader get the requests for a given uuid
-func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (common.ChunkReader, error) {
 	// check that the device actually exists
 	dev, ok := d.devices[u]
 	if !ok {

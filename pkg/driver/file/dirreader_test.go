@@ -16,11 +16,7 @@ import (
 func TestDirReader(t *testing.T) {
 	t.Run("no path", func(t *testing.T) {
 		dr := &file.DirReader{}
-		b := make([]byte, 40)
-		n, err := dr.Read(b)
-		if n != 0 {
-			t.Errorf("received %d bytes instead of expected %d", n, 0)
-		}
+		_, _, err := dr.NextChunkReader()
 		if !strings.HasPrefix(err.Error(), "directory to read required") {
 			t.Errorf("mismatched error, expected 'directory to read', had '%v'", err)
 		}
@@ -29,11 +25,7 @@ func TestDirReader(t *testing.T) {
 		dr := &file.DirReader{
 			Path: "/this/is/a/asasas/that/does/not/exist",
 		}
-		b := make([]byte, 40)
-		n, err := dr.Read(b)
-		if n != 0 {
-			t.Errorf("received %d bytes instead of expected %d", n, 0)
-		}
+		_, _, err := dr.NextChunkReader()
 		if !strings.HasPrefix(err.Error(), "unable to read directory") {
 			t.Errorf("mismatched error, expected 'directory to read', had '%v'", err)
 		}
@@ -47,11 +39,7 @@ func TestDirReader(t *testing.T) {
 		dr := &file.DirReader{
 			Path: dir,
 		}
-		b := make([]byte, 40)
-		n, err := dr.Read(b)
-		if n != 0 {
-			t.Errorf("received %d bytes instead of expected %d", n, 0)
-		}
+		_, _, err = dr.NextChunkReader()
 		if err != io.EOF {
 			t.Errorf("mismatched error, expected 'EOF', had '%v'", err)
 		}
@@ -70,8 +58,12 @@ func TestDirReader(t *testing.T) {
 		dr := &file.DirReader{
 			Path: dir,
 		}
+		r, _, err := dr.NextChunkReader()
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 		b := make([]byte, 40)
-		n, err := dr.Read(b)
+		n, err := r.Read(b)
 		if n != len(data) {
 			t.Errorf("received %d bytes instead of expected %d", n, len(data))
 		}
@@ -83,7 +75,7 @@ func TestDirReader(t *testing.T) {
 		}
 
 		// now read again to check EOF
-		n, err = dr.Read(b)
+		n, err = r.Read(b)
 		if n != 0 {
 			t.Errorf("received %d bytes instead of expected %d", n, 0)
 		}
@@ -108,8 +100,12 @@ func TestDirReader(t *testing.T) {
 			dr := &file.DirReader{
 				Path: dir,
 			}
+			r, _, err := dr.NextChunkReader()
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 			b := make([]byte, 40)
-			n, err := dr.Read(b)
+			n, err := r.Read(b)
 			if n != len(b) {
 				t.Errorf("received %d bytes instead of expected %d", n, len(b))
 			}
@@ -124,9 +120,13 @@ func TestDirReader(t *testing.T) {
 			dr := &file.DirReader{
 				Path: dir,
 			}
+			r, _, err := dr.NextChunkReader()
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 			b := make([]byte, 0)
 			buf := bytes.NewBuffer(b)
-			n, err := io.Copy(buf, dr)
+			n, err := io.Copy(buf, r)
 
 			if int(n) != len(data) {
 				t.Errorf("received %d bytes instead of expected %d", n, len(data))
@@ -163,8 +163,12 @@ func TestDirReader(t *testing.T) {
 			dr := &file.DirReader{
 				Path: dir,
 			}
+			r, _, err := dr.NextChunkReader()
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
 			b := make([]byte, 40)
-			n, err := dr.Read(b)
+			n, err := r.Read(b)
 			if n != len(b) {
 				t.Errorf("received %d bytes instead of expected %d", n, len(b))
 			}
@@ -181,11 +185,22 @@ func TestDirReader(t *testing.T) {
 			}
 			b := make([]byte, 0)
 			buf := bytes.NewBuffer(b)
-			n, err := io.Copy(buf, dr)
+			var count int64
+			for {
+				r, _, err := dr.NextChunkReader()
+				if r == nil {
+					break
+				}
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				n, err := io.Copy(buf, r)
+				count += n
+			}
 
 			expected := append(data1, data2...)
-			if int(n) != len(expected) {
-				t.Errorf("received %d bytes instead of expected %d", n, len(expected))
+			if int(count) != len(expected) {
+				t.Errorf("received %d bytes instead of expected %d", count, len(expected))
 			}
 			if err != nil {
 				t.Errorf("mismatched error, expected 'nil', had '%v'", err)

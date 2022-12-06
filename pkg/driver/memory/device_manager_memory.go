@@ -8,8 +8,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
-	"io"
-
 	"github.com/lf-edge/adam/pkg/driver/common"
 	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
@@ -508,7 +506,7 @@ func (d *DeviceManager) getOnboardSerialDevice(cert *x509.Certificate, serial st
 }
 
 // GetLogsReader get the logs for a given uuid
-func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetLogsReader(u uuid.UUID) (common.ChunkReader, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
@@ -518,7 +516,7 @@ func (d *DeviceManager) GetLogsReader(u uuid.UUID) (io.Reader, error) {
 }
 
 // GetInfoReader get the info for a given uuid
-func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetInfoReader(u uuid.UUID) (common.ChunkReader, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
@@ -528,7 +526,7 @@ func (d *DeviceManager) GetInfoReader(u uuid.UUID) (io.Reader, error) {
 }
 
 // GetRequestsReader get the requests for a given uuid
-func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (io.Reader, error) {
+func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (common.ChunkReader, error) {
 	// look up the device by uuid
 	dev, ok := d.devices[u]
 	if !ok {
