@@ -5,8 +5,6 @@ package driver
 
 import (
 	"crypto/x509"
-	"io"
-
 	"github.com/lf-edge/adam/pkg/driver/common"
 	uuid "github.com/satori/go.uuid"
 )
@@ -94,11 +92,11 @@ type DeviceManager interface {
 	// GetUUID get the UuidResponse for a given uuid
 	GetUUID(uuid.UUID) ([]byte, error)
 	// GetLogsReader get the logs for a given uuid
-	GetLogsReader(u uuid.UUID) (io.Reader, error)
+	GetLogsReader(u uuid.UUID) (common.ChunkReader, error)
 	// GetInfoReader get the info for a given uuid
-	GetInfoReader(u uuid.UUID) (io.Reader, error)
+	GetInfoReader(u uuid.UUID) (common.ChunkReader, error)
 	// GetRequestsReader get the request logs for a given uuid
-	GetRequestsReader(u uuid.UUID) (io.Reader, error)
+	GetRequestsReader(u uuid.UUID) (common.ChunkReader, error)
 	// GetCerts retrieve the attest certs for a particular device
 	GetCerts(uid uuid.UUID) ([]byte, error)
 	// GetStorageKeys retrieve storage keys for a particular device

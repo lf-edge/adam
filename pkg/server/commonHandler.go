@@ -20,14 +20,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aohorodnyk/mimeheader"
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/flowlog"
-	"github.com/lf-edge/eve/api/go/info"
 	"github.com/lf-edge/eve/api/go/logs"
-	"github.com/lf-edge/eve/api/go/metrics"
 	"github.com/lf-edge/eve/api/go/register"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -35,10 +33,36 @@ import (
 
 const (
 	contentType   = "Content-Type"
+	accept        = "Accept"
 	mimeProto     = "application/x-proto-binary"
 	mimeTextPlain = "text/plain"
 	mimeJSON      = "application/json"
 )
+
+// acceptJSON returns true if request expects JSON representation of data
+// to use with GET requests
+func acceptJSON(r *http.Request) bool {
+	ah := mimeheader.ParseAcceptHeader(r.Header.Get(accept))
+	// if Accept header match mime application/json or not match application/x-proto-binary do conversion to JSON
+	if ah.Match(mimeJSON) || !ah.Match(mimeProto) {
+		return true
+	}
+	return false
+}
+
+// contentTypeJSON returns true if request send data in JSON representation
+// to use with POST/PUT requests
+func contentTypeJSON(r *http.Request) bool {
+	switch r.Header.Get(contentType) {
+	case mimeProto:
+		return false
+	case mimeJSON:
+		return true
+	default:
+		// we do not want to touch defaults now, so will expect JSON by default
+		return true
+	}
+}
 
 func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *config.ConfigRequest, conf []byte, enforceIntegrityCheck bool) ([]byte, int, error) {
 	deviceOptions, err := getDeviceOptions(manager, u)
@@ -52,7 +76,7 @@ func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *con
 	}
 	// convert config into a protobuf
 	var msg config.EdgeDevConfig
-	if err := protojson.Unmarshal(conf, &msg); err != nil {
+	if err := proto.Unmarshal(conf, &msg); err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error reading device config: %v", err)
 	}
 	response := &config.ConfigResponse{}
@@ -132,19 +156,11 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 
 func infoProcess(manager driver.DeviceManager, infoChannel chan []byte, u uuid.UUID, infoMessage []byte) (int, error) {
 	var err error
-	msg := &info.ZInfoMsg{}
-	if err := proto.Unmarshal(infoMessage, msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("error parsing info message: %v", err)
-	}
-	var entryBytes []byte
-	if entryBytes, err = protojson.Marshal(msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("failed to marshal info message: %v", err)
-	}
 	select {
-	case infoChannel <- entryBytes:
+	case infoChannel <- infoMessage:
 	default:
 	}
-	err = manager.WriteInfo(u, entryBytes)
+	err = manager.WriteInfo(u, infoMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write info message: %v", err)
 	}
@@ -154,19 +170,11 @@ func infoProcess(manager driver.DeviceManager, infoChannel chan []byte, u uuid.U
 
 func metricProcess(manager driver.DeviceManager, metricChannel chan []byte, u uuid.UUID, metricMessage []byte) (int, error) {
 	var err error
-	msg := &metrics.ZMetricMsg{}
-	if err := proto.Unmarshal(metricMessage, msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("error parsing metric message: %v", err)
-	}
-	var entryBytes []byte
-	if entryBytes, err = protojson.Marshal(msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("failed to marshal metric message: %v", err)
-	}
 	select {
-	case metricChannel <- entryBytes:
+	case metricChannel <- metricMessage:
 	default:
 	}
-	err = manager.WriteMetrics(u, entryBytes)
+	err = manager.WriteMetrics(u, metricMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write metric message: %v", err)
 	}
@@ -327,15 +335,7 @@ func randomString(length int) string {
 
 func flowLogProcess(manager driver.DeviceManager, u uuid.UUID, flowMessage []byte) (int, error) {
 	var err error
-	msg := &flowlog.FlowMessage{}
-	if err := proto.Unmarshal(flowMessage, msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("error parsing FlowMessage: %v", err)
-	}
-	var entryBytes []byte
-	if entryBytes, err = protojson.Marshal(msg); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("failed to marshal FlowMessage: %v", err)
-	}
-	err = manager.WriteFlowMessage(u, entryBytes)
+	err = manager.WriteFlowMessage(u, flowMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write FlowMessage: %v", err)
 	}

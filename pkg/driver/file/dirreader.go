@@ -14,73 +14,34 @@ type DirReader struct {
 	// Path path to the directory to read content from
 	Path string
 	// MaxFiles maximum files to load in cache, or 0 for the entire directory
-	MaxFiles int
-	// LineFeed whether to put a linefeed "\n" (0x0a) after each file
-	LineFeed    bool
+	MaxFiles    int
 	dir         *os.File
 	fileCache   []os.FileInfo
 	currentFile *os.File
+	currentSize int64
 	complete    bool
-	// if set to true, next Read should return a linefeed character
-	nextLF bool
 }
 
-// Read the next chunk of bytes
-func (d *DirReader) Read(p []byte) (n int, err error) {
+// Next returns reader for the next chunk of data (message), its size and possible error
+func (d *DirReader) Next() (io.Reader, int64, error) {
 	if d.Path == "" {
-		return 0, errors.New("directory to read required")
+		return nil, 0, errors.New("directory to read required")
 	}
 	if d.dir == nil {
 		dir, err := os.Open(d.Path)
 		if err != nil {
-			return 0, fmt.Errorf("unable to read directory %s: %v", d.Path, err)
+			return nil, 0, fmt.Errorf("unable to read directory %s: %v", d.Path, err)
 		}
 		d.dir = dir
 	}
 	// if we already read everything, we are done
 	if d.complete {
-		return 0, io.EOF
+		return nil, 0, io.EOF
 	}
-	// cannot write if no space
-	if len(p) == 0 {
-		return 0, errors.New("must have at least one byte in slice to write")
-	}
-	// do we send a linefeed?
-	if d.nextLF {
-		p[0] = 0x0a
-		d.nextLF = false
-		return 1, nil
-	}
-	// if we have no open file, and are not complete, then we start from scratch
-	if d.currentFile == nil {
-		if err := d.nextFile(); err != nil {
-			return 0, err
-		}
-	}
-	// at this point, d.currentFile cannot be nil
-	b := make([]byte, len(p))
-	read, err := d.currentFile.Read(b)
-	if read > 0 {
-		copy(p, b)
-	}
-	// we had an error but it wasn't end of file
-	// or we had no error at all
-	if err == nil || (err != nil && err != io.EOF) {
-		return read, err
-	}
-	// we had an EOF; try to get the next file. Three possibilities:
-	// - we had an EOF: no more files, so just return the EOF
-	// - we had a non-EOF error: return it
-	// - we had no error, so keep going
 	if err := d.nextFile(); err != nil {
-		return 0, err
+		return nil, 0, err
 	}
-	// indicate that the next read should include a linefeed
-	if d.LineFeed {
-		d.nextLF = true
-	}
-
-	return read, nil
+	return d.currentFile, d.currentSize, nil
 }
 
 func (d *DirReader) nextFile() error {
@@ -140,5 +101,10 @@ func (d *DirReader) nextFile() error {
 		return err
 	}
 	d.currentFile = f
+	fstat, err := d.currentFile.Stat()
+	if err != nil {
+		return fmt.Errorf("unable to stat file %v", err)
+	}
+	d.currentSize = fstat.Size()
 	return nil
 }

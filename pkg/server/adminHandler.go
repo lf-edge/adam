@@ -19,8 +19,10 @@ import (
 	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/config"
+	"github.com/lf-edge/eve/api/go/info"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -297,6 +299,21 @@ func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
 	case deviceConfig == nil:
 		http.Error(w, "found device information, but cert was empty", http.StatusInternalServerError)
 	default:
+		if acceptJSON(r) {
+			var deviceConfigObj config.EdgeDevConfig
+			err = proto.Unmarshal(deviceConfig, &deviceConfigObj)
+			if err != nil {
+				log.Printf("deviceConfigGet: Unmarshal error: %v", err)
+				http.Error(w, "cannot unmarshal stored EdgeDevConfig", http.StatusInternalServerError)
+				return
+			}
+			deviceConfig, err = protojson.Marshal(&deviceConfigObj)
+			if err != nil {
+				log.Printf("deviceConfigGet: Marshal error: %v", err)
+				http.Error(w, "cannot marshal stored EdgeDevConfig", http.StatusInternalServerError)
+				return
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 		w.Write(deviceConfig)
 	}
@@ -314,7 +331,11 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var deviceConfig config.EdgeDevConfig
-	err = json.Unmarshal(body, &deviceConfig)
+	if contentTypeJSON(r) {
+		err = json.Unmarshal(body, &deviceConfig)
+	} else {
+		err = proto.Unmarshal(body, &deviceConfig)
+	}
 	if err != nil {
 		log.Printf("deviceConfigSet: Unmarshal config error: %v", err)
 		http.Error(w, fmt.Sprintf("failed to marshal json message into protobuf: %v", err), http.StatusBadRequest)
@@ -341,7 +362,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// convert it to protobuf so we can work with it
-	if err := protojson.Unmarshal(existingConfigB, &existingConfig); err != nil {
+	if err := proto.Unmarshal(existingConfigB, &existingConfig); err != nil {
 		log.Printf("deviceConfigSet: processing existing config error: %v", err)
 		http.Error(w, fmt.Sprintf("error processing existing config: %v", err), http.StatusInternalServerError)
 		return
@@ -379,7 +400,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	b, err := protojson.Marshal(&deviceConfig)
+	b, err := proto.Marshal(&deviceConfig)
 	if err != nil {
 		log.Printf("deviceConfigSet: Marshal error: %v", err)
 		http.Error(w, fmt.Sprintf("error processing device config: %v", err), http.StatusBadRequest)
@@ -399,23 +420,38 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceLogsGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.logChannel, h.manager.GetLogsReader)
+	h.deviceDataGet(w, r, h.logChannel, h.manager.GetLogsReader, nil)
 }
 
 func (h *adminHandler) deviceInfoGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.infoChannel, h.manager.GetInfoReader)
+	h.deviceDataGet(w, r, h.infoChannel, h.manager.GetInfoReader, func(in []byte) ([]byte, error) {
+		var err error
+		msg := &info.ZInfoMsg{}
+		if err = proto.Unmarshal(in, msg); err != nil {
+			return nil, fmt.Errorf("error parsing info message: %v", err)
+		}
+		var entryBytes []byte
+		if entryBytes, err = protojson.Marshal(msg); err != nil {
+			return nil, fmt.Errorf("failed to marshal info message: %v", err)
+		}
+		return entryBytes, nil
+	})
 }
 
 func (h *adminHandler) deviceRequestsGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.requestsChannel, h.manager.GetRequestsReader)
+	h.deviceDataGet(w, r, h.requestsChannel, h.manager.GetRequestsReader, nil)
 }
 
-func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <-chan []byte, readerFunc func(u uuid.UUID) (io.Reader, error)) {
+func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <-chan []byte, readerFunc func(u uuid.UUID) (common.ChunkReader, error), conversionFunc func(in []byte) ([]byte, error)) {
 	u := mux.Vars(r)["uuid"]
 	uid, err := uuid.FromString(u)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	conversionRequired := false
+	if conversionFunc != nil {
+		conversionRequired = acceptJSON(r)
 	}
 	watch := r.Header.Get(StreamHeader)
 	if watch == StreamValue {
@@ -439,6 +475,13 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 		for {
 			select {
 			case b := <-c:
+				if conversionRequired {
+					b, err = conversionFunc(b)
+					if err != nil {
+						log.Printf("conversionFunc failed: %v", err)
+						continue
+					}
+				}
 				w.Write(append(b, 0x0a))
 				flusher.Flush()
 			case <-cn.CloseNotify():
@@ -447,22 +490,42 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 			}
 		}
 	} else {
-		reader, err := readerFunc(uid)
-		_, isNotFound := err.(*common.NotFoundError)
-		switch {
-		case err != nil && isNotFound:
-			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		case err != nil:
-			log.Printf("deviceDataGet: readerFunc error: %v", err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		case reader == nil:
-			http.Error(w, "found device information, but logs were empty", http.StatusInternalServerError)
-		default:
-			w.WriteHeader(http.StatusOK)
-			w.Header().Set("Content-type", "application/json")
-			_, err = io.Copy(w, reader)
-			if err != nil && err != io.EOF {
-				http.Error(w, fmt.Sprintf("error reading logs: %v", err), http.StatusInternalServerError)
+		for {
+			chunk, err := readerFunc(uid)
+			_, isNotFound := err.(*common.NotFoundError)
+			switch {
+			case err != nil && isNotFound:
+				http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			case err != nil:
+				log.Printf("deviceDataGet: readerFunc error: %v", err)
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			default:
+				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-type", "application/json")
+				for {
+					reader, size, err := chunk.Next()
+					if reader == nil {
+						return
+					}
+					if err != nil && err != io.EOF {
+						http.Error(w, fmt.Sprintf("error reading chunkSize: %v", err), http.StatusInternalServerError)
+						continue
+					}
+					buf := make([]byte, size)
+					_, err = io.ReadFull(reader, buf)
+					if err != nil && err != io.EOF {
+						http.Error(w, fmt.Sprintf("error reading data: %v", err), http.StatusInternalServerError)
+						continue
+					}
+					if conversionRequired {
+						buf, err = conversionFunc(buf)
+						if err != nil {
+							log.Printf("conversionFunc failed: %v", err)
+							continue
+						}
+					}
+					w.Write(append(buf, 0x0a))
+				}
 			}
 		}
 	}

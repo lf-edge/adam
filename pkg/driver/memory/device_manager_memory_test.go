@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestDeviceManager(t *testing.T) {
+func TestDeviceManagerMemory(t *testing.T) {
 	fillOnboard := func(dm *DeviceManager) []string {
 		dm.onboardCerts = map[string]map[string]bool{}
 		cns := []string{"abcd", "efgh", "jklm"}
@@ -520,6 +521,27 @@ func TestDeviceManager(t *testing.T) {
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
 			case err == nil && (geterr != nil || !bytes.Equal(actual, msg)):
 				t.Errorf("%d: did not save message correctly, actual %v expected %v", i, d.devices[u].Logs, msg)
+			}
+
+			if tt.deviceExists {
+				buffer := make([]byte, 1024)
+				chunkReader, err := d.GetLogsReader(u)
+				assert.Equal(t, nil, err)
+				i := 100
+				for {
+					lr, s, err := chunkReader.Next()
+					if lr == nil {
+						break
+					}
+					i--
+					if i == 0 {
+						t.Fatal(s)
+					}
+					assert.Equal(t, nil, err)
+					l, err := lr.Read(buffer)
+					assert.Equal(t, nil, err)
+					assert.Equal(t, int64(l), s)
+				}
 			}
 		}
 	})

@@ -1,22 +1,24 @@
 package memory
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+
+	"github.com/lf-edge/adam/pkg/driver/common"
 )
 
 type ByteSlice struct {
 	// we do this as a slice of byte slice, rather than a single byte slice,
 	// because we need to track breaks, so we can delete from the beginning
 	data         [][]byte
-	dataCache    []byte
 	currentRead  int
 	readComplete bool
 	maxSize      int
 	size         int
 }
 
-func (bs ByteSlice) Get(index int) ([]byte, error) {
+func (bs *ByteSlice) Get(index int) ([]byte, error) {
 	if len(bs.data) < index+1 {
 		return nil, fmt.Errorf("array out of bounds: %d", index)
 	}
@@ -42,33 +44,17 @@ func (bs *ByteSlice) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (bs ByteSlice) Reader() (io.Reader, error) {
+func (bs *ByteSlice) Reader() (common.ChunkReader, error) {
 	return bs, nil
 }
 
-func (bs ByteSlice) Read(p []byte) (int, error) {
-	if bs.readComplete {
-		return 0, io.EOF
+// Next returns reader for the next chunk of data (message), its size and possible error
+func (bs *ByteSlice) Next() (io.Reader, int64, error) {
+	if len(bs.data) == 0 || bs.currentRead >= len(bs.data) {
+		return nil, 0, io.EOF
 	}
-	// start with the current read
-	if len(bs.dataCache) == 0 {
-		if len(bs.data) == 0 || bs.currentRead >= len(bs.data) {
-			bs.readComplete = true
-			return 0, io.EOF
-		}
-		// include the linefeed
-		bs.dataCache = append(bs.data[bs.currentRead], 0x0a)
-		bs.currentRead++
-	}
-	// read the data from the msg cache
-	copied := copy(p, bs.dataCache)
-	// truncate the dataCache
-	if copied >= len(bs.dataCache) {
-		bs.dataCache = bs.dataCache[:0]
-	} else {
-		bs.dataCache = bs.dataCache[copied:]
-	}
-	// we do not worried about returning less than they requested; as long as we
-	// do not return an io.EOF, they will come back for more
-	return copied, nil
+	reader := bytes.NewReader(bs.data[bs.currentRead])
+	size := int64(len(bs.data[bs.currentRead]))
+	bs.currentRead++
+	return reader, size, nil
 }

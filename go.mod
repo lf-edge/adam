@@ -3,6 +3,7 @@ module github.com/lf-edge/adam
 go 1.16
 
 require (
+	github.com/aohorodnyk/mimeheader v0.0.6 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-redis/redis v6.15.7+incompatible
 	github.com/golang/protobuf v1.4.3
