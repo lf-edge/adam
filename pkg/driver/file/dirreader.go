@@ -22,8 +22,8 @@ type DirReader struct {
 	complete    bool
 }
 
-// NextChunkReader returns reader for the next chunk of data (message), its size and possible error
-func (d *DirReader) NextChunkReader() (io.Reader, int64, error) {
+// Next returns reader for the next chunk of data (message), its size and possible error
+func (d *DirReader) Next() (io.Reader, int64, error) {
 	if d.Path == "" {
 		return nil, 0, errors.New("directory to read required")
 	}

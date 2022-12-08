@@ -48,8 +48,8 @@ func (bs *ByteSlice) Reader() (common.ChunkReader, error) {
 	return bs, nil
 }
 
-// NextChunkReader returns reader for the next chunk of data (message), its size and possible error
-func (bs *ByteSlice) NextChunkReader() (io.Reader, int64, error) {
+// Next returns reader for the next chunk of data (message), its size and possible error
+func (bs *ByteSlice) Next() (io.Reader, int64, error) {
 	if len(bs.data) == 0 || bs.currentRead >= len(bs.data) {
 		return nil, 0, io.EOF
 	}

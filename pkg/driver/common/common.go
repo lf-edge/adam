@@ -35,8 +35,13 @@ type MaxSizes struct {
 	MaxFlowMessageSize int
 }
 
+// ChunkReader provides ability to request reader for the data for every available chunk
+// device managers stores the data in separate chunks (e.g. files/slices/messages)
+// we need readers for every chunk to be separated to be able to process data before present
 type ChunkReader interface {
-	NextChunkReader() (io.Reader, int64, error)
+	// Next will return reader for the next chunk and the size of the chunk
+	// in case of no next chunk available, will return io.EOF
+	Next() (io.Reader, int64, error)
 }
 
 type BigData interface {

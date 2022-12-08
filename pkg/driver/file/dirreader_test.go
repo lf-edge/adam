@@ -16,7 +16,7 @@ import (
 func TestDirReader(t *testing.T) {
 	t.Run("no path", func(t *testing.T) {
 		dr := &file.DirReader{}
-		_, _, err := dr.NextChunkReader()
+		_, _, err := dr.Next()
 		if !strings.HasPrefix(err.Error(), "directory to read required") {
 			t.Errorf("mismatched error, expected 'directory to read', had '%v'", err)
 		}
@@ -25,7 +25,7 @@ func TestDirReader(t *testing.T) {
 		dr := &file.DirReader{
 			Path: "/this/is/a/asasas/that/does/not/exist",
 		}
-		_, _, err := dr.NextChunkReader()
+		_, _, err := dr.Next()
 		if !strings.HasPrefix(err.Error(), "unable to read directory") {
 			t.Errorf("mismatched error, expected 'directory to read', had '%v'", err)
 		}
@@ -39,7 +39,7 @@ func TestDirReader(t *testing.T) {
 		dr := &file.DirReader{
 			Path: dir,
 		}
-		_, _, err = dr.NextChunkReader()
+		_, _, err = dr.Next()
 		if err != io.EOF {
 			t.Errorf("mismatched error, expected 'EOF', had '%v'", err)
 		}
@@ -58,7 +58,7 @@ func TestDirReader(t *testing.T) {
 		dr := &file.DirReader{
 			Path: dir,
 		}
-		r, _, err := dr.NextChunkReader()
+		r, _, err := dr.Next()
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -100,7 +100,7 @@ func TestDirReader(t *testing.T) {
 			dr := &file.DirReader{
 				Path: dir,
 			}
-			r, _, err := dr.NextChunkReader()
+			r, _, err := dr.Next()
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -120,7 +120,7 @@ func TestDirReader(t *testing.T) {
 			dr := &file.DirReader{
 				Path: dir,
 			}
-			r, _, err := dr.NextChunkReader()
+			r, _, err := dr.Next()
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -163,7 +163,7 @@ func TestDirReader(t *testing.T) {
 			dr := &file.DirReader{
 				Path: dir,
 			}
-			r, _, err := dr.NextChunkReader()
+			r, _, err := dr.Next()
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -187,7 +187,7 @@ func TestDirReader(t *testing.T) {
 			buf := bytes.NewBuffer(b)
 			var count int64
 			for {
-				r, _, err := dr.NextChunkReader()
+				r, _, err := dr.Next()
 				if r == nil {
 					break
 				}

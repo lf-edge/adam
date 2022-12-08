@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aohorodnyk/mimeheader"
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
@@ -300,9 +299,7 @@ func (h *adminHandler) deviceConfigGet(w http.ResponseWriter, r *http.Request) {
 	case deviceConfig == nil:
 		http.Error(w, "found device information, but cert was empty", http.StatusInternalServerError)
 	default:
-		ah := mimeheader.ParseAcceptHeader(r.Header.Get(accept))
-		// if Accept header match mime application/json or not match application/x-proto-binary do conversion to JSON
-		if ah.Match(mimeJSON) || !ah.Match(mimeProto) {
+		if acceptJSON(r) {
 			var deviceConfigObj config.EdgeDevConfig
 			err = proto.Unmarshal(deviceConfig, &deviceConfigObj)
 			if err != nil {
@@ -334,13 +331,10 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var deviceConfig config.EdgeDevConfig
-	switch r.Header.Get(contentType) {
-	case mimeProto:
-		err = proto.Unmarshal(body, &deviceConfig)
-	case mimeJSON:
-		fallthrough
-	default:
+	if contentTypeJSON(r) {
 		err = json.Unmarshal(body, &deviceConfig)
+	} else {
+		err = proto.Unmarshal(body, &deviceConfig)
 	}
 	if err != nil {
 		log.Printf("deviceConfigSet: Unmarshal config error: %v", err)
@@ -457,11 +451,7 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 	}
 	conversionRequired := false
 	if conversionFunc != nil {
-		ah := mimeheader.ParseAcceptHeader(r.Header.Get(accept))
-		// if Accept header match mime application/json or not match application/x-proto-binary do conversion to JSON
-		if ah.Match(mimeJSON) || !ah.Match(mimeProto) {
-			conversionRequired = true
-		}
+		conversionRequired = acceptJSON(r)
 	}
 	watch := r.Header.Get(StreamHeader)
 	if watch == StreamValue {
@@ -513,7 +503,7 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 				w.WriteHeader(http.StatusOK)
 				w.Header().Set("Content-type", "application/json")
 				for {
-					reader, size, err := chunk.NextChunkReader()
+					reader, size, err := chunk.Next()
 					if reader == nil {
 						return
 					}

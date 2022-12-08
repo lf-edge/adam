@@ -253,7 +253,7 @@ func TestStreamsRedis(t *testing.T) {
 	chunkReader, err := r.GetLogsReader(u)
 	assert.Equal(t, nil, err)
 	for {
-		lr, s, err := chunkReader.NextChunkReader()
+		lr, s, err := chunkReader.Next()
 		if lr == nil {
 			break
 		}
@@ -266,7 +266,7 @@ func TestStreamsRedis(t *testing.T) {
 	chunkReader, err = r.GetInfoReader(u)
 	assert.Equal(t, nil, err)
 	for {
-		lr, s, err := chunkReader.NextChunkReader()
+		lr, s, err := chunkReader.Next()
 		if lr == nil {
 			break
 		}

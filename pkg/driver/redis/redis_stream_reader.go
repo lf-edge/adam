@@ -23,8 +23,8 @@ type RedisStreamReader struct {
 	offset string
 }
 
-// NextChunkReader returns reader for the next chunk of data (message), its size and possible error
-func (d *RedisStreamReader) NextChunkReader() (io.Reader, int64, error) {
+// Next returns reader for the next chunk of data (message), its size and possible error
+func (d *RedisStreamReader) Next() (io.Reader, int64, error) {
 	if d.Client == nil || d.Stream == "" {
 		return nil, 0, errors.New("redis connection and name of the stream required")
 	}

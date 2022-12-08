@@ -529,7 +529,7 @@ func TestDeviceManagerMemory(t *testing.T) {
 				assert.Equal(t, nil, err)
 				i := 100
 				for {
-					lr, s, err := chunkReader.NextChunkReader()
+					lr, s, err := chunkReader.Next()
 					if lr == nil {
 						break
 					}

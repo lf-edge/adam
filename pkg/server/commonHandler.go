@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aohorodnyk/mimeheader"
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
@@ -37,6 +38,31 @@ const (
 	mimeTextPlain = "text/plain"
 	mimeJSON      = "application/json"
 )
+
+// acceptJSON returns true if request expects JSON representation of data
+// to use with GET requests
+func acceptJSON(r *http.Request) bool {
+	ah := mimeheader.ParseAcceptHeader(r.Header.Get(accept))
+	// if Accept header match mime application/json or not match application/x-proto-binary do conversion to JSON
+	if ah.Match(mimeJSON) || !ah.Match(mimeProto) {
+		return true
+	}
+	return false
+}
+
+// contentTypeJSON returns true if request send data in JSON representation
+// to use with POST/PUT requests
+func contentTypeJSON(r *http.Request) bool {
+	switch r.Header.Get(contentType) {
+	case mimeProto:
+		return false
+	case mimeJSON:
+		return true
+	default:
+		// we do not want to touch defaults now, so will expect JSON by default
+		return true
+	}
+}
 
 func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *config.ConfigRequest, conf []byte, enforceIntegrityCheck bool) ([]byte, int, error) {
 	deviceOptions, err := getDeviceOptions(manager, u)
