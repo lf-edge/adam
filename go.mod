@@ -6,12 +6,11 @@ require (
 	github.com/aohorodnyk/mimeheader v0.0.6
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-redis/redis v6.15.7+incompatible
-	github.com/golang/protobuf v1.4.3
-	github.com/google/go-cmp v0.5.2 // indirect
+	github.com/golang/protobuf v1.5.0
 	github.com/google/go-tpm v0.3.3
 	github.com/gorilla/mux v1.7.2
 	github.com/kr/text v0.2.0 // indirect
-	github.com/lf-edge/eve/api/go v0.0.0-20221202180721-ec306b6a2bce
+	github.com/lf-edge/eve/api/go v0.0.0-20230612203304-13fba79dd3af
 	github.com/magiconair/properties v1.8.4 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
@@ -30,7 +29,7 @@ require (
 	golang.org/x/text v0.3.8 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.25.0
+	google.golang.org/protobuf v1.28.1
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
