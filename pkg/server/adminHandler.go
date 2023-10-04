@@ -153,7 +153,7 @@ func (h *adminHandler) onboardClear(w http.ResponseWriter, r *http.Request) {
 func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 	// extract certificate and serials from request body
 	contentType := r.Header.Get(contentType)
-	if contentType != mimeTextPlain {
+	if contentType != mimeJSON {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
