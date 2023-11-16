@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -99,7 +98,7 @@ func (m *ManagedFile) Write(b []byte) (int, error) {
 
 	if m.totalSize > m.maxSize {
 		// get all of the files from the directory
-		fi, err := ioutil.ReadDir(m.dir)
+		fi, err := os.ReadDir(m.dir)
 		if err != nil {
 			return written, fmt.Errorf("could not read directory %s: %v", m.dir, err)
 		}
@@ -111,8 +110,12 @@ func (m *ManagedFile) Write(b []byte) (int, error) {
 			if m.totalSize < m.maxSize {
 				break
 			}
-			size := f.Size()
 			filename := path.Join(m.dir, f.Name())
+			fileInfo, err := os.Stat(filename)
+			if err != nil {
+				return written, fmt.Errorf("could not get file info for %s: %v", filename, err)
+			}
+			size := fileInfo.Size()
 			if err := os.Remove(filename); err != nil {
 				return written, fmt.Errorf("failed to remove %s: %v", filename, err)
 			}
@@ -308,7 +311,7 @@ func (d *DeviceManager) OnboardGet(cn string) (*x509.Certificate, []string, erro
 		return nil, nil, fmt.Errorf("error reading onboard certificate at %s: %v", certPath, err)
 	}
 	serialPath := path.Join(onboardDir, onboardCertSerials)
-	serial, err := ioutil.ReadFile(serialPath)
+	serial, err := os.ReadFile(serialPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading onboard serials at %s: %v", serialPath, err)
 	}
@@ -359,7 +362,7 @@ func (d *DeviceManager) OnboardRemove(cn string) error {
 func (d *DeviceManager) OnboardClear() error {
 	// remove the directory and clear the cache
 	onboardPath := path.Join(d.databasePath, onboardDir)
-	candidates, err := ioutil.ReadDir(onboardPath)
+	candidates, err := os.ReadDir(onboardPath)
 	if err != nil {
 		return fmt.Errorf("unable to read onboarding certificates at %s: %v", onboardPath, err)
 	}
@@ -390,8 +393,7 @@ func (d *DeviceManager) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, err
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from filesystem: %v", err)
 	}
-	certStr := string(cert.Raw)
-	if u, ok := d.deviceCerts[certStr]; ok {
+	if u, ok := d.deviceCerts[string(cert.Raw)]; ok {
 		return &u, nil
 	}
 	return nil, nil
@@ -440,7 +442,7 @@ func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 func (d *DeviceManager) DeviceClear() error {
 	// remove the directory and clear the cache
 	devicePath := path.Join(d.databasePath, deviceDir)
-	candidates, err := ioutil.ReadDir(devicePath)
+	candidates, err := os.ReadDir(devicePath)
 	if err != nil {
 		return fmt.Errorf("unable to read device certificates at %s: %v", devicePath, err)
 	}
@@ -491,7 +493,7 @@ func (d *DeviceManager) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certif
 		return nil, nil, "", fmt.Errorf("error reading onboard certificate at %s: %v", certPath, err)
 	}
 	serialPath := path.Join(devicePath, deviceSerialFilename)
-	serial, err := ioutil.ReadFile(serialPath)
+	serial, err := os.ReadFile(serialPath)
 	// we can accept not reading the onboard serial
 	if err != nil && !os.IsNotExist(err) {
 		return nil, nil, "", fmt.Errorf("error reading device serial at %s: %v", serialPath, err)
@@ -621,7 +623,7 @@ func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certi
 	}
 	if serial != "" {
 		serialPath := path.Join(devicePath, deviceSerialFilename)
-		err = ioutil.WriteFile(serialPath, []byte(serial), 0644)
+		err = os.WriteFile(serialPath, []byte(serial), 0644)
 		if err != nil {
 			return fmt.Errorf("error saving device serial to %s: %v", serialPath, err)
 		}
@@ -672,7 +674,7 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 	}
 	// serials file
 	f = path.Join(onboardPath, onboardCertSerials)
-	err = ioutil.WriteFile(f, []byte(strings.Join(serial, "\n")), 0644)
+	err = os.WriteFile(f, []byte(strings.Join(serial, "\n")), 0644)
 	if err != nil {
 		return fmt.Errorf("unable to write onboard serials file %s: %v", f, err)
 	}
@@ -801,7 +803,7 @@ func (d *DeviceManager) WriteCerts(u uuid.UUID, b []byte) error {
 func (d *DeviceManager) GetCerts(u uuid.UUID) ([]byte, error) {
 	// read the config from disk
 	fullAttestPath := path.Join(d.getDevicePath(u), deviceAttestCertsFilename)
-	b, err := ioutil.ReadFile(fullAttestPath)
+	b, err := os.ReadFile(fullAttestPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read certificates from %s: %v", fullAttestPath, err)
 	}
@@ -835,7 +837,7 @@ func (d *DeviceManager) WriteStorageKeys(u uuid.UUID, b []byte) error {
 func (d *DeviceManager) GetStorageKeys(u uuid.UUID) ([]byte, error) {
 	// read storage keys from disk
 	fullStorageKeysPath := path.Join(d.getDevicePath(u), deviceStorageKeysFilename)
-	b, err := ioutil.ReadFile(fullStorageKeysPath)
+	b, err := os.ReadFile(fullStorageKeysPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read storage keys from %s: %v", fullStorageKeysPath, err)
 	}
@@ -847,7 +849,7 @@ func (d *DeviceManager) GetStorageKeys(u uuid.UUID) ([]byte, error) {
 func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 	// read the config from disk
 	fullConfigPath := path.Join(d.getDevicePath(u), deviceConfigFilename)
-	b, err := ioutil.ReadFile(fullConfigPath)
+	b, err := os.ReadFile(fullConfigPath)
 	switch {
 	case err != nil && os.IsNotExist(err):
 		// create the base file if it does not exist
@@ -907,7 +909,7 @@ func (d *DeviceManager) refreshCache() error {
 
 	// scan the onboard path for all files which end in ".pem" and load them
 	onboardPath := path.Join(d.databasePath, onboardDir)
-	candidates, err := ioutil.ReadDir(onboardPath)
+	candidates, err := os.ReadDir(onboardPath)
 	if err != nil {
 		return fmt.Errorf("unable to read onboarding certificates at %s: %v", onboardPath, err)
 	}
@@ -926,7 +928,7 @@ func (d *DeviceManager) refreshCache() error {
 		}
 
 		// read the file
-		b, err := ioutil.ReadFile(f)
+		b, err := os.ReadFile(f)
 		if err != nil {
 			return fmt.Errorf("unable to read onboard certificate file %s: %v", f, err)
 		}
@@ -947,7 +949,7 @@ func (d *DeviceManager) refreshCache() error {
 		if err != nil {
 			continue
 		}
-		b, err = ioutil.ReadFile(f)
+		b, err = os.ReadFile(f)
 		if err != nil {
 			return fmt.Errorf("unable to read onboard serial file %s: %v", f, err)
 		}
@@ -960,7 +962,7 @@ func (d *DeviceManager) refreshCache() error {
 	// scan the device path for each dir which is the UUID
 	//   and in each one, if a cert exists with the appropriate name, load it
 	devicePath := path.Join(d.databasePath, deviceDir)
-	candidates, err = ioutil.ReadDir(devicePath)
+	candidates, err = os.ReadDir(devicePath)
 	if err != nil {
 		return fmt.Errorf("unable to read devices at %s: %v", devicePath, err)
 	}
@@ -986,7 +988,7 @@ func (d *DeviceManager) refreshCache() error {
 			continue
 		}
 		// read the file
-		b, err := ioutil.ReadFile(f)
+		b, err := os.ReadFile(f)
 		if err != nil {
 			return fmt.Errorf("unable to read device certificate file %s: %v", f, err)
 		}
@@ -1010,7 +1012,7 @@ func (d *DeviceManager) refreshCache() error {
 			continue
 		}
 		// read the file
-		b, err = ioutil.ReadFile(f)
+		b, err = os.ReadFile(f)
 		if err != nil {
 			return fmt.Errorf("unable to read device onboard certificate file %s: %v", f, err)
 		}
@@ -1019,10 +1021,6 @@ func (d *DeviceManager) refreshCache() error {
 		cert, err = x509.ParseCertificate(certPem.Bytes)
 		if err != nil {
 			return fmt.Errorf("unable to convert data from file %s to device onboard certificate: %v", f, err)
-		}
-		certStr = string(cert.Raw)
-		if err != nil {
-			return fmt.Errorf("unable to convert device uuid from directory name %s: %v", name, err)
 		}
 		devItem := d.devices[u]
 		devItem.Onboard = cert
@@ -1035,7 +1033,7 @@ func (d *DeviceManager) refreshCache() error {
 			continue
 		}
 		// read the file
-		b, err = ioutil.ReadFile(f)
+		b, err = os.ReadFile(f)
 		if err != nil {
 			return fmt.Errorf("unable to read device serial file %s: %v", f, err)
 		}
@@ -1122,8 +1120,7 @@ func (d *DeviceManager) deviceExists(u uuid.UUID) bool {
 // checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
 // does **not** check if it has been used
 func (d *DeviceManager) checkValidOnboardSerial(cert *x509.Certificate, serial string) error {
-	certStr := string(cert.Raw)
-	if c, ok := d.onboardCerts[certStr]; ok {
+	if c, ok := d.onboardCerts[string(cert.Raw)]; ok {
 		// accept the specific serial or the wildcard
 		if _, ok := c[serial]; ok {
 			return nil
@@ -1236,7 +1233,7 @@ func (d *DeviceManager) GetDeviceOptions(u uuid.UUID) ([]byte, error) {
 	}
 	// read options from disk
 	fullOptionsPath := path.Join(d.getDevicePath(u), deviceOptionsFilename)
-	b, err := ioutil.ReadFile(fullOptionsPath)
+	b, err := os.ReadFile(fullOptionsPath)
 	if err != nil {
 		// if error another than not exists than return
 		if !os.IsNotExist(err) {
@@ -1254,9 +1251,9 @@ func (d *DeviceManager) GetDeviceOptions(u uuid.UUID) ([]byte, error) {
 }
 
 func (d *DeviceManager) SetGlobalOptions(b []byte) error {
-	return ioutil.WriteFile(filepath.Join(d.databasePath, globalOptionsFilename), b, 0666)
+	return os.WriteFile(filepath.Join(d.databasePath, globalOptionsFilename), b, 0666)
 }
 
 func (d *DeviceManager) GetGlobalOptions() ([]byte, error) {
-	return ioutil.ReadFile(filepath.Join(d.databasePath, globalOptionsFilename))
+	return os.ReadFile(filepath.Join(d.databasePath, globalOptionsFilename))
 }

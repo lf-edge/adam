@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -115,10 +114,10 @@ var serverCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("error loading server cert and key from environment variables: %v", err)
 			}
-			if err = ioutil.WriteFile(serverCert, []byte(serverENVCert), 0644); err != nil {
+			if err = os.WriteFile(serverCert, []byte(serverENVCert), 0644); err != nil {
 				log.Fatal(err)
 			}
-			if err = ioutil.WriteFile(serverKey, []byte(serverENVKey), 0600); err != nil {
+			if err = os.WriteFile(serverKey, []byte(serverENVKey), 0600); err != nil {
 				log.Fatal(err)
 			}
 		} else {
@@ -145,21 +144,21 @@ var serverCmd = &cobra.Command{
 			log.Fatalf("error parsing server cert: %v", err)
 		}
 
-		err = ioutil.WriteFile(path.Join(configDir, "server"), []byte(ca.Subject.CommonName+":"+port), 0644)
+		err = os.WriteFile(path.Join(configDir, "server"), []byte(ca.Subject.CommonName+":"+port), 0644)
 		if err != nil {
 			log.Fatalf("error writing to server file: %v", err)
 		}
 
-		err = ioutil.WriteFile(path.Join(configDir, "hosts"), []byte(hostIP+" "+ca.Subject.CommonName), 0644)
+		err = os.WriteFile(path.Join(configDir, "hosts"), []byte(hostIP+" "+ca.Subject.CommonName), 0644)
 		if err != nil {
 			log.Fatalf("error writing hosts file: %v", err)
 		}
 
-		rootCert, err := ioutil.ReadFile(serverCert)
+		rootCert, err := os.ReadFile(serverCert)
 		if err != nil {
 			log.Fatalf("error reading %s file: %v", serverCert, err)
 		}
-		err = ioutil.WriteFile(path.Join(configDir, "root-certificate.pem"), rootCert, 0644)
+		err = os.WriteFile(path.Join(configDir, "root-certificate.pem"), rootCert, 0644)
 		if err != nil {
 			log.Fatalf("error writing root-certificate.pem file: %v", err)
 		}
@@ -168,10 +167,10 @@ var serverCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("error loading signing cert and key from environment variables: %v", err)
 			}
-			if err = ioutil.WriteFile(signingCert, []byte(signingENVCert), 0644); err != nil {
+			if err = os.WriteFile(signingCert, []byte(signingENVCert), 0644); err != nil {
 				log.Fatal(err)
 			}
-			if err = ioutil.WriteFile(signingKey, []byte(signingENVKey), 0600); err != nil {
+			if err = os.WriteFile(signingKey, []byte(signingENVKey), 0600); err != nil {
 				log.Fatal(err)
 			}
 		} else {
@@ -198,10 +197,10 @@ var serverCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("error loading encrypt cert and key from environment variables: %v", err)
 			}
-			if err = ioutil.WriteFile(encryptCert, []byte(encryptENVCert), 0644); err != nil {
+			if err = os.WriteFile(encryptCert, []byte(encryptENVCert), 0644); err != nil {
 				log.Fatal(err)
 			}
-			if err = ioutil.WriteFile(encryptKey, []byte(encryptENVKey), 0600); err != nil {
+			if err = os.WriteFile(encryptKey, []byte(encryptENVKey), 0600); err != nil {
 				log.Fatal(err)
 			}
 		} else {

@@ -1,7 +1,6 @@
 package driver_test
 
 import (
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -27,7 +26,7 @@ func TestURLs(t *testing.T) {
 	}
 
 	// create a temporary working dir, because the file driver actually creates the directories
-	tmpdir, err := ioutil.TempDir("", "adam-driver-test")
+	tmpdir, err := os.MkdirTemp("", "adam-driver-test")
 	if err != nil {
 		t.Fatalf("could not create temporary directory: %v", err)
 	}

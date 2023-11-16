@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -325,7 +324,7 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "bad UUID", http.StatusBadRequest)
 	}
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("bad body: %v", err), http.StatusBadRequest)
 		return
@@ -586,7 +585,7 @@ func (h *adminHandler) deviceOptionsSet(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("bad body: %v", err), http.StatusBadRequest)
 		return
@@ -626,7 +625,7 @@ func (h *adminHandler) globalOptionsGet(w http.ResponseWriter, _ *http.Request) 
 }
 
 func (h *adminHandler) globalOptionsSet(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("bad body: %v", err), http.StatusBadRequest)
 		return

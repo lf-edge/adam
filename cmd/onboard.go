@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -42,7 +42,7 @@ var onboardListCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error reading URL %s: %v", u, err)
 		}
-		buf, err := ioutil.ReadAll(response.Body)
+		buf, err := io.ReadAll(response.Body)
 		if err != nil {
 			log.Fatalf("unable to read data from URL %s: %v", u, err)
 		}
@@ -55,7 +55,7 @@ var onboardAddCmd = &cobra.Command{
 	Short: "add new onboarding certificate",
 	Long:  `Add new onboarding certificate, as well as the valid serials. If the certificate already exists, its serials are replaced by the provided list`,
 	Run: func(cmd *cobra.Command, args []string) {
-		b, err := ioutil.ReadFile(certPath)
+		b, err := os.ReadFile(certPath)
 		switch {
 		case err != nil && os.IsNotExist(err):
 			log.Fatalf("cert file %s does not exist", certPath)
@@ -95,7 +95,7 @@ var onboardGetCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error reading URL %s: %v", u, err)
 		}
-		buf, err := ioutil.ReadAll(response.Body)
+		buf, err := io.ReadAll(response.Body)
 		if err != nil {
 			log.Fatalf("unable to read data from URL %s: %v", u, err)
 		}
