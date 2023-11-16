@@ -3,7 +3,6 @@ package file_test
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -31,7 +30,7 @@ func TestDirReader(t *testing.T) {
 		}
 	})
 	t.Run("empty directory", func(t *testing.T) {
-		dir, err := ioutil.TempDir("", "dirreader_test")
+		dir, err := os.MkdirTemp("", "dirreader_test")
 		if err != nil {
 			t.Fatalf("failure to create temporary directory: %v", err)
 		}
@@ -45,13 +44,13 @@ func TestDirReader(t *testing.T) {
 		}
 	})
 	t.Run("single small file", func(t *testing.T) {
-		dir, err := ioutil.TempDir("", "dirreader_test")
+		dir, err := os.MkdirTemp("", "dirreader_test")
 		if err != nil {
 			t.Fatalf("failure to create temporary directory: %v", err)
 		}
 		// create the file that is smaller than our buffer
 		data := []byte("Really small file")
-		if err := ioutil.WriteFile(path.Join(dir, "A"), data, 0644); err != nil {
+		if err := os.WriteFile(path.Join(dir, "A"), data, 0644); err != nil {
 			t.Fatalf("failure to write temporary file: %v", err)
 		}
 		defer os.RemoveAll(dir)
@@ -85,12 +84,12 @@ func TestDirReader(t *testing.T) {
 	})
 	t.Run("single large file", func(t *testing.T) {
 		data := []byte("Really large file with lots of data bigger than our buffer")
-		dir, err := ioutil.TempDir("", "dirreader_test")
+		dir, err := os.MkdirTemp("", "dirreader_test")
 		if err != nil {
 			t.Fatalf("failure to create temporary directory: %v", err)
 		}
 		// create the file that is larger than our buffer
-		if err := ioutil.WriteFile(path.Join(dir, "A"), data, 0644); err != nil {
+		if err := os.WriteFile(path.Join(dir, "A"), data, 0644); err != nil {
 			t.Fatalf("failure to write temporary file: %v", err)
 		}
 		defer os.RemoveAll(dir)
@@ -144,15 +143,15 @@ func TestDirReader(t *testing.T) {
 		data1 := []byte("Really large file with lots of data bigger than our buffer")
 		data2 := []byte("yet another file with lots of gibberish data to put in")
 
-		dir, err := ioutil.TempDir("", "dirreader_test")
+		dir, err := os.MkdirTemp("", "dirreader_test")
 		if err != nil {
 			t.Fatalf("failure to create temporary directory: %v", err)
 		}
 		// create the multiple files that together are larger than our buffer
-		if err := ioutil.WriteFile(path.Join(dir, "A"), data1, 0644); err != nil {
+		if err := os.WriteFile(path.Join(dir, "A"), data1, 0644); err != nil {
 			t.Fatalf("failure to write temporary file: %v", err)
 		}
-		if err := ioutil.WriteFile(path.Join(dir, "B"), data2, 0644); err != nil {
+		if err := os.WriteFile(path.Join(dir, "B"), data2, 0644); err != nil {
 			t.Fatalf("failure to write temporary file: %v", err)
 		}
 

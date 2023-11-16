@@ -5,7 +5,6 @@ package x509_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"testing"
 
 	"crypto/x509"
+
 	ax "github.com/lf-edge/adam/pkg/x509"
 )
 
@@ -85,7 +85,7 @@ func TestGenerate(t *testing.T) {
 }
 
 func TestGenerateAndWrite(t *testing.T) {
-	dir, err := ioutil.TempDir("", "adam-test")
+	dir, err := os.MkdirTemp("", "adam-test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,12 +122,12 @@ func TestGenerateAndWrite(t *testing.T) {
 			keyPath = path.Join(dir, keyFilename)
 		}
 		if tt.certExists {
-			ioutil.WriteFile(certPath, []byte{1, 2, 3}, 0644)
+			os.WriteFile(certPath, []byte{1, 2, 3}, 0644)
 		} else {
 			os.Remove(certPath)
 		}
 		if tt.keyExists {
-			ioutil.WriteFile(keyPath, []byte{1, 2, 3}, 0644)
+			os.WriteFile(keyPath, []byte{1, 2, 3}, 0644)
 		} else {
 			os.Remove(keyPath)
 		}

@@ -8,8 +8,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -212,7 +212,7 @@ func (s *Server) Start() {
 			return
 		}
 		defer f.Close()
-		content, err := ioutil.ReadAll(f)
+		content, err := io.ReadAll(f)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return

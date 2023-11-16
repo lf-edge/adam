@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/big"
 	"net/http"
@@ -83,13 +82,13 @@ func (h *apiHandlerv2) recordClient(u *uuid.UUID, r *http.Request) {
 	h.manager.WriteRequest(*u, b)
 }
 
-//validateAuthContainerAndRecord processes http.Request extracts AuthContainer and do its validation
-//against registered devices:
+// validateAuthContainerAndRecord processes http.Request extracts AuthContainer and do its validation
+// against registered devices:
 // checks for certs hash in AuthContainer and go through saved certs to check auth state
 // it verifies Signature of AuthContainer payload against saved cert
 // returns ProtectedPayload and device uuid
 func (h *apiHandlerv2) validateAuthContainerAndRecord(w http.ResponseWriter, r *http.Request) ([]byte, *uuid.UUID) {
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -130,7 +129,7 @@ func (h *apiHandlerv2) validateAuthContainerAndRecord(w http.ResponseWriter, r *
 	return payload, u
 }
 
-//getAllCerts process certificates files and return structure with them
+// getAllCerts process certificates files and return structure with them
 func (h *apiHandlerv2) getAllCerts() (map[string]*certs.ZCert, error) {
 	allCerts := make(map[string]*certs.ZCert)
 	signingCerts, sgErr := getCertChain(h.signingCertPath, certs.ZCertType_CERT_TYPE_CONTROLLER_SIGNING)
@@ -206,7 +205,7 @@ func getCertChain(certPath string, certType certs.ZCertType) (*common.Zcerts, er
 		return nil, err
 	}
 
-	certData, err := ioutil.ReadFile(certPath)
+	certData, err := os.ReadFile(certPath)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +373,7 @@ func (h *apiHandlerv2) prepareEnvelope(payload []byte) ([]byte, error) {
 	}
 
 	//read private signing key.
-	signingPrivateKey, rErr := ioutil.ReadFile(h.signingKeyPath)
+	signingPrivateKey, rErr := os.ReadFile(h.signingKeyPath)
 	if rErr != nil {
 		return nil, fmt.Errorf("error occurred while reading signing key: %v", rErr)
 	}
@@ -399,7 +398,7 @@ func (h *apiHandlerv2) prepareEnvelope(payload []byte) ([]byte, error) {
 }
 
 func (h *apiHandlerv2) processAuthContainer(reader io.Reader) (*auth.AuthContainer, error) {
-	b, err := ioutil.ReadAll(reader)
+	b, err := io.ReadAll(reader)
 	if err != nil || len(b) == 0 {
 		return nil, fmt.Errorf("error reading request body: %v", err)
 	}
