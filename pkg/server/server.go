@@ -120,10 +120,10 @@ func (s *Server) Start() {
 			logChannel:      logChannel,
 			infoChannel:     infoChannel,
 			metricChannel:   metricChannel,
-			signingCertPath: s.SigningCertPath,
-			signingKeyPath:  s.SigningKeyPath,
-			encryptCertPath: s.EncryptCertPath,
-			encryptKeyPath:  s.EncryptKeyPath,
+			signingCertPath: &s.SigningCertPath,
+			signingKeyPath:  &s.SigningKeyPath,
+			encryptCertPath: &s.EncryptCertPath,
+			encryptKeyPath:  &s.EncryptKeyPath,
 		}
 
 		edv2 := router.PathPrefix("/api/v2/edgedevice").Subrouter()
@@ -147,9 +147,11 @@ func (s *Server) Start() {
 
 	// admin endpoint - custom, used to manage adam
 	admin := &adminHandler{
-		manager:     s.DeviceManager,
-		logChannel:  logChannel,
-		infoChannel: infoChannel,
+		manager:         s.DeviceManager,
+		logChannel:      logChannel,
+		infoChannel:     infoChannel,
+		signingCertPath: &s.SigningCertPath,
+		signingKeyPath:  &s.SigningKeyPath,
 	}
 
 	ad := router.PathPrefix("/admin").Subrouter()
@@ -188,6 +190,7 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device/{uuid}/options", admin.deviceOptionsSet).Methods("PUT")
 	ad.HandleFunc("/options", admin.globalOptionsGet).Methods("GET")
 	ad.HandleFunc("/options", admin.globalOptionsSet).Methods("PUT")
+	ad.HandleFunc("/certs", admin.signingCertSet).Methods("POST")
 
 	var (
 		//index  []byte

@@ -29,6 +29,7 @@ The following are the admin endpoints:
 * `PUT /device/{uuid}/options` - update options for one device
 * `GET /options` - set global options
 * `PUT /options` - update global options
+* `POST /certs` - update signing certificate
 
 ## Adam Admin
 

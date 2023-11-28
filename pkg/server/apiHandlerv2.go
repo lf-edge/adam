@@ -42,10 +42,10 @@ type apiHandlerv2 struct {
 	logChannel      chan []byte
 	infoChannel     chan []byte
 	metricChannel   chan []byte
-	signingCertPath string
-	signingKeyPath  string
-	encryptCertPath string
-	encryptKeyPath  string
+	signingCertPath *string
+	signingKeyPath  *string
+	encryptCertPath *string
+	encryptKeyPath  *string
 }
 
 const (
@@ -132,7 +132,7 @@ func (h *apiHandlerv2) validateAuthContainerAndRecord(w http.ResponseWriter, r *
 // getAllCerts process certificates files and return structure with them
 func (h *apiHandlerv2) getAllCerts() (map[string]*certs.ZCert, error) {
 	allCerts := make(map[string]*certs.ZCert)
-	signingCerts, sgErr := getCertChain(h.signingCertPath, certs.ZCertType_CERT_TYPE_CONTROLLER_SIGNING)
+	signingCerts, sgErr := getCertChain(*h.signingCertPath, certs.ZCertType_CERT_TYPE_CONTROLLER_SIGNING)
 	if sgErr != nil {
 		return nil, fmt.Errorf("error occurred while fetching signing cert chain: %v", sgErr)
 	}
@@ -142,7 +142,7 @@ func (h *apiHandlerv2) getAllCerts() (map[string]*certs.ZCert, error) {
 		allCerts[string(cert.CertHash)] = cert
 	}
 
-	encryptCerts, egErr := getCertChain(h.encryptCertPath, certs.ZCertType_CERT_TYPE_CONTROLLER_ECDH_EXCHANGE)
+	encryptCerts, egErr := getCertChain(*h.encryptCertPath, certs.ZCertType_CERT_TYPE_CONTROLLER_ECDH_EXCHANGE)
 	if egErr != nil {
 		return nil, fmt.Errorf("error occurred while fetching encryption cert chain: %v", egErr)
 	}
@@ -361,7 +361,7 @@ func (h *apiHandlerv2) prepareEnvelope(payload []byte) ([]byte, error) {
 	var senderCertHash []byte
 	var signingCert []byte
 
-	zcerts, gErr := getCertChain(h.signingCertPath, certs.ZCertType_CERT_TYPE_CONTROLLER_SIGNING)
+	zcerts, gErr := getCertChain(*h.signingCertPath, certs.ZCertType_CERT_TYPE_CONTROLLER_SIGNING)
 	if gErr != nil {
 		return nil, gErr
 	}
@@ -373,7 +373,7 @@ func (h *apiHandlerv2) prepareEnvelope(payload []byte) ([]byte, error) {
 	}
 
 	//read private signing key.
-	signingPrivateKey, rErr := os.ReadFile(h.signingKeyPath)
+	signingPrivateKey, rErr := os.ReadFile(*h.signingKeyPath)
 	if rErr != nil {
 		return nil, fmt.Errorf("error occurred while reading signing key: %v", rErr)
 	}

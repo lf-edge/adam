@@ -16,6 +16,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
+	"github.com/lf-edge/adam/pkg/util"
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve/api/go/config"
 	"github.com/lf-edge/eve/api/go/info"
@@ -34,6 +35,8 @@ type adminHandler struct {
 	logChannel      chan []byte
 	infoChannel     chan []byte
 	requestsChannel chan []byte
+	signingCertPath *string
+	signingKeyPath  *string
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
@@ -643,5 +646,43 @@ func (h *adminHandler) globalOptionsSet(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, fmt.Sprintf("failed to set global options: %s", err), http.StatusInternalServerError)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *adminHandler) signingCertSet(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("bad body: %v", err), http.StatusBadRequest)
+		return
+	}
+	if len(body) == 0 {
+		http.Error(w, "empty body", http.StatusBadRequest)
+		return
+	}
+
+	// validate the cert
+	_, err = ax.ParseCert(body)
+	if err != nil {
+		log.Printf("signingCertSet: %s", err)
+		http.Error(w, fmt.Sprintf("failed to parse signing cert: %s", err), http.StatusInternalServerError)
+		return
+	}
+
+	certPath := *h.signingCertPath
+	// when no signing cert is set, we will create a new file
+	if certPath == "" {
+		// generate a random name
+		certPath = fmt.Sprintf("/tmp/signingCert-%s.pem", common.RandomString(8))
+	}
+	// write the cert to the file atomically (using a temp file)
+	err = util.WriteRename(certPath, body)
+	if err != nil {
+		log.Printf("signingCertSet: %s", err)
+		http.Error(w, fmt.Sprintf("failed to write signing cert: %s", err), http.StatusInternalServerError)
+		return
+	}
+	// set the signing cert path
+	*h.signingCertPath = certPath
+
 	w.WriteHeader(http.StatusOK)
 }
