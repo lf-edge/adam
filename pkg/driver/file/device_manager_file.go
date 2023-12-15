@@ -22,7 +22,7 @@ import (
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/adam/pkg/util"
 	ax "github.com/lf-edge/adam/pkg/x509"
-	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
+	eveuuid "github.com/lf-edge/eve-api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )

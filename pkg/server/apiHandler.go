@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
-	"github.com/lf-edge/eve/api/go/config"
+	"github.com/lf-edge/eve-api/go/config"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )
