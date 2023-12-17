@@ -18,8 +18,8 @@ import (
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	x509Pem "github.com/lf-edge/adam/pkg/x509"
-	"github.com/lf-edge/eve/api/go/attest"
-	"github.com/lf-edge/eve/api/go/certs"
+	"github.com/lf-edge/eve-api/go/attest"
+	"github.com/lf-edge/eve-api/go/certs"
 	uuid "github.com/satori/go.uuid"
 )
 

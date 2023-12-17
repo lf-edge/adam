@@ -24,9 +24,9 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
-	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/logs"
-	"github.com/lf-edge/eve/api/go/register"
+	"github.com/lf-edge/eve-api/go/config"
+	"github.com/lf-edge/eve-api/go/logs"
+	"github.com/lf-edge/eve-api/go/register"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 )

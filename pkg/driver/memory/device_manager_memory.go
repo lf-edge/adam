@@ -9,7 +9,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"github.com/lf-edge/adam/pkg/driver/common"
-	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
+	eveuuid "github.com/lf-edge/eve-api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/proto"
 )

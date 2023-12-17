@@ -30,11 +30,11 @@ import (
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	x509Pem "github.com/lf-edge/adam/pkg/x509"
-	"github.com/lf-edge/eve/api/go/auth"
-	"github.com/lf-edge/eve/api/go/certs"
-	"github.com/lf-edge/eve/api/go/config"
-	"github.com/lf-edge/eve/api/go/evecommon"
-	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
+	"github.com/lf-edge/eve-api/go/auth"
+	"github.com/lf-edge/eve-api/go/certs"
+	"github.com/lf-edge/eve-api/go/config"
+	"github.com/lf-edge/eve-api/go/evecommon"
+	eveuuid "github.com/lf-edge/eve-api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
 )
 

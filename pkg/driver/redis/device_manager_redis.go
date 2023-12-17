@@ -19,7 +19,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	ax "github.com/lf-edge/adam/pkg/x509"
-	eveuuid "github.com/lf-edge/eve/api/go/eveuuid"
+	eveuuid "github.com/lf-edge/eve-api/go/eveuuid"
 	uuid "github.com/satori/go.uuid"
 	"github.com/vmihailenco/msgpack/v4"
 	"google.golang.org/protobuf/proto"
