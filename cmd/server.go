@@ -114,11 +114,19 @@ var serverCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("error loading server cert and key from environment variables: %v", err)
 			}
-			if err = os.WriteFile(serverCert, []byte(serverENVCert), 0644); err != nil {
-				log.Fatal(err)
-			}
-			if err = os.WriteFile(serverKey, []byte(serverENVKey), 0600); err != nil {
-				log.Fatal(err)
+
+			// only create new certs and keys if the files do not exist
+			_, err = os.Stat(serverCert)
+			serverCertNotExist := os.IsNotExist(err)
+			_, err = os.Stat(serverKey)
+			serverKeyNotExist := os.IsNotExist(err)
+			if serverCertNotExist && serverKeyNotExist {
+				if err = os.WriteFile(serverCert, []byte(serverENVCert), 0644); err != nil {
+					log.Fatal(err)
+				}
+				if err = os.WriteFile(serverKey, []byte(serverENVKey), 0600); err != nil {
+					log.Fatal(err)
+				}
 			}
 		} else {
 			// if we were asked to autoCert, then we do it
@@ -162,16 +170,24 @@ var serverCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error writing root-certificate.pem file: %v", err)
 		}
+
 		if signingENVCertProvided && signingENVKeyProvided {
-			_, err = tls.X509KeyPair([]byte(signingENVCert), []byte(signingENVKey))
-			if err != nil {
-				log.Fatalf("error loading signing cert and key from environment variables: %v", err)
-			}
-			if err = os.WriteFile(signingCert, []byte(signingENVCert), 0644); err != nil {
-				log.Fatal(err)
-			}
-			if err = os.WriteFile(signingKey, []byte(signingENVKey), 0600); err != nil {
-				log.Fatal(err)
+			// only create new certs and keys if the files do not exist
+			_, err = os.Stat(signingCert)
+			signingCertNotExist := os.IsNotExist(err)
+			_, err = os.Stat(signingKey)
+			signingKeyNotExist := os.IsNotExist(err)
+			if signingCertNotExist && signingKeyNotExist {
+				_, err = tls.X509KeyPair([]byte(signingENVCert), []byte(signingENVKey))
+				if err != nil {
+					log.Fatalf("error loading signing cert and key from environment variables: %v", err)
+				}
+				if err = os.WriteFile(signingCert, []byte(signingENVCert), 0644); err != nil {
+					log.Fatal(err)
+				}
+				if err = os.WriteFile(signingKey, []byte(signingENVKey), 0600); err != nil {
+					log.Fatal(err)
+				}
 			}
 		} else {
 			// if we were asked to autoCert, then we do it
@@ -192,16 +208,24 @@ var serverCmd = &cobra.Command{
 				log.Printf("Will use APIv1: error loading signing cert %s and signing key %s: %v", signingCert, signingKey, err)
 			}
 		}
+
 		if encryptENVCertProvided && encryptENVKeyProvided {
-			_, err = tls.X509KeyPair([]byte(encryptENVCert), []byte(encryptENVKey))
-			if err != nil {
-				log.Fatalf("error loading encrypt cert and key from environment variables: %v", err)
-			}
-			if err = os.WriteFile(encryptCert, []byte(encryptENVCert), 0644); err != nil {
-				log.Fatal(err)
-			}
-			if err = os.WriteFile(encryptKey, []byte(encryptENVKey), 0600); err != nil {
-				log.Fatal(err)
+			// only create new certs and keys if the files do not exist
+			_, err = os.Stat(encryptCert)
+			encryptCertNotExist := os.IsNotExist(err)
+			_, err = os.Stat(encryptKey)
+			encryptKeyNotExist := os.IsNotExist(err)
+			if encryptCertNotExist && encryptKeyNotExist {
+				_, err = tls.X509KeyPair([]byte(encryptENVCert), []byte(encryptENVKey))
+				if err != nil {
+					log.Fatalf("error loading encrypt cert and key from environment variables: %v", err)
+				}
+				if err = os.WriteFile(encryptCert, []byte(encryptENVCert), 0644); err != nil {
+					log.Fatal(err)
+				}
+				if err = os.WriteFile(encryptKey, []byte(encryptENVKey), 0600); err != nil {
+					log.Fatal(err)
+				}
 			}
 		} else {
 			// if we were asked to autoCert, then we do it
