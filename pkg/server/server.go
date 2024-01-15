@@ -5,14 +5,18 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -38,6 +42,8 @@ type Server struct {
 
 // Start start the server
 func (s *Server) Start() {
+	irqSig := make(chan os.Signal, 1)
+	signal.Notify(irqSig, syscall.SIGINT, syscall.SIGTERM)
 	// ensure the server cert and key exist
 	_, err := os.Stat(s.CertPath)
 	if err != nil {
@@ -240,7 +246,28 @@ func (s *Server) Start() {
 	log.Printf("\tdatabase: %s\n", s.DeviceManager.Database())
 	log.Printf("\tserver cert: %s\n", s.CertPath)
 	log.Printf("\tserver key: %s\n", s.KeyPath)
-	log.Fatal(server.ListenAndServeTLS(s.CertPath, s.KeyPath))
+	done := make(chan bool)
+	go func() {
+		err := server.ListenAndServeTLS(s.CertPath, s.KeyPath)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Listen and serve: %v", err)
+		}
+		done <- true
+	}()
+	<-irqSig
+	log.Printf("server shutdown starting")
+
+	//Create shutdown context with 10 second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	//shutdown the server
+	err = server.Shutdown(ctx)
+	if err != nil {
+		log.Printf("Shutdown request error: %v", err)
+	}
+	<-done
+	log.Printf("server shutdown done")
 }
 
 // middleware handlers to check device cert and onboarding cert
