@@ -86,59 +86,27 @@ var serverCmd = &cobra.Command{
 			log.Fatalf("failed to make directory %s: %v", configDir, err)
 		}
 
-		serverENVCert, serverENVCertProvided := os.LookupEnv("SERVER_CERT")
-		serverENVKey, serverENVKeyProvided := os.LookupEnv("SERVER_KEY")
-
-		signingENVCert, signingENVCertProvided := os.LookupEnv("SIGNING_CERT")
-		signingENVKey, signingENVKeyProvided := os.LookupEnv("SIGNING_KEY")
-
-		encryptENVCert, encryptENVCertProvided := os.LookupEnv("ENCRYPT_CERT")
-		encryptENVKey, encryptENVKeyProvided := os.LookupEnv("ENCRYPT_KEY")
-
-		// get the directory
-		certDir := path.Dir(serverCert)
-		keyDir := path.Dir(serverKey)
-		// make the directories or fail
-		if err := os.MkdirAll(certDir, 0755); err != nil {
-			log.Fatalf("failed to make cert directory %s: %v", certDir, err)
-		}
-		if err := os.MkdirAll(keyDir, 0755); err != nil {
-			log.Fatalf("failed to make key directory %s: %v", keyDir, err)
-		}
-
 		// only do it if the files do not exist
 		certForce := false
-		var catls tls.Certificate
-		if serverENVCertProvided && serverENVKeyProvided {
-			catls, err = tls.X509KeyPair([]byte(serverENVCert), []byte(serverENVKey))
-			if err != nil {
-				log.Fatalf("error loading server cert and key from environment variables: %v", err)
-			}
-			if err = os.WriteFile(serverCert, []byte(serverENVCert), 0644); err != nil {
-				log.Fatal(err)
-			}
-			if err = os.WriteFile(serverKey, []byte(serverENVKey), 0600); err != nil {
-				log.Fatal(err)
-			}
-		} else {
-			// if we were asked to autoCert, then we do it
-			if autoCert {
-				if certCN == certHosts && certCN == "" {
-					log.Fatalf("must specify at least one hostname/IP or CN")
-				}
-				if err := ax509.GenerateAndWrite(certCN, certHosts, serverCert, serverKey, certForce); err != nil {
-					log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", serverKey, serverCert)
-				} else {
-					log.Printf("saved new server certificate to %s", serverCert)
-					log.Printf("saved new server key to %s", serverKey)
-				}
-			}
 
-			catls, err = tls.LoadX509KeyPair(serverCert, serverKey)
-			if err != nil {
-				log.Fatalf("error loading server cert %s and server key %s: %v", serverCert, serverKey, err)
+		// if we were asked to autoCert, then we do it
+		if autoCert {
+			if certCN == certHosts && certCN == "" {
+				log.Fatalf("must specify at least one hostname/IP or CN")
+			}
+			if err := ax509.GenerateAndWrite(certCN, certHosts, serverCert, serverKey, certForce); err != nil {
+				log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", serverKey, serverCert)
+			} else {
+				log.Printf("saved new server certificate to %s", serverCert)
+				log.Printf("saved new server key to %s", serverKey)
 			}
 		}
+
+		catls, err := tls.LoadX509KeyPair(serverCert, serverKey)
+		if err != nil {
+			log.Fatalf("error loading server cert %s and server key %s: %v", serverCert, serverKey, err)
+		}
+
 		ca, err := x509.ParseCertificate(catls.Certificate[0])
 		if err != nil {
 			log.Fatalf("error parsing server cert: %v", err)
@@ -162,66 +130,43 @@ var serverCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error writing root-certificate.pem file: %v", err)
 		}
-		if signingENVCertProvided && signingENVKeyProvided {
-			_, err = tls.X509KeyPair([]byte(signingENVCert), []byte(signingENVKey))
-			if err != nil {
-				log.Fatalf("error loading signing cert and key from environment variables: %v", err)
-			}
-			if err = os.WriteFile(signingCert, []byte(signingENVCert), 0644); err != nil {
-				log.Fatal(err)
-			}
-			if err = os.WriteFile(signingKey, []byte(signingENVKey), 0600); err != nil {
-				log.Fatal(err)
-			}
-		} else {
-			// if we were asked to autoCert, then we do it
-			if autoCert {
-				if certCN == certHosts && certCN == "" {
-					log.Fatalf("must specify at least one hostname/IP or CN")
-				}
-				if err := ax509.GenerateAndWrite(certCN, certHosts, signingCert, signingKey, certForce); err != nil {
-					log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", signingKey, signingCert)
-				} else {
-					log.Printf("saved new signing certificate to %s", signingCert)
-					log.Printf("saved new signing key to %s", signingKey)
-				}
-			}
 
-			catls, err = tls.LoadX509KeyPair(signingCert, signingKey)
-			if err != nil {
-				log.Printf("Will use APIv1: error loading signing cert %s and signing key %s: %v", signingCert, signingKey, err)
+		// if we were asked to autoCert, then we do it
+		if autoCert {
+			if certCN == certHosts && certCN == "" {
+				log.Fatalf("must specify at least one hostname/IP or CN")
+			}
+			if err := ax509.GenerateAndWrite(certCN, certHosts, signingCert, signingKey, certForce); err != nil {
+				log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", signingKey, signingCert)
+			} else {
+				log.Printf("saved new signing certificate to %s", signingCert)
+				log.Printf("saved new signing key to %s", signingKey)
 			}
 		}
-		if encryptENVCertProvided && encryptENVKeyProvided {
-			_, err = tls.X509KeyPair([]byte(encryptENVCert), []byte(encryptENVKey))
-			if err != nil {
-				log.Fatalf("error loading encrypt cert and key from environment variables: %v", err)
-			}
-			if err = os.WriteFile(encryptCert, []byte(encryptENVCert), 0644); err != nil {
-				log.Fatal(err)
-			}
-			if err = os.WriteFile(encryptKey, []byte(encryptENVKey), 0600); err != nil {
-				log.Fatal(err)
-			}
-		} else {
-			// if we were asked to autoCert, then we do it
-			if autoCert {
-				if certCN == certHosts && certCN == "" {
-					log.Fatalf("must specify at least one hostname/IP or CN")
-				}
-				if err := ax509.GenerateAndWrite(certCN, certHosts, encryptCert, encryptKey, certForce); err != nil {
-					log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", encryptKey, encryptCert)
-				} else {
-					log.Printf("saved new encrypt certificate to %s", encryptCert)
-					log.Printf("saved new encrypt key to %s", encryptKey)
-				}
-			}
 
-			catls, err = tls.LoadX509KeyPair(encryptCert, encryptKey)
-			if err != nil {
-				log.Printf("Will use APIv1: error loading encrypt cert %s and encrypt key %s: %v", encryptCert, encryptKey, err)
+		_, err = tls.LoadX509KeyPair(signingCert, signingKey)
+		if err != nil {
+			log.Printf("Will use APIv1: error loading signing cert %s and signing key %s: %v", signingCert, signingKey, err)
+		}
+
+		// if we were asked to autoCert, then we do it
+		if autoCert {
+			if certCN == certHosts && certCN == "" {
+				log.Fatalf("must specify at least one hostname/IP or CN")
+			}
+			if err := ax509.GenerateAndWrite(certCN, certHosts, encryptCert, encryptKey, certForce); err != nil {
+				log.Printf("auto-generation: key %s and/or cert %s already in place, skipping", encryptKey, encryptCert)
+			} else {
+				log.Printf("saved new encrypt certificate to %s", encryptCert)
+				log.Printf("saved new encrypt key to %s", encryptKey)
 			}
 		}
+
+		_, err = tls.LoadX509KeyPair(encryptCert, encryptKey)
+		if err != nil {
+			log.Printf("Will use APIv1: error loading encrypt cert %s and encrypt key %s: %v", encryptCert, encryptKey, err)
+		}
+
 		log.Printf("EVE-compatible configuration directory output to %s", configDir)
 
 		s := &server.Server{
