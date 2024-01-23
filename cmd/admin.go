@@ -6,10 +6,10 @@ package cmd
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"time"
 
@@ -69,7 +69,7 @@ func getStreamingClient() *http.Client {
 func getClientStreamingOption(stream bool) *http.Client {
 	tlsConfig := &tls.Config{}
 	if serverCA != "" {
-		caCert, err := ioutil.ReadFile(serverCA)
+		caCert, err := os.ReadFile(serverCA)
 		if err != nil {
 			log.Fatalf("unable to read server CA file at %s: %v", serverCA, err)
 		}

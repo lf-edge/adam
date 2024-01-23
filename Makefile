@@ -5,7 +5,7 @@
 
 IMG ?= lfedge/adam
 HASH ?= $(shell git show --format=%T -s)
-GOVER ?= 1.16.3-alpine3.13
+GOVER ?= 1.20.10-alpine3.18
 
 
 # check if we should append a dirty tag
@@ -68,7 +68,7 @@ $(LOCALBIN):
 $(LOCALLINK):
 	@if [ "$(OS)" = "$(BUILDOS)" -a "$(ARCH)" = "$(BUILDARCH)" -a ! -L "$@" -a ! -e "$@" ]; then ln -s $(notdir $(LOCALBIN)) $@; fi
 
-build-docker: 
+build-docker:
 	docker build -t $(IMG) .
 
 build-docker-local: build

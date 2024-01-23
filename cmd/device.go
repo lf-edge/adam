@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -44,7 +43,7 @@ var deviceListCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error reading URL %s: %v", u, err)
 		}
-		buf, err := ioutil.ReadAll(response.Body)
+		buf, err := io.ReadAll(response.Body)
 		if err != nil {
 			log.Fatalf("unable to read data from URL %s: %v", u, err)
 		}
@@ -66,7 +65,7 @@ var deviceGetCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error reading URL %s: %v", u, err)
 		}
-		buf, err := ioutil.ReadAll(response.Body)
+		buf, err := io.ReadAll(response.Body)
 		if err != nil {
 			log.Fatalf("unable to read data from URL %s: %v", u, err)
 		}
@@ -81,7 +80,7 @@ var deviceAddCmd = &cobra.Command{
 	Short: "add new device",
 	Long:  `Add new device and retrieve the UUID`,
 	Run: func(cmd *cobra.Command, args []string) {
-		b, err := ioutil.ReadFile(certPath)
+		b, err := os.ReadFile(certPath)
 		switch {
 		case err != nil && os.IsNotExist(err):
 			log.Fatalf("cert file %s does not exist", certPath)
@@ -172,7 +171,7 @@ var deviceConfigGetCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error reading URL %s: %v", u, err)
 		}
-		buf, err := ioutil.ReadAll(response.Body)
+		buf, err := io.ReadAll(response.Body)
 		if err != nil {
 			log.Fatalf("unable to read data from URL %s: %v", u, err)
 		}
@@ -192,12 +191,12 @@ var deviceConfigSetCmd = &cobra.Command{
 			err error
 		)
 		if configPath == "-" {
-			b, err = ioutil.ReadAll(os.Stdin)
+			b, err = io.ReadAll(os.Stdin)
 			if err != nil && err != io.EOF {
 				log.Fatalf("Error reading stdin: %v", err)
 			}
 		} else {
-			b, err = ioutil.ReadFile(configPath)
+			b, err = os.ReadFile(configPath)
 			switch {
 			case err != nil && os.IsNotExist(err):
 				log.Fatalf("config file %s does not exist", configPath)
@@ -219,7 +218,7 @@ var deviceConfigSetCmd = &cobra.Command{
 			log.Fatalf("error PUT URL %s: %v", u, err)
 		}
 		if res.StatusCode != 200 {
-			b, _ := ioutil.ReadAll(res.Body)
+			b, _ := io.ReadAll(res.Body)
 			log.Fatalf("error PUT URL %s: %d %s", u, res.StatusCode, string(b))
 		}
 	},

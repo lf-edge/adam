@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -54,7 +53,7 @@ func TestDeviceManager(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unable to write certificate: %v", err)
 			}
-			ioutil.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(serials, "\n")), 0644)
+			os.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(serials, "\n")), 0644)
 			if err != nil {
 				t.Fatalf("Unable to write serials: %v", err)
 			}
@@ -107,7 +106,7 @@ func TestDeviceManager(t *testing.T) {
 		timeout := 5
 
 		// make a temporary directory with which to work
-		dir, err := ioutil.TempDir("", "adam-test")
+		dir, err := os.MkdirTemp("", "adam-test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -157,7 +156,7 @@ func TestDeviceManager(t *testing.T) {
 		// include the device onboarding cert
 		copyFile(path.Join(onboardPath, onboardCertFilename), path.Join(devicePath, DeviceOnboardFilename))
 		// write the device serial
-		ioutil.WriteFile(path.Join(devicePath, deviceSerialFilename), []byte(serial), 0644)
+		os.WriteFile(path.Join(devicePath, deviceSerialFilename), []byte(serial), 0644)
 		// wait for the timeout
 		time.Sleep(time.Duration(timeout) * time.Millisecond)
 		// force the cache to refresh
@@ -208,7 +207,7 @@ func TestDeviceManager(t *testing.T) {
 		}
 		for i, tt := range tests {
 			// make a temporary directory with which to work
-			dir, err := ioutil.TempDir("", "adam-test")
+			dir, err := os.MkdirTemp("", "adam-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -231,7 +230,7 @@ func TestDeviceManager(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Unable to write certificate: %v", err)
 				}
-				ioutil.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(tt.serials, "\n")), 0644)
+				os.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(tt.serials, "\n")), 0644)
 				if err != nil {
 					t.Fatalf("Unable to write serials: %v", err)
 				}
@@ -242,7 +241,7 @@ func TestDeviceManager(t *testing.T) {
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
 			case err == nil && !common.EqualStringSlice(serial, tt.serials):
 				t.Errorf("%d: mismatched serials, actual '%v', expected '%v'", i, serial, tt.serials)
-			case err == nil && bytes.Compare(validCert.Raw, cert.Raw) != 0:
+			case err == nil && !bytes.Equal(validCert.Raw, cert.Raw):
 				t.Errorf("%d: mismatched certs", i)
 			}
 		}
@@ -250,7 +249,7 @@ func TestDeviceManager(t *testing.T) {
 
 	t.Run("TestOnboardList", func(t *testing.T) {
 		// make a temporary directory with which to work
-		dir, err := ioutil.TempDir("", "adam-test")
+		dir, err := os.MkdirTemp("", "adam-test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -283,7 +282,7 @@ func TestDeviceManager(t *testing.T) {
 
 		for i, tt := range tests {
 			// make a temporary directory with which to work
-			dir, err := ioutil.TempDir("", "adam-test")
+			dir, err := os.MkdirTemp("", "adam-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -319,7 +318,7 @@ func TestDeviceManager(t *testing.T) {
 
 	t.Run("TestOnboardClear", func(t *testing.T) {
 		// make a temporary directory with which to work
-		dir, err := ioutil.TempDir("", "adam-test")
+		dir, err := os.MkdirTemp("", "adam-test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -330,10 +329,10 @@ func TestDeviceManager(t *testing.T) {
 
 		fillOnboard(&dm)
 
-		err = dm.OnboardClear()
+		dm.OnboardClear()
 		// read the dirs
 		onboardPath := path.Join(dm.databasePath, onboardDir)
-		candidates, err := ioutil.ReadDir(onboardPath)
+		candidates, err := os.ReadDir(onboardPath)
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
@@ -358,7 +357,7 @@ func TestDeviceManager(t *testing.T) {
 		}
 		for i, tt := range tests {
 			// make a temporary directory with which to work
-			dir, err := ioutil.TempDir("", "adam-test")
+			dir, err := os.MkdirTemp("", "adam-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -399,7 +398,7 @@ func TestDeviceManager(t *testing.T) {
 
 	t.Run("TestDeviceClear", func(t *testing.T) {
 		// make a temporary directory with which to work
-		dir, err := ioutil.TempDir("", "adam-test")
+		dir, err := os.MkdirTemp("", "adam-test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -410,10 +409,10 @@ func TestDeviceManager(t *testing.T) {
 
 		fillDevice(&dm)
 
-		err = dm.DeviceClear()
+		dm.DeviceClear()
 		// read the dirs
 		devicePath := path.Join(dm.databasePath, deviceDir)
-		candidates, err := ioutil.ReadDir(devicePath)
+		candidates, err := os.ReadDir(devicePath)
 		switch {
 		case err != nil:
 			t.Errorf("unexpected error: %v", err)
@@ -434,7 +433,7 @@ func TestDeviceManager(t *testing.T) {
 		}
 		for i, tt := range tests {
 			// make a temporary directory with which to work
-			dir, err := ioutil.TempDir("", "adam-test")
+			dir, err := os.MkdirTemp("", "adam-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -465,7 +464,7 @@ func TestDeviceManager(t *testing.T) {
 			switch {
 			case (err != nil && tt.err == nil) || (err == nil && tt.err != nil) || (err != nil && tt.err != nil && !strings.HasPrefix(err.Error(), tt.err.Error())):
 				t.Errorf("%d: mismatched errors, actual %v expected %v", i, err, tt.err)
-			case err == nil && cert != nil && fileCert != nil && bytes.Compare(fileCert.Raw, cert.Raw) != 0:
+			case err == nil && cert != nil && fileCert != nil && !bytes.Equal(fileCert.Raw, cert.Raw):
 				t.Errorf("%d: mismatched cert", i)
 			}
 		}
@@ -473,7 +472,7 @@ func TestDeviceManager(t *testing.T) {
 
 	t.Run("TestDeviceList", func(t *testing.T) {
 		// make a temporary directory with which to work
-		dir, err := ioutil.TempDir("", "adam-test")
+		dir, err := os.MkdirTemp("", "adam-test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -508,7 +507,7 @@ func TestDeviceManager(t *testing.T) {
 		for i, tt := range tests {
 			ts := int64(1000)
 			// make a temporary directory with which to work
-			dir, err := ioutil.TempDir("", "adam-test")
+			dir, err := os.MkdirTemp("", "adam-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -527,7 +526,7 @@ func TestDeviceManager(t *testing.T) {
 			case err == nil && tt.err == nil && tt.validMsg:
 				// check if the correct file exists
 				// only check if errors were nil, and we had a validMsg; nothing to write otherwise
-				fi, err := ioutil.ReadDir(sectionPath)
+				fi, err := os.ReadDir(sectionPath)
 				switch {
 				case err != nil:
 					t.Errorf("missing directory: %s", sectionPath)
@@ -622,7 +621,7 @@ func TestDeviceManager(t *testing.T) {
 			)
 
 			// make a temporary directory with which to work
-			dir, err := ioutil.TempDir("", "adam-test")
+			dir, err := os.MkdirTemp("", "adam-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -696,7 +695,7 @@ func TestDeviceManager(t *testing.T) {
 
 			// reset with each test
 			// make a temporary directory with which to work
-			dir, err := ioutil.TempDir("", "adam-test")
+			dir, err := os.MkdirTemp("", "adam-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -753,7 +752,7 @@ func TestDeviceManager(t *testing.T) {
 		for _, tt := range tests {
 			// reset with each test
 			// make a temporary directory with which to work
-			dir, err := ioutil.TempDir("", "adam-test")
+			dir, err := os.MkdirTemp("", "adam-test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -792,12 +791,12 @@ func TestDeviceManager(t *testing.T) {
 }
 
 func copyFile(src, dest string) error {
-	input, err := ioutil.ReadFile(src)
+	input, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
 
-	err = ioutil.WriteFile(dest, input, 0644)
+	err = os.WriteFile(dest, input, 0644)
 	if err != nil {
 		return err
 	}
@@ -835,7 +834,7 @@ func checkDeviceDirectory(devicePath string, unew uuid.UUID, deviceCert, onboard
 	if _, err := os.Stat(deviceSerialPath); err != nil && os.IsNotExist(err) {
 		return fmt.Errorf("device serials file %s does not exist", deviceSerialPath)
 	}
-	if b, err = ioutil.ReadFile(deviceSerialPath); err != nil {
+	if b, err = os.ReadFile(deviceSerialPath); err != nil {
 		return fmt.Errorf("error reading certificate file %s: %v", deviceSerialPath, err)
 	}
 	if string(b) != serial {
@@ -858,7 +857,7 @@ func saveOnboardCertAndSerials(onboardDir string, cert *x509.Certificate, serial
 		return fmt.Errorf("error writing onboard certificate: %v", err)
 	}
 
-	err = ioutil.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(serials, "\n")), 0644)
+	err = os.WriteFile(path.Join(onboardPath, onboardCertSerials), []byte(strings.Join(serials, "\n")), 0644)
 	if err != nil {
 		return fmt.Errorf("error writing onboard serials: %v", err)
 	}

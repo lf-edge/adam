@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 )
 
@@ -22,7 +21,7 @@ func WriteCert(cert []byte, certPath string, force bool) error {
 		return fmt.Errorf("file already exists at certPath %s", certPath)
 	}
 	certPem := PemEncodeCert(cert)
-	err := ioutil.WriteFile(certPath, certPem, 0644)
+	err := os.WriteFile(certPath, certPem, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write certificate to %s: %v", certPath, err)
 	}
@@ -40,7 +39,7 @@ func WriteKey(key *rsa.PrivateKey, keyPath string, force bool) error {
 		return fmt.Errorf("file already exists at keyPath %s", keyPath)
 	}
 	keyPem := PemEncodeKey(key)
-	err := ioutil.WriteFile(keyPath, keyPem, 0600)
+	err := os.WriteFile(keyPath, keyPem, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write key to %s: %v", keyPath, err)
 	}
@@ -57,7 +56,7 @@ func ReadCert(p string) (*x509.Certificate, error) {
 	if _, err = os.Stat(p); err != nil && os.IsNotExist(err) {
 		return nil, err
 	}
-	if b, err = ioutil.ReadFile(p); err != nil {
+	if b, err = os.ReadFile(p); err != nil {
 		return nil, fmt.Errorf("error reading certificate file %s: %v", p, err)
 	}
 	return ParseCert(b)

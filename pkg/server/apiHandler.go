@@ -5,7 +5,7 @@ package server
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -77,7 +77,7 @@ func (h *apiHandler) register(w http.ResponseWriter, r *http.Request) {
 	//  - get the serial
 	//  - get the device cert
 	onboardCert := getClientCert(r)
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -158,7 +158,7 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -178,7 +178,7 @@ func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -198,7 +198,7 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -239,7 +239,7 @@ func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -291,7 +291,7 @@ func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
 
 // retrieve the config request
 func (h *apiHandler) getClientConfigRequest(r *http.Request) (*config.ConfigRequest, error) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Body read failed: %v", err)
 		return nil, err
@@ -310,7 +310,7 @@ func (h *apiHandler) flowLog(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil || len(b) == 0 {
 		log.Printf("error reading request body: %v", err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
