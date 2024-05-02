@@ -1,6 +1,6 @@
 # Configuration Files
 
-According to [the API](http://github.com/lf-edge/eve/blob/master/api/API.md) and the [EVE implementation](http://github.com/lf-edge/eve), once a device is registered, it will ask for its config with some regularity.
+According to [the API](https://github.com/lf-edge/eve-api/blob/main/APIv2.md) and the [EVE implementation](http://github.com/lf-edge/eve), once a device is registered, it will ask for its config with some regularity.
 
 Adam does _not_ require pre-registration or pre-configuration of devices. You _can_ pre-register devices by installing the device certificate, or you can activate a device by installing an onboarding certificate and the serial number for the device (or a wildcard).
 

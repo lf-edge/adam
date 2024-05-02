@@ -42,7 +42,7 @@ Each directory in `device/` represents a unique registered device, with the dire
 
 The purpose of each file and directory is as follows:
 
-* `config.json` - configuration of format `config.EdgeDevConfig` from [the API](https://github.com/lf-edge/eve/blob/master/api/API.md), marshalled to json.
+* `config.json` - configuration of format `config.EdgeDevConfig` from [the API](https://github.com/lf-edge/eve-api/blob/main/APIv2.md), marshalled to json.
 * `onboard-certificate.pem` - the onboard certificate used when this device self-registered. If the device was registered directly, this file will not exist.
 * `device-certificate.pem` - the device certificate for this device.
 * `serial.txt` - the serial used when this device self-registered. If the device was registered directly, this file will not exist.
