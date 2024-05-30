@@ -23,7 +23,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-//extractQuoteAttestTemplate process attestation quote and return internal structure with provided data
+// extractQuoteAttestTemplate process attestation quote and return internal structure with provided data
 func extractQuoteAttestTemplate(quote *attest.ZAttestQuote) *common.PCRTemplate {
 	template := common.PCRTemplate{}
 	for _, el := range quote.GetPcrValues() {
@@ -43,8 +43,8 @@ func extractQuoteAttestTemplate(quote *attest.ZAttestQuote) *common.PCRTemplate 
 	return &template
 }
 
-//quoteValidate validates nonce, algo and hash of provided quote
-//it modifies resp.Response field in case of errors
+// quoteValidate validates nonce, algo and hash of provided quote
+// it modifies resp.Response field in case of errors
 func quoteValidate(manager driver.DeviceManager, u uuid.UUID, quote *attest.ZAttestQuote, resp *attest.ZAttestQuoteResp) error {
 	deviceOptions, err := getDeviceOptions(manager, u)
 	if err != nil {
@@ -143,7 +143,7 @@ func quoteValidate(manager driver.DeviceManager, u uuid.UUID, quote *attest.ZAtt
 	return nil
 }
 
-//templateAttest checks provided quote against saved template
+// templateAttest checks provided quote against saved template
 func templateAttest(manager driver.DeviceManager, u uuid.UUID, quote *attest.ZAttestQuote, resp *attest.ZAttestQuoteResp) error {
 	deviceOptions, err := getDeviceOptions(manager, u)
 	if err != nil {

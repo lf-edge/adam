@@ -8,5 +8,6 @@ import (
 )
 
 // Embed the static directory
+//
 //go:embed static
 var StaticFiles embed.FS
