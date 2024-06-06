@@ -222,6 +222,9 @@ func (d *DeviceManager) OnboardGet(cn string) (*x509.Certificate, []string, erro
 	}
 
 	s, err := d.client.HGet(onboardSerialsHash, cn).Result()
+	if err != nil && errors.Is(err, redis.Nil) {
+		return nil, nil, &common.NotFoundError{Err: fmt.Sprintf("device not found %s", cn)}
+	}
 	if err != nil {
 		return nil, nil, fmt.Errorf("error reading onboard serials for %s: %v", cn, err)
 	}
@@ -392,6 +395,9 @@ func (d *DeviceManager) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certif
 	}
 
 	serial, err := d.client.HGet(deviceSerialsHash, u.String()).Result()
+	if err != nil && errors.Is(err, redis.Nil) {
+		return nil, nil, "", &common.NotFoundError{Err: fmt.Sprintf("device not found %s", u)}
+	}
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("error reading device serial for %s: %v", u.String(), err)
 	}
@@ -658,6 +664,9 @@ func (d *DeviceManager) GetCerts(u uuid.UUID) ([]byte, error) {
 	// hold our config
 	var b []byte
 	data, err := d.client.HGet(deviceAttestCertsHash, u.String()).Result()
+	if err != nil && errors.Is(err, redis.Nil) {
+		return nil, &common.NotFoundError{Err: fmt.Sprintf("no attestation certificates found for device %s", u)}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attest for %s: %v", u.String(), err)
 	} else {
@@ -699,6 +708,9 @@ func (d *DeviceManager) GetStorageKeys(u uuid.UUID) ([]byte, error) {
 	// hold our config
 	var b []byte
 	data, err := d.client.HGet(deviceStorageKeysHash, u.String()).Result()
+	if err != nil && errors.Is(err, redis.Nil) {
+		return nil, &common.NotFoundError{Err: fmt.Sprintf("no storage keys found for device %s", u)}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get storage keys for %s: %v", u.String(), err)
 	} else {
@@ -713,7 +725,8 @@ func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 	// hold our config
 	var b []byte
 	data, err := d.client.HGet(deviceConfigsHash, u.String()).Result()
-	if err != nil {
+	switch {
+	case err != nil && errors.Is(err, redis.Nil):
 		// if config doesn't exist - create an empty one
 		b = common.CreateBaseConfig(u)
 		if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(b)).Result(); err == nil {
@@ -722,7 +735,9 @@ func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to save config for %s: %v", u.String(), err)
 		}
-	} else {
+	case err != nil:
+		return nil, fmt.Errorf("failed to get config for %s: %v", u.String(), err)
+	default:
 		b = []byte(data)
 	}
 
@@ -818,9 +833,12 @@ func (d *DeviceManager) refreshCache() error {
 		certStr := string(cert.Raw)
 
 		v, err := d.client.HGet(onboardSerialsHash, u).Result()
-		if err != nil {
+		if err != nil && errors.Is(err, redis.Nil) {
 			log.Printf("unabled to get a serial for %s: %v", u, err)
 			continue
+		}
+		if err != nil {
+			return fmt.Errorf("error getting serials for %s: %v", u, err)
 		}
 
 		onboardCerts[certStr] = make(map[string]bool)
