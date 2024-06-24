@@ -1,7 +1,7 @@
 # Copyright (c) 2019 Zededa, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM lfedge/eve-alpine:8.11.0 AS build
+FROM lfedge/eve-alpine:12.1.0 AS build
 ENV BUILD_PKGS go git
 RUN eve-alpine-deploy.sh
 

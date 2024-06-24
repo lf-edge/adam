@@ -28,7 +28,7 @@ func PemEncodeKey(key *rsa.PrivateKey) []byte {
 	return b
 }
 
-//ParseCertFromBlock process pem certificates
+// ParseCertFromBlock process pem certificates
 func ParseCertFromBlock(b []byte) ([]*x509.Certificate, error) {
 	var certsSlice []*x509.Certificate
 	for block, rest := pem.Decode(b); block != nil; block, rest = pem.Decode(rest) {
