@@ -12,6 +12,11 @@ env:
 jobs:
   release:
     runs-on: ubuntu-20.04
+    permissions:
+      packages: write
+      contents: read
+      attestations: write
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -20,17 +25,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
       - name: Login to DockerHub
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.RELEASE_DOCKERHUB_ACCOUNT }}
           password: ${{ secrets.RELEASE_DOCKERHUB_TOKEN }}
-      - name: Build and push
+      - name: Build and push to Dockerhub
         id: docker_build
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{env.IMAGE_NAME}}:${{env.GITHUB_REF#refs/tags/}}
             ${{env.IMAGE_NAME}}:latest
-
+            ghcr.io/${{ github.repository_owner }}/adam:${{ github.event.release.tag_name }}
+            ghcr.io/${{ github.repository_owner }}/adam:latest
