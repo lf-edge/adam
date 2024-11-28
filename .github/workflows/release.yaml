@@ -38,5 +38,5 @@ jobs:
           tags: |
             ${{env.IMAGE_NAME}}:${{ github.ref_name }}
             ${{env.IMAGE_NAME}}:latest
-            ghcr.io/${{ github.repository_owner }}/adam:${{ github.event.release.tag_name }}
+            ghcr.io/${{ github.repository_owner }}/adam:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/adam:latest
