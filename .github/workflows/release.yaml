@@ -36,7 +36,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{env.IMAGE_NAME}}:${{env.GITHUB_REF#refs/tags/}}
+            ${{env.IMAGE_NAME}}:${{ github.ref_name }}
             ${{env.IMAGE_NAME}}:latest
             ghcr.io/${{ github.repository_owner }}/adam:${{ github.event.release.tag_name }}
             ghcr.io/${{ github.repository_owner }}/adam:latest
