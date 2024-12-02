@@ -1137,6 +1137,9 @@ func (d *DeviceManager) checkValidOnboardSerial(cert *x509.Certificate, serial s
 func (d *DeviceManager) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
 	certStr := string(cert.Raw)
 	for uid, dev := range d.devices {
+		if dev.Onboard == nil {
+			continue
+		}
 		dCertStr := string(dev.Onboard.Raw)
 		if dCertStr == certStr && serial == dev.Serial {
 			return &uid
