@@ -419,6 +419,12 @@ func (h *apiHandlerv2) register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	if len(b.SenderCertHash) == 0 {
+		log.Printf("no SenderCertHash in AuthContainer")
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
 	onBoardCertDecoded, err := base64.StdEncoding.DecodeString(string(b.GetSenderCert()))
 	if err != nil {
 		log.Printf("error decoding SenderCert: %v", err)
@@ -431,6 +437,23 @@ func (h *apiHandlerv2) register(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+
+	// at least one of the certs should be the onboarding cert
+	for _, cert := range onboardCert {
+		payload := b.ProtectedPayload.GetPayload()
+		hashedPayload := sha256.Sum256(payload)
+		err = verifySignature(b.SignatureHash, hashedPayload[:], cert)
+		if err == nil {
+			log.Printf("signature verification passed")
+			break
+		}
+	}
+	if err != nil {
+		log.Printf("signature verification failed: %v", err)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return
+	}
+
 	if len(onboardCert) == 0 {
 		log.Println("no certificates parsed from SenderCert")
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
