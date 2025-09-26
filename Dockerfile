@@ -1,7 +1,7 @@
 # Copyright (c) 2019 Zededa, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
-FROM lfedge/eve-alpine:12.1.0 AS build
+FROM lfedge/eve-alpine:15.4.0 AS build
 ENV BUILD_PKGS go git
 RUN eve-alpine-deploy.sh
 
@@ -10,7 +10,7 @@ ENV GO111MODULE=on
 
 RUN mkdir -p /adam/src && mkdir -p /adam/bin
 WORKDIR /adam/src
-RUN go install github.com/go-swagger/go-swagger/cmd/swagger@v0.27.0
+RUN go install github.com/go-swagger/go-swagger/cmd/swagger@v0.32.3
 COPY go.mod .
 COPY go.sum .
 RUN go mod download
