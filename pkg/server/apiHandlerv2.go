@@ -694,3 +694,12 @@ func (h *apiHandlerv2) uuid(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(cloudEnvelope)
 }
+
+func (h *apiHandlerv2) hardwarehealth(w http.ResponseWriter, r *http.Request) {
+	_, u := h.validateAuthContainerAndRecord(w, r)
+	if u == nil {
+		return
+	}
+	// For now, just return 200 OK in any case
+	w.WriteHeader(http.StatusOK)
+}
