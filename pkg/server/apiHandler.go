@@ -19,10 +19,11 @@ import (
 )
 
 type apiHandler struct {
-	manager       driver.DeviceManager
-	logChannel    chan []byte
-	infoChannel   chan []byte
-	metricChannel chan []byte
+	manager         driver.DeviceManager
+	logChannel      chan []byte
+	infoChannel     chan []byte
+	metricChannel   chan []byte
+	requestsChannel chan []byte
 }
 
 // GetUser godoc
@@ -50,7 +51,10 @@ func (h *apiHandler) recordClient(u *uuid.UUID, r *http.Request) {
 		log.Printf("error saving request structure: %v", err)
 		return
 	}
-
+	select {
+	case h.requestsChannel <- b:
+	default:
+	}
 	h.manager.WriteRequest(*u, b)
 }
 

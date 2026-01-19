@@ -42,6 +42,7 @@ type apiHandlerv2 struct {
 	logChannel      chan []byte
 	infoChannel     chan []byte
 	metricChannel   chan []byte
+	requestsChannel chan []byte
 	signingCertPath string
 	signingKeyPath  string
 	encryptCertPath string
@@ -78,7 +79,10 @@ func (h *apiHandlerv2) recordClient(u *uuid.UUID, r *http.Request) {
 		log.Printf("error saving request structure: %v", err)
 		return
 	}
-
+	select {
+	case h.requestsChannel <- b:
+	default:
+	}
 	h.manager.WriteRequest(*u, b)
 }
 

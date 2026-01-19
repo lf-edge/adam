@@ -93,13 +93,15 @@ func (s *Server) Start() {
 	logChannel := make(chan []byte)
 	infoChannel := make(chan []byte)
 	metricChannel := make(chan []byte)
+	requestsChannel := make(chan []byte)
 
 	// edgedevice endpoint - fully compliant with EVE open API
 	api := &apiHandler{
-		manager:       s.DeviceManager,
-		logChannel:    logChannel,
-		infoChannel:   infoChannel,
-		metricChannel: metricChannel,
+		manager:         s.DeviceManager,
+		logChannel:      logChannel,
+		infoChannel:     infoChannel,
+		metricChannel:   metricChannel,
+		requestsChannel: requestsChannel,
 	}
 
 	router.HandleFunc("/probe", api.probe).Methods("GET")
@@ -126,6 +128,7 @@ func (s *Server) Start() {
 			logChannel:      logChannel,
 			infoChannel:     infoChannel,
 			metricChannel:   metricChannel,
+			requestsChannel: requestsChannel,
 			signingCertPath: s.SigningCertPath,
 			signingKeyPath:  s.SigningKeyPath,
 			encryptCertPath: s.EncryptCertPath,
@@ -154,9 +157,10 @@ func (s *Server) Start() {
 
 	// admin endpoint - custom, used to manage adam
 	admin := &adminHandler{
-		manager:     s.DeviceManager,
-		logChannel:  logChannel,
-		infoChannel: infoChannel,
+		manager:         s.DeviceManager,
+		logChannel:      logChannel,
+		infoChannel:     infoChannel,
+		requestsChannel: requestsChannel,
 	}
 
 	ad := router.PathPrefix("/admin").Subrouter()
