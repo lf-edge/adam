@@ -147,7 +147,7 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 		return http.StatusBadRequest, fmt.Errorf("error generating a new device UUID: %v", err)
 	}
 	// we do not keep the uuid or send it back; perhaps a future version of the API will support it
-	if err := manager.DeviceRegister(unew, deviceCert, onboardCert, serial, common.CreateBaseConfig(unew)); err != nil {
+	if err := manager.DeviceRegister(unew, deviceCert, onboardCert, serial); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("error registering new device: %v", err)
 	}
 	// send back a 201
@@ -293,7 +293,11 @@ func setDeviceOptions(manager driver.DeviceManager, u uuid.UUID, deviceOptions *
 func getDeviceOptions(manager driver.DeviceManager, u uuid.UUID) (*common.DeviceOptions, error) {
 	deviceOptionsBytes, err := manager.GetDeviceOptions(u)
 	if err != nil {
-		return nil, fmt.Errorf("getDeviceOptions failed to get from manager: %s", err)
+		if _, isNotFound := err.(*common.NotFoundError); isNotFound {
+			return &common.DeviceOptions{}, nil
+		} else {
+			return nil, fmt.Errorf("getDeviceOptions failed to get from manager: %s", err)
+		}
 	}
 	var deviceOptions common.DeviceOptions
 	if err := json.Unmarshal(deviceOptionsBytes, &deviceOptions); err != nil {
@@ -305,7 +309,11 @@ func getDeviceOptions(manager driver.DeviceManager, u uuid.UUID) (*common.Device
 func getGlobalOptions(manager driver.DeviceManager) (*common.GlobalOptions, error) {
 	globalOptionsBytes, err := manager.GetGlobalOptions()
 	if err != nil {
-		return nil, fmt.Errorf("getGlobalOptions failed to get from manager: %s", err)
+		if _, isNotFound := err.(*common.NotFoundError); isNotFound {
+			return &common.GlobalOptions{}, nil
+		} else {
+			return nil, fmt.Errorf("getGlobalOptions failed to get from manager: %s", err)
+		}
 	}
 	var globalOptions common.GlobalOptions
 	if err := json.Unmarshal(globalOptionsBytes, &globalOptions); err != nil {

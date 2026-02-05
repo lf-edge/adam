@@ -447,7 +447,7 @@ func (d *DeviceManager) DeviceList() ([]*uuid.UUID, error) {
 }
 
 // DeviceRegister register a new device cert
-func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certificate, serial string, conf []byte) error {
+func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certificate, serial string) error {
 	// check if it already exists - this also checks for nil cert
 	u, err := d.DeviceCheckCert(cert)
 	if err != nil {
@@ -478,12 +478,6 @@ func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certi
 		if err != nil {
 			return fmt.Errorf("error saving device serial for %v: %v", unew, err)
 		}
-	}
-
-	// save the base configuration
-	err = d.writeJSONMsgPack(unew, deviceConfigsHash, conf)
-	if err != nil {
-		return fmt.Errorf("error saving device config for %v: %v", unew, err)
 	}
 
 	// save new one to cache - just the serial and onboard; the rest is on disk
@@ -769,14 +763,10 @@ func (d *DeviceManager) GetConfig(u uuid.UUID) ([]byte, error) {
 	data, err := d.client.HGet(deviceConfigsHash, u.String()).Result()
 	switch {
 	case err != nil && errors.Is(err, redis.Nil):
-		// if config doesn't exist - create an empty one
-		b = common.CreateBaseConfig(u)
-		if _, err = d.client.HSet(deviceConfigsHash, u.String(), string(b)).Result(); err == nil {
-			_, err = d.client.Save().Result()
+		err = &common.NotFoundError{
+			Err: fmt.Sprintf("config not found for device UUID %s", u),
 		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to save config for %s: %v", u.String(), err)
-		}
+		return nil, err
 	case err != nil:
 		return nil, fmt.Errorf("failed to get config for %s: %v", u.String(), err)
 	default:
@@ -1078,14 +1068,14 @@ func (d *DeviceManager) transactionDrop(keys [][]string) (result error) {
 	for _, k := range keys {
 		switch len(k) {
 		case 1:
-			if i, err := d.client.Del(k[0]).Result(); i != 1 || err != nil {
-				result = fmt.Errorf("couldn't drop %s with error %d/%v (previous error in transaction %v)",
-					k[0], i, err, result)
+			if _, err := d.client.Del(k[0]).Result(); err != nil {
+				result = fmt.Errorf("couldn't drop %s: %v (previous error in transaction %v)",
+					k[0], err, result)
 			}
 		case 2:
-			if i, err := d.client.HDel(k[0], k[1]).Result(); i != 1 || err != nil {
-				result = fmt.Errorf("couldn't drop %s[%s] with error %d/%v (previous error in transaction %v)",
-					k[0], k[1], i, err, result)
+			if _, err := d.client.HDel(k[0], k[1]).Result(); err != nil {
+				result = fmt.Errorf("couldn't drop %s[%s]: %v (previous error in transaction %v)",
+					k[0], k[1], err, result)
 			}
 		default:
 			panic("transactionDrop should never be called with keys that are less than 1 or more than 2 elements")
@@ -1202,10 +1192,11 @@ func (d *DeviceManager) GetDeviceOptions(u uuid.UUID) ([]byte, error) {
 	}
 	data, err := d.client.HGet(deviceOptionsHash, u.String()).Result()
 	if err != nil {
-		cfg := common.CreateBaseDeviceOptions(u)
-		err = d.SetDeviceOptions(u, cfg)
-		if err == nil {
-			return cfg, nil
+		if errors.Is(err, redis.Nil) {
+			err = &common.NotFoundError{
+				Err: fmt.Sprintf("options not found for device UUID: %s", u),
+			}
+			return nil, err
 		}
 		return nil, fmt.Errorf("failed to get options for %s: %v", u.String(), err)
 	} else {
@@ -1231,10 +1222,11 @@ func (d *DeviceManager) SetGlobalOptions(b []byte) error {
 func (d *DeviceManager) GetGlobalOptions() ([]byte, error) {
 	data, err := d.client.HGet(globalOptionsHash, globalOptionsHash).Result()
 	if err != nil {
-		cfg := common.CreateBaseGlobalOptions()
-		err = d.SetGlobalOptions(cfg)
-		if err == nil {
-			return cfg, nil
+		if errors.Is(err, redis.Nil) {
+			err = &common.NotFoundError{
+				Err: "global options not found",
+			}
+			return nil, err
 		}
 		return nil, fmt.Errorf("failed to get options for %s: %v", globalOptionsHash, err)
 	} else {

@@ -193,7 +193,7 @@ func (h *adminHandler) deviceAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("error generating a new device UUID: %v", err), http.StatusBadRequest)
 		return
 	}
-	if err := h.manager.DeviceRegister(unew, cert, onboard, t.Serial, common.CreateBaseConfig(unew)); err != nil {
+	if err := h.manager.DeviceRegister(unew, cert, onboard, t.Serial); err != nil {
 		log.Printf("deviceAdd: DeviceRegister error: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -344,40 +344,40 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	}
 	// before setting the config, set any necessary defaults
 	// check for UUID and/or version mismatch
-	var (
-		existingId     *config.UUIDandVersion
-		existingConfig config.EdgeDevConfig
-	)
+	var existingId *config.UUIDandVersion
 	existingConfigB, err := h.manager.GetConfig(uid)
-	_, isNotFound := err.(*common.NotFoundError)
-	switch {
-	case err != nil && isNotFound:
-		http.Error(w, fmt.Sprintf("device not found %s", u), http.StatusNotFound)
-		return
-	case err != nil:
-		log.Printf("deviceConfigSet: GetConfig error: %v", err)
-		http.Error(w, fmt.Sprintf("error retrieving existing config for device %s: %v", u, err), http.StatusBadRequest)
-		return
-	case len(existingConfigB) == 0:
-		http.Error(w, "found device information, but had no config", http.StatusInternalServerError)
-		return
+	if err != nil {
+		// If the device is not found, SetConfig will fail.
+		// If the device is registered but no config has been applied yet, this is OK;
+		// we apply the initial configuration.
+		_, isNotFound := err.(*common.NotFoundError)
+		if !isNotFound {
+			log.Printf("deviceConfigSet: GetConfig error: %v", err)
+			errMsg := fmt.Sprintf("error retrieving existing config for device %s: %v", u, err)
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+	} else {
+		var existingConfig config.EdgeDevConfig
+		if err := proto.Unmarshal(existingConfigB, &existingConfig); err != nil {
+			log.Printf("deviceConfigSet: processing existing config error: %v", err)
+			errMsg := fmt.Sprintf("error processing existing config: %v", err)
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			return
+		}
+		existingId = existingConfig.GetId()
 	}
-	// convert it to protobuf so we can work with it
-	if err := proto.Unmarshal(existingConfigB, &existingConfig); err != nil {
-		log.Printf("deviceConfigSet: processing existing config error: %v", err)
-		http.Error(w, fmt.Sprintf("error processing existing config: %v", err), http.StatusInternalServerError)
-		return
-	}
-	existingId = existingConfig.Id
 
 	// we only can bump the version if it is a valid integer
-	newVersion, versionError := strconv.Atoi(existingId.Version)
+	newVersion, versionError := strconv.Atoi(existingId.GetVersion())
 	if versionError == nil {
 		newVersion++
 	}
 	if deviceConfig.Id == nil {
 		if versionError != nil {
-			http.Error(w, fmt.Sprintf("cannot automatically non-number bump version %s", existingId.Version), http.StatusBadRequest)
+			errMsg := fmt.Sprintf("cannot automatically non-number bump version %s",
+				existingId.GetVersion())
+			http.Error(w, errMsg, http.StatusBadRequest)
 			return
 		}
 		deviceConfig.Id = &config.UUIDandVersion{
@@ -390,13 +390,17 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 		}
 		if deviceConfig.Id.Version == "" {
 			if versionError != nil {
-				http.Error(w, fmt.Sprintf("cannot automatically non-number bump version %s", existingId.Version), http.StatusBadRequest)
+				errMsg := fmt.Sprintf("cannot automatically non-number bump version %s",
+					existingId.GetVersion())
+				http.Error(w, errMsg, http.StatusBadRequest)
 				return
 			}
 			deviceConfig.Id.Version = strconv.Itoa(newVersion)
 		}
 		if deviceConfig.Id.Uuid != u {
-			http.Error(w, fmt.Sprintf("mismatched UUID, setting %s for device %s", deviceConfig.Id.Uuid, u), http.StatusBadRequest)
+			errMsg := fmt.Sprintf("mismatched UUID, setting %s for device %s",
+				deviceConfig.Id.Uuid, u)
+			http.Error(w, errMsg, http.StatusBadRequest)
 			return
 		}
 	}
@@ -404,11 +408,12 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 	b, err := proto.Marshal(&deviceConfig)
 	if err != nil {
 		log.Printf("deviceConfigSet: Marshal error: %v", err)
-		http.Error(w, fmt.Sprintf("error processing device config: %v", err), http.StatusBadRequest)
+		errMsg := fmt.Sprintf("error processing device config: %v", err)
+		http.Error(w, errMsg, http.StatusBadRequest)
 		return
 	}
 	err = h.manager.SetConfig(uid, b)
-	_, isNotFound = err.(*common.NotFoundError)
+	_, isNotFound := err.(*common.NotFoundError)
 	switch {
 	case err != nil && isNotFound:
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)

@@ -19,7 +19,6 @@ import (
 	"github.com/lf-edge/eve-api/go/metrics"
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -94,20 +93,20 @@ func TestDeviceRedis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to generate new UUID: %v", err)
 	}
-	err = r.DeviceRegister(UUID2, cert2, certOnboard, "------", common.CreateBaseConfig(UUID2))
+	err = r.DeviceRegister(UUID2, cert2, certOnboard, "------")
 	assert.Equal(t, nil, err)
 	UUID3, err := uuid.NewV4()
 	if err != nil {
 		t.Fatalf("unable to generate new UUID: %v", err)
 	}
-	err = r.DeviceRegister(UUID3, cert3, certOnboard, "------", common.CreateBaseConfig(UUID3))
+	err = r.DeviceRegister(UUID3, cert3, certOnboard, "------")
 	assert.Equal(t, nil, err)
 
 	UUID1, err := uuid.NewV4()
 	if err != nil {
 		t.Fatalf("unable to generate new UUID: %v", err)
 	}
-	err = r.DeviceRegister(UUID1, cert, certOnboard, "123456", common.CreateBaseConfig(UUID1))
+	err = r.DeviceRegister(UUID1, cert, certOnboard, "123456")
 	assert.Equal(t, nil, err)
 	UUID, err := r.DeviceCheckCert(cert)
 	assert.Equal(t, nil, err)
@@ -163,37 +162,35 @@ func TestConfigRedis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to generate new UUID: %v", err)
 	}
-	err = r.DeviceRegister(UUID, cert, certOnboard, "123456", common.CreateBaseConfig(UUID))
+	err = r.DeviceRegister(UUID, cert, certOnboard, "123456")
 	assert.Equal(t, nil, err)
 
-	conf, err := r.GetConfig(UUID)
-	assert.Equal(t, nil, err)
-	// convert to struct
-	var msg config.EdgeDevConfig
-	if err := proto.Unmarshal(conf, &msg); err != nil {
-		t.Fatalf("error converting device config bytes to struct: %v", err)
+	// No config has been submitted yet — expect NotFoundError.
+	_, err = r.GetConfig(UUID)
+	_, isNotFound := err.(*common.NotFoundError)
+	assert.True(t, isNotFound)
+
+	// Submit a config and verify round-trip.
+	msg := config.EdgeDevConfig{
+		Id: &config.UUIDandVersion{
+			Uuid:    UUID.String(),
+			Version: "1",
+		},
 	}
-
-	assert.Equal(t, UUID.String(), msg.GetId().Uuid)
-	assert.Equal(t, "4", msg.GetId().Version)
-
-	// convert to bytes
-	conf, err = protojson.Marshal(&msg)
+	conf, err := proto.Marshal(&msg)
 	if err != nil {
-		t.Fatalf("error converting device config struct to bytes: %v", err)
+		t.Fatalf("error marshaling device config: %v", err)
 	}
-
 	assert.Equal(t, nil, r.SetConfig(UUID, conf))
 
 	conf, err = r.GetConfig(UUID)
-	// convert to struct
-	if err := protojson.Unmarshal(conf, &msg); err != nil {
+	assert.Equal(t, nil, err)
+	var got config.EdgeDevConfig
+	if err := proto.Unmarshal(conf, &got); err != nil {
 		t.Fatalf("error converting device config bytes to struct: %v", err)
 	}
-
-	assert.Equal(t, nil, err)
-	assert.Equal(t, UUID.String(), msg.GetId().Uuid)
-	assert.Equal(t, "4", msg.GetId().Version)
+	assert.Equal(t, UUID.String(), got.GetId().Uuid)
+	assert.Equal(t, "1", got.GetId().Version)
 }
 
 func TestStreamsRedis(t *testing.T) {
@@ -212,7 +209,7 @@ func TestStreamsRedis(t *testing.T) {
 	cert := generateCert(t, "cert", "host")
 	certOnboard := generateCert(t, "onboard", "host")
 
-	err = r.DeviceRegister(u, cert, certOnboard, "123456", common.CreateBaseConfig(u))
+	err = r.DeviceRegister(u, cert, certOnboard, "123456")
 	assert.Equal(t, nil, err)
 
 	var (
@@ -261,6 +258,9 @@ func TestStreamsRedis(t *testing.T) {
 			break
 		}
 		assert.Equal(t, nil, err)
+		if s == 0 {
+			continue
+		}
 		l, err := lr.Read(buffer)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, int64(l), s)
@@ -274,6 +274,9 @@ func TestStreamsRedis(t *testing.T) {
 			break
 		}
 		assert.Equal(t, nil, err)
+		if s == 0 {
+			continue
+		}
 		l, err := lr.Read(buffer)
 		assert.Equal(t, nil, err)
 		assert.Equal(t, int64(l), s)
@@ -320,7 +323,7 @@ func TestDeviceManagerRedisConcurrency(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseCertificate: %v", err)
 			}
-			if err := d.DeviceRegister(uids[i], cert, nil, "", common.CreateBaseConfig(uids[i])); err != nil {
+			if err := d.DeviceRegister(uids[i], cert, nil, ""); err != nil {
 				t.Fatalf("DeviceRegister: %v", err)
 			}
 		}
