@@ -19,11 +19,11 @@ import (
 )
 
 type apiHandler struct {
-	manager         driver.DeviceManager
-	logChannel      chan []byte
-	infoChannel     chan []byte
-	metricChannel   chan []byte
-	requestsChannel chan []byte
+	manager        driver.DeviceManager
+	logStream      *stream
+	infoStream     *stream
+	metricStream   *stream
+	requestsStream *stream
 }
 
 // GetUser godoc
@@ -51,10 +51,7 @@ func (h *apiHandler) recordClient(u *uuid.UUID, r *http.Request) {
 		log.Printf("error saving request structure: %v", err)
 		return
 	}
-	select {
-	case h.requestsChannel <- b:
-	default:
-	}
+	h.requestsStream.publish(*u, b)
 	h.manager.WriteRequest(*u, b)
 }
 
@@ -168,7 +165,7 @@ func (h *apiHandler) info(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := infoProcess(h.manager, h.infoChannel, *u, b)
+	status, err := infoProcess(h.manager, h.infoStream, *u, b)
 	if err != nil {
 		log.Printf("Failed to infoProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -188,7 +185,7 @@ func (h *apiHandler) metrics(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := metricProcess(h.manager, h.metricChannel, *u, b)
+	status, err := metricProcess(h.manager, h.metricStream, *u, b)
 	if err != nil {
 		log.Printf("Failed to metricProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -209,7 +206,7 @@ func (h *apiHandler) logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, err := logsProcess(h.manager, h.logChannel, *u, b)
+	status, err := logsProcess(h.manager, h.logStream, *u, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -224,7 +221,7 @@ func (h *apiHandler) newLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status, err := newLogsProcess(h.manager, h.logChannel, *u, r.Body)
+	status, err := newLogsProcess(h.manager, h.logStream, *u, r.Body)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)

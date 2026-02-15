@@ -1182,6 +1182,17 @@ func (d *DeviceManager) GetInfoReader(u uuid.UUID) (common.ChunkReader, error) {
 	return d.devices[u].Info.Reader()
 }
 
+// GetMetricsReader returns a metrics reader for the specified device.
+func (d *DeviceManager) GetMetricsReader(u uuid.UUID) (common.ChunkReader, error) {
+	d.cacheM.RLock()
+	defer d.cacheM.RUnlock()
+	// check that the device actually exists
+	if !d.deviceExists(u) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", u)
+	}
+	return d.devices[u].Metrics.Reader()
+}
+
 // GetRequestsReader get the requests for a given uuid
 func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (common.ChunkReader, error) {
 	// check that the device actually exists

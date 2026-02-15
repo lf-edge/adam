@@ -154,12 +154,9 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 	return http.StatusCreated, nil
 }
 
-func infoProcess(manager driver.DeviceManager, infoChannel chan []byte, u uuid.UUID, infoMessage []byte) (int, error) {
+func infoProcess(manager driver.DeviceManager, infoStream *stream, u uuid.UUID, infoMessage []byte) (int, error) {
 	var err error
-	select {
-	case infoChannel <- infoMessage:
-	default:
-	}
+	infoStream.publish(u, infoMessage)
 	err = manager.WriteInfo(u, infoMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write info message: %v", err)
@@ -168,12 +165,9 @@ func infoProcess(manager driver.DeviceManager, infoChannel chan []byte, u uuid.U
 	return http.StatusCreated, nil
 }
 
-func metricProcess(manager driver.DeviceManager, metricChannel chan []byte, u uuid.UUID, metricMessage []byte) (int, error) {
+func metricProcess(manager driver.DeviceManager, metricStream *stream, u uuid.UUID, metricMessage []byte) (int, error) {
 	var err error
-	select {
-	case metricChannel <- metricMessage:
-	default:
-	}
+	metricStream.publish(u, metricMessage)
 	err = manager.WriteMetrics(u, metricMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write metric message: %v", err)
@@ -182,7 +176,7 @@ func metricProcess(manager driver.DeviceManager, metricChannel chan []byte, u uu
 	return http.StatusCreated, nil
 }
 
-func logsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uuid.UUID, logsMessage []byte) (int, error) {
+func logsProcess(manager driver.DeviceManager, logsStream *stream, u uuid.UUID, logsMessage []byte) (int, error) {
 	var err error
 	msg := &logs.LogBundle{}
 	if err := proto.Unmarshal(logsMessage, msg); err != nil {
@@ -200,10 +194,7 @@ func logsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uuid.U
 		if entryBytes, err = entry.Json(); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
 		}
-		select {
-		case logsChannel <- entryBytes:
-		default:
-		}
+		logsStream.publish(u, entryBytes)
 		err = manager.WriteLogs(u, entryBytes)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
@@ -213,7 +204,7 @@ func logsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uuid.U
 	return http.StatusCreated, nil
 }
 
-func newLogsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uuid.UUID, reader io.Reader) (int, error) {
+func newLogsProcess(manager driver.DeviceManager, logsStream *stream, u uuid.UUID, reader io.Reader) (int, error) {
 	gr, err := gzip.NewReader(reader)
 	if err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error gzip.NewReader: %v", err)
@@ -237,10 +228,7 @@ func newLogsProcess(manager driver.DeviceManager, logsChannel chan []byte, u uui
 		if entryBytes, err = entry.Json(); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
 		}
-		select {
-		case logsChannel <- entryBytes:
-		default:
-		}
+		logsStream.publish(u, entryBytes)
 		err = manager.WriteLogs(u, entryBytes)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
