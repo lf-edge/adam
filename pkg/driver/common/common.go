@@ -44,6 +44,15 @@ type ChunkReader interface {
 	Next() (io.Reader, int64, error)
 }
 
+// EmptyChunkReader is a ChunkReader implementation that contains no chunks.
+// Its Next method always returns io.EOF, indicating that no data is available.
+type EmptyChunkReader struct{}
+
+// Next always returns io.EOF because there are no chunks.
+func (EmptyChunkReader) Next() (io.Reader, int64, error) {
+	return nil, 0, io.EOF
+}
+
 type BigData interface {
 	Get(index int) ([]byte, error)
 	Reader() (ChunkReader, error)

@@ -421,11 +421,17 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceLogsGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.logStream, h.manager.GetLogsReader, nil)
+	readerFunc := func(id instanceID) (common.ChunkReader, error) {
+		return h.manager.GetLogsReader(id.devUUID)
+	}
+	h.deviceDataGet(w, r, h.logStream, readerFunc, nil)
 }
 
 func (h *adminHandler) deviceInfoGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.infoStream, h.manager.GetInfoReader, func(in []byte) ([]byte, error) {
+	readerFunc := func(id instanceID) (common.ChunkReader, error) {
+		return h.manager.GetInfoReader(id.devUUID)
+	}
+	h.deviceDataGet(w, r, h.infoStream, readerFunc, func(in []byte) ([]byte, error) {
 		var err error
 		msg := &info.ZInfoMsg{}
 		if err = proto.Unmarshal(in, msg); err != nil {
@@ -440,11 +446,17 @@ func (h *adminHandler) deviceInfoGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceRequestsGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.requestsStream, h.manager.GetRequestsReader, nil)
+	readerFunc := func(id instanceID) (common.ChunkReader, error) {
+		return h.manager.GetRequestsReader(id.devUUID)
+	}
+	h.deviceDataGet(w, r, h.requestsStream, readerFunc, nil)
 }
 
 func (h *adminHandler) deviceMetricsGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.metricsStream, h.manager.GetMetricsReader, func(in []byte) ([]byte, error) {
+	readerFunc := func(id instanceID) (common.ChunkReader, error) {
+		return h.manager.GetMetricsReader(id.devUUID)
+	}
+	h.deviceDataGet(w, r, h.metricsStream, readerFunc, func(in []byte) ([]byte, error) {
 		var err error
 		msg := &metrics.ZMetricMsg{}
 		if err = proto.Unmarshal(in, msg); err != nil {
@@ -458,14 +470,30 @@ func (h *adminHandler) deviceMetricsGet(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func (h *adminHandler) appLogsGet(w http.ResponseWriter, r *http.Request) {
+	readerFunc := func(id instanceID) (common.ChunkReader, error) {
+		return h.manager.GetAppLogsReader(id.devUUID, id.appUUID)
+	}
+	h.deviceDataGet(w, r, h.logStream, readerFunc, nil)
+}
+
 func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request,
-	s *stream, readerFunc func(u uuid.UUID) (common.ChunkReader, error),
+	s *stream, readerFunc func(instanceID) (common.ChunkReader, error),
 	conversionFunc func(in []byte) ([]byte, error)) {
-	u := mux.Vars(r)["uuid"]
-	uid, err := uuid.FromString(u)
+	var id instanceID
+	var err error
+	uuidStr := mux.Vars(r)["uuid"]
+	id.devUUID, err = uuid.FromString(uuidStr)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	if uuidStr, hasAppUUID := mux.Vars(r)["appuuid"]; hasAppUUID {
+		id.appUUID, err = uuid.FromString(uuidStr)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	conversionRequired := false
 	if conversionFunc != nil {
@@ -490,7 +518,7 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request,
 		w.Header().Set("Content-type", "application/json")
 		flusher.Flush()
 
-		c, unsubscribe := s.subscribe(uid)
+		c, unsubscribe := s.subscribe(id)
 		defer unsubscribe()
 
 		for {
@@ -512,7 +540,7 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request,
 		}
 	} else {
 		for {
-			chunk, err := readerFunc(uid)
+			chunk, err := readerFunc(id)
 			_, isNotFound := err.(*common.NotFoundError)
 			switch {
 			case err != nil && isNotFound:

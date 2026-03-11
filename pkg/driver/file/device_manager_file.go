@@ -740,6 +740,9 @@ func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
 	if _, ok := d.devices[u]; !ok {
 		return false
 	}
+	if _, ok := d.devices[u].AppLogs[instanceID]; !ok {
+		return false
+	}
 	return true
 }
 
@@ -1220,6 +1223,20 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (common.ChunkReader, erro
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
 	return dev.Requests.Reader()
+}
+
+// GetAppLogsReader returns a logs reader for the specified application
+// on the given device.
+func (d *DeviceManager) GetAppLogsReader(device, app uuid.UUID) (common.ChunkReader, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	if !d.deviceExists(device) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", device)
+	}
+	if !d.appExists(device, app) {
+		return common.EmptyChunkReader{}, nil
+	}
+	return d.devices[device].AppLogs[app].Reader()
 }
 
 // WriteFlowMessage write FlowMessage

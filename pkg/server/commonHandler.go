@@ -156,7 +156,7 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 
 func infoProcess(manager driver.DeviceManager, infoStream *stream, u uuid.UUID, infoMessage []byte) (int, error) {
 	var err error
-	infoStream.publish(u, infoMessage)
+	infoStream.publish(instanceID{devUUID: u}, infoMessage)
 	err = manager.WriteInfo(u, infoMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write info message: %v", err)
@@ -167,7 +167,7 @@ func infoProcess(manager driver.DeviceManager, infoStream *stream, u uuid.UUID, 
 
 func metricProcess(manager driver.DeviceManager, metricStream *stream, u uuid.UUID, metricMessage []byte) (int, error) {
 	var err error
-	metricStream.publish(u, metricMessage)
+	metricStream.publish(instanceID{devUUID: u}, metricMessage)
 	err = manager.WriteMetrics(u, metricMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write metric message: %v", err)
@@ -194,7 +194,7 @@ func logsProcess(manager driver.DeviceManager, logsStream *stream, u uuid.UUID, 
 		if entryBytes, err = entry.Json(); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
 		}
-		logsStream.publish(u, entryBytes)
+		logsStream.publish(instanceID{devUUID: u}, entryBytes)
 		err = manager.WriteLogs(u, entryBytes)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
@@ -228,7 +228,7 @@ func newLogsProcess(manager driver.DeviceManager, logsStream *stream, u uuid.UUI
 		if entryBytes, err = entry.Json(); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
 		}
-		logsStream.publish(u, entryBytes)
+		logsStream.publish(instanceID{devUUID: u}, entryBytes)
 		err = manager.WriteLogs(u, entryBytes)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
@@ -238,7 +238,8 @@ func newLogsProcess(manager driver.DeviceManager, logsStream *stream, u uuid.UUI
 	return http.StatusCreated, nil
 }
 
-func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessage []byte) (int, error) {
+func appLogsProcess(manager driver.DeviceManager, logsStream *stream,
+	devID, appID uuid.UUID, logsMessage []byte) (int, error) {
 	msg := &logs.AppInstanceLogBundle{}
 	if err := proto.Unmarshal(logsMessage, msg); err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error parsing appinstancelogbundle message: %v", err)
@@ -249,7 +250,8 @@ func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessag
 		if b, err = protojson.Marshal(le); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
 		}
-		err = manager.WriteAppInstanceLogs(appID, u, b)
+		logsStream.publish(instanceID{devUUID: devID, appUUID: appID}, b)
+		err = manager.WriteAppInstanceLogs(appID, devID, b)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write appinstancelogbundle message: %v", err)
 		}
@@ -258,7 +260,8 @@ func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessag
 	return http.StatusCreated, nil
 }
 
-func newAppLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, reader io.Reader) (int, error) {
+func newAppLogsProcess(manager driver.DeviceManager, logsStream *stream,
+	devID, appID uuid.UUID, reader io.Reader) (int, error) {
 	gr, err := gzip.NewReader(reader)
 	if err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error gzip.NewReader: %v", err)
@@ -273,7 +276,8 @@ func newAppLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, reader 
 		if b, err = protojson.Marshal(le); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
 		}
-		err = manager.WriteAppInstanceLogs(appID, u, b)
+		logsStream.publish(instanceID{devUUID: devID, appUUID: appID}, b)
+		err = manager.WriteAppInstanceLogs(appID, devID, b)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
 		}

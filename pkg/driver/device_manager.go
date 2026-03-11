@@ -99,6 +99,9 @@ type DeviceManager interface {
 	GetMetricsReader(u uuid.UUID) (common.ChunkReader, error)
 	// GetRequestsReader get the request logs for a given uuid
 	GetRequestsReader(u uuid.UUID) (common.ChunkReader, error)
+	// GetAppLogsReader returns a logs reader for the specified application
+	// on the given device.
+	GetAppLogsReader(device, app uuid.UUID) (common.ChunkReader, error)
 	// GetCerts retrieve the attest certs for a particular device
 	GetCerts(uid uuid.UUID) ([]byte, error)
 	// GetStorageKeys retrieve storage keys for a particular device
