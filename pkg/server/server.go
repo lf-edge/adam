@@ -95,6 +95,7 @@ func (s *Server) Start() {
 	infoStream := &stream{}
 	metricStream := &stream{}
 	requestsStream := &stream{}
+	flowlogsStream := &stream{}
 
 	// edgedevice endpoint - fully compliant with EVE open API
 	api := &apiHandler{
@@ -103,6 +104,7 @@ func (s *Server) Start() {
 		infoStream:     infoStream,
 		metricStream:   metricStream,
 		requestsStream: requestsStream,
+		flowlogsStream: flowlogsStream,
 	}
 
 	router.HandleFunc("/probe", api.probe).Methods("GET")
@@ -130,6 +132,7 @@ func (s *Server) Start() {
 			infoStream:      infoStream,
 			metricStream:    metricStream,
 			requestsStream:  requestsStream,
+			flowlogsStream:  flowlogsStream,
 			signingCertPath: s.SigningCertPath,
 			signingKeyPath:  s.SigningKeyPath,
 			encryptCertPath: s.EncryptCertPath,
@@ -164,6 +167,7 @@ func (s *Server) Start() {
 		infoStream:     infoStream,
 		requestsStream: requestsStream,
 		metricsStream:  metricStream,
+		flowlogsStream: flowlogsStream,
 	}
 
 	ad := router.PathPrefix("/admin").Subrouter()
@@ -197,6 +201,7 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device/{uuid}/metrics", admin.deviceMetricsGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/certs", admin.deviceCertsGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/app/{appuuid}/logs", admin.appLogsGet).Methods("GET")
+	ad.HandleFunc("/device/{uuid}/flowlogs", admin.deviceFlowlogsGet).Methods("GET")
 	ad.HandleFunc("/device", admin.deviceAdd).Methods("POST")
 	ad.HandleFunc("/device", admin.deviceClear).Methods("DELETE")
 	ad.HandleFunc("/device/{uuid}", admin.deviceRemove).Methods("DELETE")

@@ -45,6 +45,7 @@ type apiHandlerv2 struct {
 	infoStream      *stream
 	metricStream    *stream
 	requestsStream  *stream
+	flowlogsStream  *stream
 	signingCertPath string
 	signingKeyPath  string
 	encryptCertPath string
@@ -657,7 +658,7 @@ func (h *apiHandlerv2) flowlog(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
-	status, err := flowLogProcess(h.manager, *u, b)
+	status, err := flowLogProcess(h.manager, h.flowlogsStream, *u, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)

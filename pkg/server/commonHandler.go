@@ -325,8 +325,10 @@ func randomString(length int) string {
 	return fmt.Sprintf("%x", b)[:length]
 }
 
-func flowLogProcess(manager driver.DeviceManager, u uuid.UUID, flowMessage []byte) (int, error) {
+func flowLogProcess(manager driver.DeviceManager, flowlogsStream *stream,
+	u uuid.UUID, flowMessage []byte) (int, error) {
 	var err error
+	flowlogsStream.publish(instanceID{devUUID: u}, flowMessage)
 	err = manager.WriteFlowMessage(u, flowMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write FlowMessage: %v", err)

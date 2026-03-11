@@ -24,6 +24,7 @@ type apiHandler struct {
 	infoStream     *stream
 	metricStream   *stream
 	requestsStream *stream
+	flowlogsStream *stream
 }
 
 // GetUser godoc
@@ -317,7 +318,7 @@ func (h *apiHandler) flowLog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := flowLogProcess(h.manager, *u, b)
+	status, err := flowLogProcess(h.manager, h.flowlogsStream, *u, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)

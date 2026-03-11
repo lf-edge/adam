@@ -36,6 +36,7 @@ type adminHandler struct {
 	infoStream     *stream
 	requestsStream *stream
 	metricsStream  *stream
+	flowlogsStream *stream
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
@@ -475,6 +476,13 @@ func (h *adminHandler) appLogsGet(w http.ResponseWriter, r *http.Request) {
 		return h.manager.GetAppLogsReader(id.devUUID, id.appUUID)
 	}
 	h.deviceDataGet(w, r, h.logStream, readerFunc, nil)
+}
+
+func (h *adminHandler) deviceFlowlogsGet(w http.ResponseWriter, r *http.Request) {
+	readerFunc := func(id instanceID) (common.ChunkReader, error) {
+		return h.manager.GetFlowMessageReader(id.devUUID)
+	}
+	h.deviceDataGet(w, r, h.flowlogsStream, readerFunc, nil)
 }
 
 func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request,
