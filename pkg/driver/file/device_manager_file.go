@@ -529,7 +529,7 @@ func (d *DeviceManager) initDevice(u uuid.UUID) error {
 	}
 
 	// create the necessary directories for data uploads
-	for _, p := range []string{logDir, metricsDir, infoDir, requestsDir} {
+	for _, p := range []string{logDir, metricsDir, infoDir, requestsDir, flowMessageDir} {
 		cur := path.Join(devicePath, p)
 		err = os.MkdirAll(cur, 0755)
 		if err != nil {
