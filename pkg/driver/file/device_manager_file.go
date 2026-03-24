@@ -758,8 +758,12 @@ func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid
 		return fmt.Errorf("unregistered device UUID: %s", deviceID)
 	}
 	if !d.appExists(deviceID, instanceID) {
+		appDir := d.getAppPath(deviceID, instanceID)
+		if err := os.MkdirAll(appDir, 0755); err != nil {
+			return fmt.Errorf("failed to create app log directory %s: %v", appDir, err)
+		}
 		d.devices[deviceID].AppLogs[instanceID] = &ManagedFile{
-			dir:     d.getAppPath(deviceID, instanceID),
+			dir:     appDir,
 			maxSize: int64(d.maxAppLogsSize),
 		}
 	}
