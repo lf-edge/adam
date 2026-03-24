@@ -1087,9 +1087,9 @@ func (d *DeviceManager) getOnboardPath(cn string) string {
 	return path.Join(d.databasePath, onboardDir, cn)
 }
 
-func openTimestampFile(filename string) (*os.File, error) {
+func openTimestampFile(dirname string) (*os.File, error) {
 	// open a new one
-	fullPath := path.Join(filename, time.Now().Format("2006-01-02T15:04:05.111"))
+	fullPath := path.Join(dirname, fmt.Sprintf("%020d", time.Now().UnixNano()))
 	return os.Create(fullPath)
 }
 

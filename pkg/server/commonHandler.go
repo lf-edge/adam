@@ -25,7 +25,9 @@ import (
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve-api/go/config"
+	"github.com/lf-edge/eve-api/go/info"
 	"github.com/lf-edge/eve-api/go/logs"
+	"github.com/lf-edge/eve-api/go/metrics"
 	"github.com/lf-edge/eve-api/go/register"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -155,24 +157,34 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 }
 
 func infoProcess(manager driver.DeviceManager, infoStream *stream, u uuid.UUID, infoMessage []byte) (int, error) {
-	var err error
-	infoStream.publish(instanceID{devUUID: u}, infoMessage)
-	err = manager.WriteInfo(u, infoMessage)
+	msg := &info.ZInfoMsg{}
+	if err := proto.Unmarshal(infoMessage, msg); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("error parsing info message: %v", err)
+	}
+	jsonBytes, err := protojson.Marshal(msg)
 	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to marshal info to json: %v", err)
+	}
+	infoStream.publish(instanceID{devUUID: u}, jsonBytes)
+	if err := manager.WriteInfo(u, append(jsonBytes, '\n')); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write info message: %v", err)
 	}
-	// send back a 201
 	return http.StatusCreated, nil
 }
 
 func metricProcess(manager driver.DeviceManager, metricStream *stream, u uuid.UUID, metricMessage []byte) (int, error) {
-	var err error
-	metricStream.publish(instanceID{devUUID: u}, metricMessage)
-	err = manager.WriteMetrics(u, metricMessage)
+	msg := &metrics.ZMetricMsg{}
+	if err := proto.Unmarshal(metricMessage, msg); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("error parsing metrics message: %v", err)
+	}
+	jsonBytes, err := protojson.Marshal(msg)
 	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to marshal metrics to json: %v", err)
+	}
+	metricStream.publish(instanceID{devUUID: u}, jsonBytes)
+	if err := manager.WriteMetrics(u, append(jsonBytes, '\n')); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write metric message: %v", err)
 	}
-	// send back a 201
 	return http.StatusCreated, nil
 }
 
