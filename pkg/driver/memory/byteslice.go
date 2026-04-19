@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/lf-edge/adam/pkg/driver/common"
 )
@@ -11,6 +12,7 @@ import (
 type ByteSlice struct {
 	// we do this as a slice of byte slice, rather than a single byte slice,
 	// because we need to track breaks, so we can delete from the beginning
+	m            sync.Mutex
 	data         [][]byte
 	currentRead  int
 	readComplete bool
@@ -26,6 +28,8 @@ func (bs *ByteSlice) Get(index int) ([]byte, error) {
 }
 
 func (bs *ByteSlice) Write(b []byte) (int, error) {
+	bs.m.Lock()
+	defer bs.m.Unlock()
 	// write it to the current one
 	bs.data = append(bs.data, b[:])
 	bs.size += len(b)
@@ -50,6 +54,8 @@ func (bs *ByteSlice) Reader() (common.ChunkReader, error) {
 
 // Next returns reader for the next chunk of data (message), its size and possible error
 func (bs *ByteSlice) Next() (io.Reader, int64, error) {
+	bs.m.Lock()
+	defer bs.m.Unlock()
 	if len(bs.data) == 0 || bs.currentRead >= len(bs.data) {
 		return nil, 0, io.EOF
 	}
