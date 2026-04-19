@@ -5,6 +5,9 @@ package redis
 
 import (
 	"crypto/x509"
+	"fmt"
+	"io"
+	"sync"
 	"testing"
 
 	"github.com/lf-edge/adam/pkg/driver/common"
@@ -294,4 +297,262 @@ func generateCert(t *testing.T, cn, host string) *x509.Certificate {
 		t.Fatalf("unexpected error parsing certificate: %v", err)
 	}
 	return cert
+}
+
+func TestDeviceManagerRedisConcurrency(t *testing.T) {
+	setup := func(t *testing.T, n int) (*DeviceManager, []uuid.UUID) {
+		t.Helper()
+		d := &DeviceManager{}
+		if _, err := d.Init("redis://localhost:6379/0", common.MaxSizes{}); err != nil {
+			t.Fatalf("Init: %v", err)
+		}
+		if d.client.FlushAll().Err() != nil {
+			t.Skip("you need to run 'docker run redis' before running the rest of the tests")
+		}
+		uids := make([]uuid.UUID, n)
+		for i := range uids {
+			uids[i], _ = uuid.NewV4()
+			certB, _, err := ax.Generate(fmt.Sprintf("device-%d", i), "")
+			if err != nil {
+				t.Fatalf("Generate: %v", err)
+			}
+			cert, err := x509.ParseCertificate(certB)
+			if err != nil {
+				t.Fatalf("ParseCertificate: %v", err)
+			}
+			if err := d.DeviceRegister(uids[i], cert, nil, "", common.CreateBaseConfig(uids[i])); err != nil {
+				t.Fatalf("DeviceRegister: %v", err)
+			}
+		}
+		return d, uids
+	}
+
+	t.Run("ConcurrentWritesDifferentDevices", func(t *testing.T) {
+		d, uids := setup(t, 3)
+		payload := []byte("data")
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteInfo(uids[0], payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteLogs(uids[1], payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteMetrics(uids[2], payload)
+			}
+		}()
+		wg.Wait()
+	})
+
+	t.Run("ConcurrentWriteTypesSameDevice", func(t *testing.T) {
+		d, uids := setup(t, 1)
+		u := uids[0]
+		payload := []byte("data")
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteInfo(u, payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteLogs(u, payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteMetrics(u, payload)
+			}
+		}()
+		wg.Wait()
+	})
+
+	t.Run("ConcurrentWritesAndDeviceClear", func(t *testing.T) {
+		d, uids := setup(t, 1)
+		u := uids[0]
+		payload := []byte("data")
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteInfo(u, payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteLogs(u, payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 5; i++ {
+				d.DeviceClear()
+			}
+		}()
+		wg.Wait()
+	})
+
+	t.Run("ConcurrentDeviceListAndClear", func(t *testing.T) {
+		d, _ := setup(t, 3)
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.DeviceList()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.DeviceList()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 5; i++ {
+				d.DeviceClear()
+			}
+		}()
+		wg.Wait()
+	})
+
+	t.Run("ConcurrentOnboardOperations", func(t *testing.T) {
+		d, _ := setup(t, 0)
+		for i := 0; i < 3; i++ {
+			certB, _, err := ax.Generate(fmt.Sprintf("onboard-cn-%d", i), "")
+			if err != nil {
+				t.Fatalf("Generate: %v", err)
+			}
+			cert, err := x509.ParseCertificate(certB)
+			if err != nil {
+				t.Fatalf("ParseCertificate: %v", err)
+			}
+			if err := d.OnboardRegister(cert, []string{"s1", "s2"}); err != nil {
+				t.Fatalf("OnboardRegister: %v", err)
+			}
+		}
+		newCertB, _, err := ax.Generate("onboard-new", "")
+		if err != nil {
+			t.Fatalf("Generate: %v", err)
+		}
+		newCert, err := x509.ParseCertificate(newCertB)
+		if err != nil {
+			t.Fatalf("ParseCertificate: %v", err)
+		}
+		var wg sync.WaitGroup
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 20; i++ {
+				d.OnboardList()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 20; i++ {
+				d.OnboardRegister(newCert, []string{"s3"})
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 5; i++ {
+				d.OnboardClear()
+			}
+		}()
+		wg.Wait()
+	})
+
+	t.Run("ConcurrentWritesAndReaders", func(t *testing.T) {
+		d, uids := setup(t, 3)
+		payload := []byte("data")
+		var wg sync.WaitGroup
+		wg.Add(6)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteInfo(uids[0], payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteLogs(uids[1], payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 30; i++ {
+				d.WriteMetrics(uids[2], payload)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 20; i++ {
+				r, err := d.GetInfoReader(uids[0])
+				if err != nil {
+					t.Errorf("GetInfoReader: %v", err)
+					return
+				}
+				readAllChunks(t, r)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 20; i++ {
+				r, err := d.GetLogsReader(uids[1])
+				if err != nil {
+					t.Errorf("GetLogsReader: %v", err)
+					return
+				}
+				readAllChunks(t, r)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 20; i++ {
+				r, err := d.GetMetricsReader(uids[2])
+				if err != nil {
+					t.Errorf("GetMetricsReader: %v", err)
+					return
+				}
+				readAllChunks(t, r)
+			}
+		}()
+		wg.Wait()
+	})
+}
+
+// readAllChunks drains every chunk from a ChunkReader, discarding the data.
+func readAllChunks(t *testing.T, r common.ChunkReader) {
+	t.Helper()
+	for {
+		chunk, _, err := r.Next()
+		if chunk == nil || err == io.EOF {
+			return
+		}
+		if err != nil {
+			t.Errorf("ChunkReader.Next: %v", err)
+			return
+		}
+		if _, err = io.Copy(io.Discard, chunk); err != nil {
+			t.Errorf("io.Copy from chunk: %v", err)
+			return
+		}
+	}
 }

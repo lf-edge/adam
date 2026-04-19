@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -97,12 +98,16 @@ func (m *ManagedStream) Reader() (common.ChunkReader, error) {
 
 // DeviceManager implementation of DeviceManager interface with a Redis DB as the backing store
 type DeviceManager struct {
+	// m serializes access to the in-memory maps (onboardCerts, deviceCerts, devices).
+	m sync.Mutex
+
 	client       *redis.Client
 	databaseNet  string
 	databaseURL  string
 	databaseID   int
 	cacheTimeout int
 	lastUpdate   time.Time
+
 	// these are for caching only
 	onboardCerts map[string]map[string]bool
 	deviceCerts  map[string]uuid.UUID
@@ -195,8 +200,10 @@ func (d *DeviceManager) OnboardCheck(cert *x509.Certificate, serial string) erro
 	if cert == nil {
 		return fmt.Errorf("invalid nil certificate")
 	}
+	d.m.Lock()
+	defer d.m.Unlock()
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
 		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
@@ -237,8 +244,10 @@ func (d *DeviceManager) OnboardGet(cn string) (*x509.Certificate, []string, erro
 
 // OnboardList list all of the known Common Names for onboard
 func (d *DeviceManager) OnboardList() ([]string, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
@@ -258,7 +267,7 @@ func (d *DeviceManager) OnboardList() ([]string, error) {
 func (d *DeviceManager) OnboardRemove(cn string) (result error) {
 	result = d.transactionDrop([][]string{{onboardCertsHash, cn}, {onboardSerialsHash, cn}})
 	if result == nil {
-		result = d.refreshCache()
+		result = d.refreshCache(false)
 	}
 	return
 }
@@ -269,7 +278,9 @@ func (d *DeviceManager) OnboardClear() error {
 		return fmt.Errorf("unable to remove the onboarding certificates/serials: %v", err)
 	}
 
+	d.m.Lock()
 	d.onboardCerts = map[string]map[string]bool{}
+	d.m.Unlock()
 	return nil
 }
 
@@ -278,8 +289,10 @@ func (d *DeviceManager) DeviceCheckCert(cert *x509.Certificate) (*uuid.UUID, err
 	if cert == nil {
 		return nil, fmt.Errorf("invalid nil certificate")
 	}
+	d.m.Lock()
+	defer d.m.Unlock()
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
@@ -295,8 +308,10 @@ func (d *DeviceManager) DeviceCheckCertHash(hash []byte) (*uuid.UUID, error) {
 	if hash == nil {
 		return nil, fmt.Errorf("invalid empty hash")
 	}
+	d.m.Lock()
+	defer d.m.Unlock()
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
@@ -326,16 +341,18 @@ func (d *DeviceManager) DeviceRemove(u *uuid.UUID) error {
 		{deviceFlowMessageStream + k},
 		{deviceRequestsStream + k},
 	}
+	d.m.Lock()
 	for appUUID := range d.devices[*u].AppLogs {
 		streams = append(streams, []string{deviceAppLogsStream + k + "_" + appUUID.String()})
 	}
+	d.m.Unlock()
 	err := d.transactionDrop(streams)
 
 	if err != nil {
 		return fmt.Errorf("unable to remove the device %s %v", k, err)
 	}
 	// refresh the cache
-	err = d.refreshCache()
+	err = d.refreshCache(false)
 	if err != nil {
 		return fmt.Errorf("unable to refresh device cache: %v", err)
 	}
@@ -353,6 +370,7 @@ func (d *DeviceManager) DeviceClear() error {
 		{deviceOnboardCertsHash},
 		{deviceOptionsHash}}
 
+	d.m.Lock()
 	for u, dev := range d.devices {
 		streams = append(streams,
 			[]string{deviceMetricsStream + u.String()},
@@ -364,6 +382,7 @@ func (d *DeviceManager) DeviceClear() error {
 			streams = append(streams, []string{deviceAppLogsStream + u.String() + "_" + appUUID.String()})
 		}
 	}
+	d.m.Unlock()
 
 	err := d.transactionDrop(streams)
 
@@ -371,8 +390,10 @@ func (d *DeviceManager) DeviceClear() error {
 		return fmt.Errorf("unable to remove all devices %v", err)
 	}
 
+	d.m.Lock()
 	d.deviceCerts = map[string]uuid.UUID{}
 	d.devices = map[uuid.UUID]common.DeviceStorage{}
+	d.m.Unlock()
 	return nil
 }
 
@@ -407,8 +428,10 @@ func (d *DeviceManager) DeviceGet(u *uuid.UUID) (*x509.Certificate, *x509.Certif
 
 // DeviceList list all of the known UUIDs for devices
 func (d *DeviceManager) DeviceList() ([]*uuid.UUID, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
 		return nil, fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
@@ -425,11 +448,6 @@ func (d *DeviceManager) DeviceList() ([]*uuid.UUID, error) {
 
 // DeviceRegister register a new device cert
 func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certificate, serial string, conf []byte) error {
-	// refresh certs from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
-	if err != nil {
-		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
-	}
 	// check if it already exists - this also checks for nil cert
 	u, err := d.DeviceCheckCert(cert)
 	if err != nil {
@@ -469,9 +487,11 @@ func (d *DeviceManager) DeviceRegister(unew uuid.UUID, cert, onboard *x509.Certi
 	}
 
 	// save new one to cache - just the serial and onboard; the rest is on disk
+	d.m.Lock()
 	d.deviceCerts[string(cert.Raw)] = unew
 	d.devices[unew] = d.initDevice(unew, onboard, serial)
 	ds := d.devices[unew]
+	d.m.Unlock()
 
 	// create the necessary Redis streams for this device
 	for _, ms := range []common.BigData{ds.Logs, ds.Info, ds.Metrics, ds.Requests} {
@@ -537,21 +557,24 @@ func (d *DeviceManager) OnboardRegister(cert *x509.Certificate, serial []string)
 	}
 
 	// update the cache
-	if d.onboardCerts == nil {
-		d.onboardCerts = map[string]map[string]bool{}
-	}
 	serialList := map[string]bool{}
 	for _, s := range serial {
 		serialList[s] = true
 	}
+	d.m.Lock()
+	if d.onboardCerts == nil {
+		d.onboardCerts = map[string]map[string]bool{}
+	}
 	d.onboardCerts[certStr] = serialList
+	d.m.Unlock()
 
 	return nil
 }
 
 // WriteRequest record a request
 func (d *DeviceManager) WriteRequest(u uuid.UUID, b []byte) error {
-	if dev, ok := d.devices[u]; ok {
+	dev, ok := d.getDevice(u)
+	if ok {
 		if err := dev.AddRequest(b); err != nil {
 			return fmt.Errorf("AddRequest error: %s", err)
 		}
@@ -567,7 +590,7 @@ func (d *DeviceManager) WriteInfo(u uuid.UUID, b []byte) error {
 		return nil
 	}
 	// check that the device actually exists
-	dev, ok := d.devices[u]
+	dev, ok := d.getDevice(u)
 	if !ok {
 		return fmt.Errorf("device not found: %s", u)
 	}
@@ -581,14 +604,24 @@ func (d *DeviceManager) WriteLogs(u uuid.UUID, b []byte) error {
 		return nil
 	}
 	// check that the device actually exists
-	dev, ok := d.devices[u]
+	dev, ok := d.getDevice(u)
 	if !ok {
 		return fmt.Errorf("device not found: %s", u)
 	}
 	return dev.AddLogs(b)
 }
 
+// getDevice locks d.m, looks up the device, and returns a copy of its
+// DeviceStorage and an existence flag.
+func (d *DeviceManager) getDevice(u uuid.UUID) (common.DeviceStorage, bool) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	dev, ok := d.devices[u]
+	return dev, ok
+}
+
 // appExists return if an app has been created
+// Caller must hold d.m.
 func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
 	if _, ok := d.devices[u]; !ok {
 		return false
@@ -605,8 +638,10 @@ func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid
 	if len(b) < 1 {
 		return nil
 	}
+	d.m.Lock()
 	dev, ok := d.devices[deviceID]
 	if !ok {
+		d.m.Unlock()
 		return fmt.Errorf("unregistered device UUID %s", deviceID)
 	}
 	if !d.appExists(deviceID, instanceID) {
@@ -615,6 +650,7 @@ func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid
 			client: d.client,
 		}
 	}
+	d.m.Unlock()
 	return dev.AddAppLog(instanceID, b)
 }
 
@@ -625,7 +661,7 @@ func (d *DeviceManager) WriteMetrics(u uuid.UUID, b []byte) error {
 		return nil
 	}
 	// check that the device actually exists
-	dev, ok := d.devices[u]
+	dev, ok := d.getDevice(u)
 	if !ok {
 		return fmt.Errorf("device not found: %s", u)
 	}
@@ -639,13 +675,16 @@ func (d *DeviceManager) WriteCerts(u uuid.UUID, b []byte) error {
 		return fmt.Errorf("empty configuration")
 	}
 
+	d.m.Lock()
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
+		d.m.Unlock()
 		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	// look up the device by uuid
 	_, ok := d.devices[u]
+	d.m.Unlock()
 	if !ok {
 		return fmt.Errorf("unregistered device UUID %s", u.String())
 	}
@@ -683,13 +722,16 @@ func (d *DeviceManager) WriteStorageKeys(u uuid.UUID, b []byte) error {
 		return fmt.Errorf("empty configuration")
 	}
 
+	d.m.Lock()
 	// refresh cache from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
+		d.m.Unlock()
 		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	// look up the device by uuid
 	_, ok := d.devices[u]
+	d.m.Unlock()
 	if !ok {
 		return fmt.Errorf("unregistered device UUID %s", u.String())
 	}
@@ -751,13 +793,16 @@ func (d *DeviceManager) SetConfig(u uuid.UUID, b []byte) error {
 		return fmt.Errorf("empty configuration")
 	}
 
+	d.m.Lock()
 	// refresh certs from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
+		d.m.Unlock()
 		return fmt.Errorf("unable to refresh certs from Redis: %v", err)
 	}
 	// look up the device by uuid
 	_, ok := d.devices[u]
+	d.m.Unlock()
 	if !ok {
 		return fmt.Errorf("unregistered device UUID %s", u.String())
 	}
@@ -774,7 +819,7 @@ func (d *DeviceManager) SetConfig(u uuid.UUID, b []byte) error {
 // GetLogsReader get the logs for a given uuid
 func (d *DeviceManager) GetLogsReader(u uuid.UUID) (common.ChunkReader, error) {
 	// check that the device actually exists
-	dev, ok := d.devices[u]
+	dev, ok := d.getDevice(u)
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
@@ -784,7 +829,7 @@ func (d *DeviceManager) GetLogsReader(u uuid.UUID) (common.ChunkReader, error) {
 // GetInfoReader get the info for a given uuid
 func (d *DeviceManager) GetInfoReader(u uuid.UUID) (common.ChunkReader, error) {
 	// check that the device actually exists
-	dev, ok := d.devices[u]
+	dev, ok := d.getDevice(u)
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
@@ -794,7 +839,7 @@ func (d *DeviceManager) GetInfoReader(u uuid.UUID) (common.ChunkReader, error) {
 // GetMetricsReader returns a metrics reader for the specified device.
 func (d *DeviceManager) GetMetricsReader(u uuid.UUID) (common.ChunkReader, error) {
 	// check that the device actually exists
-	dev, ok := d.devices[u]
+	dev, ok := d.getDevice(u)
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
@@ -804,15 +849,20 @@ func (d *DeviceManager) GetMetricsReader(u uuid.UUID) (common.ChunkReader, error
 // GetRequestsReader get the requests for a given uuid
 func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (common.ChunkReader, error) {
 	// check that the device actually exists
-	dev, ok := d.devices[u]
+	dev, ok := d.getDevice(u)
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
 	return dev.Requests.Reader()
 }
 
-// refreshCache refresh cache from disk
-func (d *DeviceManager) refreshCache() error {
+// refreshCache refresh cache from disk.
+// If isLocked is true the caller already holds d.m; otherwise refreshCache acquires it.
+func (d *DeviceManager) refreshCache(isLocked bool) error {
+	if !isLocked {
+		d.m.Lock()
+		defer d.m.Unlock()
+	}
 	// is it time to update the cache again?
 	now := time.Now()
 	if now.Sub(d.lastUpdate).Seconds() < float64(d.cacheTimeout) {
@@ -988,6 +1038,7 @@ func (d *DeviceManager) writeJSONMsgPack(u uuid.UUID, hash string, b []byte) err
 
 // checkValidOnboardSerial see if a particular certificate+serial combinaton is valid
 // does **not** check if it has been used
+// Caller must hold d.m.
 func (d *DeviceManager) checkValidOnboardSerial(cert *x509.Certificate, serial string) error {
 	certStr := string(cert.Raw)
 	if c, ok := d.onboardCerts[certStr]; ok {
@@ -1004,9 +1055,13 @@ func (d *DeviceManager) checkValidOnboardSerial(cert *x509.Certificate, serial s
 }
 
 // getOnboardSerialDevice see if a particular certificate+serial combinaton has been used and get its device uuid
+// Caller must hold d.m.
 func (d *DeviceManager) getOnboardSerialDevice(cert *x509.Certificate, serial string) *uuid.UUID {
 	certStr := string(cert.Raw)
 	for uid, dev := range d.devices {
+		if dev.Onboard == nil {
+			continue
+		}
 		dCertStr := string(dev.Onboard.Raw)
 		if dCertStr == certStr && serial == dev.Serial {
 			return &uid
@@ -1084,7 +1139,7 @@ func (d *DeviceManager) WriteFlowMessage(u uuid.UUID, b []byte) error {
 		return nil
 	}
 	// check that the device actually exists
-	dev, ok := d.devices[u]
+	dev, ok := d.getDevice(u)
 	if !ok {
 		return fmt.Errorf("device not found: %s", u)
 	}
@@ -1094,7 +1149,7 @@ func (d *DeviceManager) WriteFlowMessage(u uuid.UUID, b []byte) error {
 // GetUUID get UuidResponse for device by uuid
 func (d *DeviceManager) GetUUID(u uuid.UUID) ([]byte, error) {
 	// check that the device actually exists
-	_, ok := d.devices[u]
+	_, ok := d.getDevice(u)
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
@@ -1108,13 +1163,16 @@ func (d *DeviceManager) SetDeviceOptions(u uuid.UUID, b []byte) error {
 		return fmt.Errorf("empty options")
 	}
 
+	d.m.Lock()
 	// refresh cache from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
+		d.m.Unlock()
 		return fmt.Errorf("unable to refresh from Redis: %v", err)
 	}
 	// look up the device by uuid
 	_, ok := d.devices[u]
+	d.m.Unlock()
 	if !ok {
 		return fmt.Errorf("unregistered device UUID %s", u.String())
 	}
@@ -1129,13 +1187,16 @@ func (d *DeviceManager) SetDeviceOptions(u uuid.UUID, b []byte) error {
 }
 
 func (d *DeviceManager) GetDeviceOptions(u uuid.UUID) ([]byte, error) {
+	d.m.Lock()
 	// refresh cache from Redis, if needed - includes checking if necessary based on timer
-	err := d.refreshCache()
+	err := d.refreshCache(true)
 	if err != nil {
+		d.m.Unlock()
 		return nil, fmt.Errorf("unable to refresh from Redis: %v", err)
 	}
 	// look up the device by uuid
 	_, ok := d.devices[u]
+	d.m.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("unregistered device UUID %s", u.String())
 	}
