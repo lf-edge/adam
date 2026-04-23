@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/lf-edge/adam/pkg/driver/common"
 
@@ -35,7 +36,7 @@ var (
 	certCN             string
 	certHosts          string
 	port               string
-	hostIP             string
+	listenIPs          []string
 	certRefresh        int
 	maxLogSize         int
 	maxInfoSize        int
@@ -117,8 +118,14 @@ var serverCmd = &cobra.Command{
 			log.Fatalf("error writing to server file: %v", err)
 		}
 
-		err = os.WriteFile(path.Join(configDir, "hosts"), []byte(hostIP+" "+ca.Subject.CommonName), 0644)
-		if err != nil {
+		var hostsEntries []string
+		for _, ip := range listenIPs {
+			hostsEntries = append(hostsEntries,
+				fmt.Sprintf("%s %s", ip, ca.Subject.CommonName))
+		}
+		hostsContent := strings.Join(hostsEntries, "\n")
+		hostsPath := path.Join(configDir, "hosts")
+		if err := os.WriteFile(hostsPath, []byte(hostsContent), 0644); err != nil {
 			log.Fatalf("error writing hosts file: %v", err)
 		}
 
@@ -171,7 +178,7 @@ var serverCmd = &cobra.Command{
 
 		s := &server.Server{
 			Port:            port,
-			Address:         hostIP,
+			ListenIPs:       listenIPs,
 			CertPath:        serverCert,
 			KeyPath:         serverKey,
 			SigningCertPath: signingCert,
@@ -203,7 +210,8 @@ func serverInit() {
 		defaultAppLogsSizes = append(defaultAppLogsSizes, fmt.Sprintf("%s:%d", m.Name(), m.MaxAppLogsSize()))
 	}
 	serverCmd.Flags().StringVar(&port, "port", defaultPort, "port on which to listen")
-	serverCmd.Flags().StringVar(&hostIP, "ip", defaultIP, "IP address on which to listen")
+	serverCmd.Flags().StringSliceVar(&listenIPs, "ip", []string{defaultIP},
+		"IP addresses on which to listen (can be specified multiple times)")
 	serverCmd.Flags().StringVar(&serverCert, "server-cert", path.Join(defaultDatabaseURL, serverCertFilename), "path to server certificate")
 	serverCmd.Flags().StringVar(&serverKey, "server-key", path.Join(defaultDatabaseURL, serverKeyFilename), "path to server key")
 	serverCmd.Flags().StringVar(&signingCert, "signing-cert", path.Join(defaultDatabaseURL, signingCertFilename), "path to signing certificate")

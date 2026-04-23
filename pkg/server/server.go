@@ -9,13 +9,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,7 +28,7 @@ import (
 // Server an adam server
 type Server struct {
 	Port            string
-	Address         string
+	ListenIPs       []string
 	CertPath        string
 	KeyPath         string
 	SigningCertPath string
@@ -239,23 +240,33 @@ func (s *Server) Start() {
 
 	server := &http.Server{
 		Handler:   router,
-		Addr:      fmt.Sprintf("%s:%s", s.Address, s.Port),
 		TLSConfig: tlsConfig,
 	}
 	log.Println("Starting adam:")
-	log.Printf("\tURL: https://%s:%s\n", s.Address, s.Port)
+	for _, ip := range s.ListenIPs {
+		log.Printf("\tURL: https://%s\n", net.JoinHostPort(ip, s.Port))
+	}
 	log.Printf("\tstorage: %s\n", s.DeviceManager.Name())
 	log.Printf("\tdatabase: %s\n", s.DeviceManager.Database())
 	log.Printf("\tserver cert: %s\n", s.CertPath)
 	log.Printf("\tserver key: %s\n", s.KeyPath)
-	done := make(chan bool)
-	go func() {
-		err := server.ListenAndServeTLS(s.CertPath, s.KeyPath)
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Listen and serve: %v", err)
+
+	var wg sync.WaitGroup
+	for _, listenIP := range s.ListenIPs {
+		addr := net.JoinHostPort(listenIP, s.Port)
+		listener, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatalf("Failed to listen on address %s: %v", addr, err)
 		}
-		done <- true
-	}()
+		wg.Add(1)
+		go func(listener net.Listener) {
+			defer wg.Done()
+			err := server.ServeTLS(listener, s.CertPath, s.KeyPath)
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Fatalf("HTTPS server error: %v", err)
+			}
+		}(listener)
+	}
 	<-irqSig
 	log.Printf("server shutdown starting")
 
@@ -268,7 +279,7 @@ func (s *Server) Start() {
 	if err != nil {
 		log.Printf("Shutdown request error: %v", err)
 	}
-	<-done
+	wg.Wait()
 	log.Printf("server shutdown done")
 }
 
