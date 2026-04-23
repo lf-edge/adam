@@ -20,6 +20,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/lf-edge/eve-api/go/config"
 	"github.com/lf-edge/eve-api/go/evecommon"
 	eveuuid "github.com/lf-edge/eve-api/go/eveuuid"
+	eveproxy "github.com/lf-edge/eve-api/go/proxy"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -702,4 +704,209 @@ func (h *apiHandlerv2) hardwarehealth(w http.ResponseWriter, r *http.Request) {
 	}
 	// For now, just return 200 OK in any case
 	w.WriteHeader(http.StatusOK)
+}
+
+// scepProxy handles SCEP proxy requests from an authenticated device.
+// It validates the requested SCEP profile against the device configuration
+// and forwards the request to the configured SCEP server.
+// See: https://github.com/lf-edge/eve-api/blob/main/APIv2.md#scep-proxy
+func (h *apiHandlerv2) scepProxy(w http.ResponseWriter, r *http.Request) {
+	// Authenticate request and extract device UUID.
+	payload, uuid := h.validateAuthContainerAndRecord(w, r)
+	if uuid == nil {
+		return
+	}
+
+	// Decode the SCEP proxy request sent by the device.
+	proxyRequest := &eveproxy.SCEPProxyRequest{}
+	err := proto.Unmarshal(payload, proxyRequest)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to unmarshal SCEPProxyRequest: %v", err)
+		log.Print(errMsg)
+		http.Error(w, errMsg, http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve device configuration to verify that the requested
+	// SCEP profile is authorized for this device.
+	deviceConfigBytes, err := h.manager.GetConfig(*uuid)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to get config for device %s: %v",
+			uuid.String(), err)
+		log.Print(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+	deviceConfig := &config.EdgeDevConfig{}
+	err = proto.Unmarshal(deviceConfigBytes, deviceConfig)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to unmarshal device config: %v", err)
+		log.Print(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+
+	// Ensure the requested SCEP profile exists in the device config.
+	var scepProfile *config.SCEPProfile
+	for _, profile := range deviceConfig.GetScepProfiles() {
+		if profile.GetProfileName() == proxyRequest.GetScepProfileName() {
+			scepProfile = profile
+		}
+	}
+	if scepProfile == nil {
+		errMsg := fmt.Sprintf("unknown or unauthorized SCEP server profile %q",
+			proxyRequest.ScepProfileName)
+		log.Print(errMsg)
+		http.Error(w, errMsg, http.StatusForbidden)
+		return
+	}
+
+	// Parse the configured SCEP server URL.
+	scepServerURL, err := url.Parse(scepProfile.GetScepUrl())
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to parse SCEP server URL: %v", err)
+		log.Print(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Proxying SCEP request: %s %s",
+		proxyRequest.Operation.String(), scepServerURL.String())
+
+	// Forward the request to the external SCEP server.
+	proxyResponse, err := h.forwardToSCEPServer(proxyRequest, scepServerURL)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to forward to SCEP server: %v", err)
+		log.Print(errMsg)
+		http.Error(w, errMsg, http.StatusBadGateway)
+		return
+	}
+
+	log.Printf("Proxying SCEP response: %s %s, with HTTP status code %d",
+		proxyResponse.Operation.String(), scepServerURL.String(),
+		proxyResponse.HttpStatusCode)
+
+	// Marshal response and wrap it into a cloud envelope before sending back.
+	proxyResponseBytes, err := proto.Marshal(proxyResponse)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to marshal SCEPProxyResponse: %v", err)
+		log.Print(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+	cloudEnvelope, eErr := h.prepareEnvelope(proxyResponseBytes)
+	if eErr != nil {
+		errMsg := fmt.Sprintf("failed to create envelope: %v", eErr)
+		log.Print(errMsg)
+		http.Error(w, errMsg, http.StatusInternalServerError)
+		return
+	}
+
+	// Return proxied response to the device.
+	w.Header().Set(contentType, mimeProto)
+	w.WriteHeader(http.StatusOK)
+	w.Write(cloudEnvelope)
+}
+
+func (h *apiHandlerv2) forwardToSCEPServer(req *eveproxy.SCEPProxyRequest,
+	scepServerURL *url.URL) (*eveproxy.SCEPProxyResponse, error) {
+	// Determine HTTP method
+	method := "GET"
+	if req.HttpMethod == eveproxy.HTTPMethod_HTTP_METHOD_POST {
+		method = "POST"
+	}
+
+	// Add query parameters
+	// The operation parameter is ALWAYS required in the query string, even for POST
+	if req.Operation != eveproxy.SCEPOperation_SCEP_OPERATION_UNSPECIFIED {
+		operation := scepOperationToString(req.Operation)
+		if operation != "" {
+			query := scepServerURL.Query()
+			query.Set("operation", operation)
+
+			// For GET requests, add message parameter (base64 URL-encoded)
+			if method == "GET" && len(req.Message) > 0 {
+				encoded := base64.URLEncoding.EncodeToString(req.Message)
+				query.Set("message", encoded)
+			}
+
+			scepServerURL.RawQuery = query.Encode()
+		}
+	}
+
+	// Create HTTP request
+	var bodyReader io.Reader
+	if method == "POST" {
+		bodyReader = bytes.NewReader(req.Message)
+	}
+
+	httpReq, err := http.NewRequest(method, scepServerURL.String(), bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %v", err)
+	}
+
+	// Add headers from request
+	for _, headerField := range req.GetHttpHeaderFields() {
+		httpReq.Header.Set(headerField.GetName(), headerField.GetValue())
+	}
+
+	// Set content type for POST
+	if method == "POST" {
+		httpReq.Header.Set("Content-Type", "application/x-pki-message")
+	}
+
+	// Send request
+	httpResp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request to SCEP server: %v", err)
+	}
+	defer httpResp.Body.Close()
+
+	// Read response
+	const maxPayloadSize = 2 << 20 // 2MB
+	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, maxPayloadSize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read SCEP server response: %v", err)
+	}
+
+	// Build response header field list
+	var respHeaderFields []*eveproxy.HTTPHeaderField
+	for key, values := range httpResp.Header {
+		for _, value := range values {
+			respHeaderFields = append(respHeaderFields, &eveproxy.HTTPHeaderField{
+				Name:  key,
+				Value: value,
+			})
+		}
+	}
+
+	// Build SCEP proxy response
+	scepResp := &eveproxy.SCEPProxyResponse{
+		ScepProfileName:  req.ScepProfileName,
+		Operation:        req.Operation,
+		Message:          respBody,
+		HttpStatusCode:   uint32(httpResp.StatusCode),
+		HttpHeaderFields: respHeaderFields,
+	}
+
+	// Include error body if status >= 400
+	if httpResp.StatusCode >= 400 {
+		scepResp.ErrorBody = respBody
+	}
+	return scepResp, nil
+}
+
+func scepOperationToString(op eveproxy.SCEPOperation) string {
+	switch op {
+	case eveproxy.SCEPOperation_SCEP_OPERATION_GET_CA_CAPS:
+		return "GetCACaps"
+	case eveproxy.SCEPOperation_SCEP_OPERATION_GET_CA_CERT:
+		return "GetCACert"
+	case eveproxy.SCEPOperation_SCEP_OPERATION_GET_NEXT_CA_CERT:
+		return "GetNextCACert"
+	case eveproxy.SCEPOperation_SCEP_OPERATION_PKI_MESSAGE:
+		return "PKIOperation"
+	default:
+		return ""
+	}
 }
