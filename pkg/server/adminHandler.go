@@ -19,6 +19,7 @@ import (
 	ax "github.com/lf-edge/adam/pkg/x509"
 	"github.com/lf-edge/eve-api/go/config"
 	"github.com/lf-edge/eve-api/go/info"
+	"github.com/lf-edge/eve-api/go/metrics"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -30,10 +31,11 @@ const (
 )
 
 type adminHandler struct {
-	manager         driver.DeviceManager
-	logChannel      chan []byte
-	infoChannel     chan []byte
-	requestsChannel chan []byte
+	manager        driver.DeviceManager
+	logStream      *stream
+	infoStream     *stream
+	requestsStream *stream
+	metricsStream  *stream
 }
 
 // OnboardCert encoding for sending an onboard cert and serials via json
@@ -419,11 +421,11 @@ func (h *adminHandler) deviceConfigSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceLogsGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.logChannel, h.manager.GetLogsReader, nil)
+	h.deviceDataGet(w, r, h.logStream, h.manager.GetLogsReader, nil)
 }
 
 func (h *adminHandler) deviceInfoGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.infoChannel, h.manager.GetInfoReader, func(in []byte) ([]byte, error) {
+	h.deviceDataGet(w, r, h.infoStream, h.manager.GetInfoReader, func(in []byte) ([]byte, error) {
 		var err error
 		msg := &info.ZInfoMsg{}
 		if err = proto.Unmarshal(in, msg); err != nil {
@@ -438,10 +440,27 @@ func (h *adminHandler) deviceInfoGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *adminHandler) deviceRequestsGet(w http.ResponseWriter, r *http.Request) {
-	h.deviceDataGet(w, r, h.requestsChannel, h.manager.GetRequestsReader, nil)
+	h.deviceDataGet(w, r, h.requestsStream, h.manager.GetRequestsReader, nil)
 }
 
-func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <-chan []byte, readerFunc func(u uuid.UUID) (common.ChunkReader, error), conversionFunc func(in []byte) ([]byte, error)) {
+func (h *adminHandler) deviceMetricsGet(w http.ResponseWriter, r *http.Request) {
+	h.deviceDataGet(w, r, h.metricsStream, h.manager.GetMetricsReader, func(in []byte) ([]byte, error) {
+		var err error
+		msg := &metrics.ZMetricMsg{}
+		if err = proto.Unmarshal(in, msg); err != nil {
+			return nil, fmt.Errorf("error parsing metrics message: %v", err)
+		}
+		var entryBytes []byte
+		if entryBytes, err = protojson.Marshal(msg); err != nil {
+			return nil, fmt.Errorf("failed to marshal metrics message: %v", err)
+		}
+		return entryBytes, nil
+	})
+}
+
+func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request,
+	s *stream, readerFunc func(u uuid.UUID) (common.ChunkReader, error),
+	conversionFunc func(in []byte) ([]byte, error)) {
 	u := mux.Vars(r)["uuid"]
 	uid, err := uuid.FromString(u)
 	if err != nil {
@@ -470,6 +489,9 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request, c <
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-type", "application/json")
 		flusher.Flush()
+
+		c, unsubscribe := s.subscribe(uid)
+		defer unsubscribe()
 
 		for {
 			select {

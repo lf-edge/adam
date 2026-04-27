@@ -91,16 +91,18 @@ func (s *Server) Start() {
 	router.PathPrefix("/swaggerui/").Handler(sh)
 
 	// to pass logs and info around
-	logChannel := make(chan []byte)
-	infoChannel := make(chan []byte)
-	metricChannel := make(chan []byte)
+	logStream := &stream{}
+	infoStream := &stream{}
+	metricStream := &stream{}
+	requestsStream := &stream{}
 
 	// edgedevice endpoint - fully compliant with EVE open API
 	api := &apiHandler{
-		manager:       s.DeviceManager,
-		logChannel:    logChannel,
-		infoChannel:   infoChannel,
-		metricChannel: metricChannel,
+		manager:        s.DeviceManager,
+		logStream:      logStream,
+		infoStream:     infoStream,
+		metricStream:   metricStream,
+		requestsStream: requestsStream,
 	}
 
 	router.HandleFunc("/probe", api.probe).Methods("GET")
@@ -124,9 +126,10 @@ func (s *Server) Start() {
 	if hasApiV2 {
 		apiv2 := &apiHandlerv2{
 			manager:         s.DeviceManager,
-			logChannel:      logChannel,
-			infoChannel:     infoChannel,
-			metricChannel:   metricChannel,
+			logStream:       logStream,
+			infoStream:      infoStream,
+			metricStream:    metricStream,
+			requestsStream:  requestsStream,
 			signingCertPath: s.SigningCertPath,
 			signingKeyPath:  s.SigningKeyPath,
 			encryptCertPath: s.EncryptCertPath,
@@ -156,9 +159,11 @@ func (s *Server) Start() {
 
 	// admin endpoint - custom, used to manage adam
 	admin := &adminHandler{
-		manager:     s.DeviceManager,
-		logChannel:  logChannel,
-		infoChannel: infoChannel,
+		manager:        s.DeviceManager,
+		logStream:      logStream,
+		infoStream:     infoStream,
+		requestsStream: requestsStream,
+		metricsStream:  metricStream,
 	}
 
 	ad := router.PathPrefix("/admin").Subrouter()
@@ -189,6 +194,7 @@ func (s *Server) Start() {
 	ad.HandleFunc("/device/{uuid}/logs", admin.deviceLogsGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/info", admin.deviceInfoGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/requests", admin.deviceRequestsGet).Methods("GET")
+	ad.HandleFunc("/device/{uuid}/metrics", admin.deviceMetricsGet).Methods("GET")
 	ad.HandleFunc("/device/{uuid}/certs", admin.deviceCertsGet).Methods("GET")
 	ad.HandleFunc("/device", admin.deviceAdd).Methods("POST")
 	ad.HandleFunc("/device", admin.deviceClear).Methods("DELETE")
