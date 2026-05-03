@@ -10,6 +10,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    services:
+      # Redis is required so that the Redis driver unit tests are not skipped.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v2

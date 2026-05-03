@@ -64,7 +64,7 @@ type DeviceManager interface {
 	// DeviceList list all of the known UUIDs for devices
 	DeviceList() ([]*uuid.UUID, error)
 	// DeviceRegister register a new device certificate, including the onboarding certificate used to register it and its serial
-	DeviceRegister(uuid.UUID, *x509.Certificate, *x509.Certificate, string, []byte) error
+	DeviceRegister(uuid.UUID, *x509.Certificate, *x509.Certificate, string) error
 	// WriteCerts write an attestation certs information
 	WriteCerts(uuid.UUID, []byte) error
 	// WriteStorageKeys write storage keys information

@@ -5,7 +5,6 @@ package common
 
 import (
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,11 +12,9 @@ import (
 
 	"github.com/lf-edge/eve-api/go/attest"
 	"github.com/lf-edge/eve-api/go/certs"
-	"github.com/lf-edge/eve-api/go/config"
 	"github.com/lf-edge/eve-api/go/logs"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -180,30 +177,4 @@ func (d *DeviceStorage) AddFlowRecord(b []byte) error {
 	}
 	_, err := d.FlowMessage.Write(b)
 	return err
-}
-
-func CreateBaseConfig(u uuid.UUID) []byte {
-	conf := &config.EdgeDevConfig{
-		Id: &config.UUIDandVersion{
-			Uuid:    u.String(),
-			Version: "4",
-		},
-	}
-	// we ignore the error because it is tightly controlled
-	// we probably should handle it, but then we have to do it with everything downstream
-	// eventually
-	b, _ := proto.Marshal(conf)
-	return b
-}
-
-func CreateBaseDeviceOptions(_ uuid.UUID) []byte {
-	conf := &DeviceOptions{}
-	b, _ := json.Marshal(conf)
-	return b
-}
-
-func CreateBaseGlobalOptions() []byte {
-	conf := &GlobalOptions{}
-	b, _ := json.Marshal(conf)
-	return b
 }
