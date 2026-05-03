@@ -24,6 +24,7 @@ type apiHandler struct {
 	infoStream     *stream
 	metricStream   *stream
 	requestsStream *stream
+	flowlogsStream *stream
 }
 
 // GetUser godoc
@@ -51,7 +52,7 @@ func (h *apiHandler) recordClient(u *uuid.UUID, r *http.Request) {
 		log.Printf("error saving request structure: %v", err)
 		return
 	}
-	h.requestsStream.publish(*u, b)
+	h.requestsStream.publish(instanceID{devUUID: *u}, b)
 	h.manager.WriteRequest(*u, b)
 }
 
@@ -256,7 +257,7 @@ func (h *apiHandler) appLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := appLogsProcess(h.manager, *u, uid, b)
+	status, err := appLogsProcess(h.manager, h.logStream, *u, uid, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -291,7 +292,7 @@ func (h *apiHandler) newAppLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	status, err := newAppLogsProcess(h.manager, *u, uid, r.Body)
+	status, err := newAppLogsProcess(h.manager, h.logStream, *u, uid, r.Body)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)
@@ -327,7 +328,7 @@ func (h *apiHandler) flowLog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	status, err := flowLogProcess(h.manager, *u, b)
+	status, err := flowLogProcess(h.manager, h.flowlogsStream, *u, b)
 	if err != nil {
 		log.Printf("Failed to logsProcess: %v", err)
 		http.Error(w, http.StatusText(status), status)

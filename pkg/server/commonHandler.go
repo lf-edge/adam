@@ -25,7 +25,9 @@ import (
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve-api/go/config"
+	"github.com/lf-edge/eve-api/go/info"
 	"github.com/lf-edge/eve-api/go/logs"
+	"github.com/lf-edge/eve-api/go/metrics"
 	"github.com/lf-edge/eve-api/go/register"
 	uuid "github.com/satori/go.uuid"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -155,24 +157,34 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 }
 
 func infoProcess(manager driver.DeviceManager, infoStream *stream, u uuid.UUID, infoMessage []byte) (int, error) {
-	var err error
-	infoStream.publish(u, infoMessage)
-	err = manager.WriteInfo(u, infoMessage)
+	msg := &info.ZInfoMsg{}
+	if err := proto.Unmarshal(infoMessage, msg); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("error parsing info message: %v", err)
+	}
+	jsonBytes, err := protojson.Marshal(msg)
 	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to marshal info to json: %v", err)
+	}
+	infoStream.publish(instanceID{devUUID: u}, jsonBytes)
+	if err := manager.WriteInfo(u, append(jsonBytes, '\n')); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write info message: %v", err)
 	}
-	// send back a 201
 	return http.StatusCreated, nil
 }
 
 func metricProcess(manager driver.DeviceManager, metricStream *stream, u uuid.UUID, metricMessage []byte) (int, error) {
-	var err error
-	metricStream.publish(u, metricMessage)
-	err = manager.WriteMetrics(u, metricMessage)
+	msg := &metrics.ZMetricMsg{}
+	if err := proto.Unmarshal(metricMessage, msg); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("error parsing metrics message: %v", err)
+	}
+	jsonBytes, err := protojson.Marshal(msg)
 	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to marshal metrics to json: %v", err)
+	}
+	metricStream.publish(instanceID{devUUID: u}, jsonBytes)
+	if err := manager.WriteMetrics(u, append(jsonBytes, '\n')); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write metric message: %v", err)
 	}
-	// send back a 201
 	return http.StatusCreated, nil
 }
 
@@ -194,7 +206,7 @@ func logsProcess(manager driver.DeviceManager, logsStream *stream, u uuid.UUID, 
 		if entryBytes, err = entry.Json(); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
 		}
-		logsStream.publish(u, entryBytes)
+		logsStream.publish(instanceID{devUUID: u}, entryBytes)
 		err = manager.WriteLogs(u, entryBytes)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
@@ -228,7 +240,7 @@ func newLogsProcess(manager driver.DeviceManager, logsStream *stream, u uuid.UUI
 		if entryBytes, err = entry.Json(); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal FullLogEntry message: %v", err)
 		}
-		logsStream.publish(u, entryBytes)
+		logsStream.publish(instanceID{devUUID: u}, entryBytes)
 		err = manager.WriteLogs(u, entryBytes)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
@@ -238,7 +250,8 @@ func newLogsProcess(manager driver.DeviceManager, logsStream *stream, u uuid.UUI
 	return http.StatusCreated, nil
 }
 
-func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessage []byte) (int, error) {
+func appLogsProcess(manager driver.DeviceManager, logsStream *stream,
+	devID, appID uuid.UUID, logsMessage []byte) (int, error) {
 	msg := &logs.AppInstanceLogBundle{}
 	if err := proto.Unmarshal(logsMessage, msg); err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error parsing appinstancelogbundle message: %v", err)
@@ -249,7 +262,8 @@ func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessag
 		if b, err = protojson.Marshal(le); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
 		}
-		err = manager.WriteAppInstanceLogs(appID, u, b)
+		logsStream.publish(instanceID{devUUID: devID, appUUID: appID}, b)
+		err = manager.WriteAppInstanceLogs(appID, devID, b)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write appinstancelogbundle message: %v", err)
 		}
@@ -258,7 +272,8 @@ func appLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, logsMessag
 	return http.StatusCreated, nil
 }
 
-func newAppLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, reader io.Reader) (int, error) {
+func newAppLogsProcess(manager driver.DeviceManager, logsStream *stream,
+	devID, appID uuid.UUID, reader io.Reader) (int, error) {
 	gr, err := gzip.NewReader(reader)
 	if err != nil {
 		return http.StatusBadRequest, fmt.Errorf("error gzip.NewReader: %v", err)
@@ -273,7 +288,8 @@ func newAppLogsProcess(manager driver.DeviceManager, u, appID uuid.UUID, reader 
 		if b, err = protojson.Marshal(le); err != nil {
 			return http.StatusBadRequest, fmt.Errorf("failed to marshal LogEntry message: %v", err)
 		}
-		err = manager.WriteAppInstanceLogs(appID, u, b)
+		logsStream.publish(instanceID{devUUID: devID, appUUID: appID}, b)
+		err = manager.WriteAppInstanceLogs(appID, devID, b)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("failed to write logs message: %v", err)
 		}
@@ -329,8 +345,10 @@ func randomString(length int) string {
 	return fmt.Sprintf("%x", b)[:length]
 }
 
-func flowLogProcess(manager driver.DeviceManager, u uuid.UUID, flowMessage []byte) (int, error) {
+func flowLogProcess(manager driver.DeviceManager, flowlogsStream *stream,
+	u uuid.UUID, flowMessage []byte) (int, error) {
 	var err error
+	flowlogsStream.publish(instanceID{devUUID: u}, flowMessage)
 	err = manager.WriteFlowMessage(u, flowMessage)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write FlowMessage: %v", err)

@@ -529,7 +529,7 @@ func (d *DeviceManager) initDevice(u uuid.UUID) error {
 	}
 
 	// create the necessary directories for data uploads
-	for _, p := range []string{logDir, metricsDir, infoDir, requestsDir} {
+	for _, p := range []string{logDir, metricsDir, infoDir, requestsDir, flowMessageDir} {
 		cur := path.Join(devicePath, p)
 		err = os.MkdirAll(cur, 0755)
 		if err != nil {
@@ -735,6 +735,9 @@ func (d *DeviceManager) appExists(u, instanceID uuid.UUID) bool {
 	if _, ok := d.devices[u]; !ok {
 		return false
 	}
+	if _, ok := d.devices[u].AppLogs[instanceID]; !ok {
+		return false
+	}
 	return true
 }
 
@@ -750,8 +753,12 @@ func (d *DeviceManager) WriteAppInstanceLogs(instanceID uuid.UUID, deviceID uuid
 		return fmt.Errorf("unregistered device UUID: %s", deviceID)
 	}
 	if !d.appExists(deviceID, instanceID) {
+		appDir := d.getAppPath(deviceID, instanceID)
+		if err := os.MkdirAll(appDir, 0755); err != nil {
+			return fmt.Errorf("failed to create app log directory %s: %v", appDir, err)
+		}
 		d.devices[deviceID].AppLogs[instanceID] = &ManagedFile{
-			dir:     d.getAppPath(deviceID, instanceID),
+			dir:     appDir,
 			maxSize: int64(d.maxAppLogsSize),
 		}
 	}
@@ -1077,9 +1084,9 @@ func (d *DeviceManager) getOnboardPath(cn string) string {
 	return path.Join(d.databasePath, onboardDir, cn)
 }
 
-func openTimestampFile(filename string) (*os.File, error) {
+func openTimestampFile(dirname string) (*os.File, error) {
 	// open a new one
-	fullPath := path.Join(filename, time.Now().Format("2006-01-02T15:04:05.111"))
+	fullPath := path.Join(dirname, fmt.Sprintf("%020d", time.Now().UnixNano()))
 	return os.Create(fullPath)
 }
 
@@ -1213,6 +1220,31 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (common.ChunkReader, erro
 		return nil, fmt.Errorf("unregistered device UUID: %s", u)
 	}
 	return dev.Requests.Reader()
+}
+
+// GetAppLogsReader returns a logs reader for the specified application
+// on the given device.
+func (d *DeviceManager) GetAppLogsReader(devID, appID uuid.UUID) (common.ChunkReader, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	if !d.deviceExists(devID) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", devID)
+	}
+	if !d.appExists(devID, appID) {
+		return common.EmptyChunkReader{}, nil
+	}
+	return d.devices[devID].AppLogs[appID].Reader()
+}
+
+// GetFlowMessageReader returns a flow-message reader for the specified device.
+func (d *DeviceManager) GetFlowMessageReader(devID uuid.UUID) (common.ChunkReader, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	// check that the device actually exists
+	if !d.deviceExists(devID) {
+		return nil, fmt.Errorf("unregistered device UUID: %s", devID)
+	}
+	return d.devices[devID].FlowMessage.Reader()
 }
 
 // WriteFlowMessage write FlowMessage

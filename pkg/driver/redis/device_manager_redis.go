@@ -846,6 +846,32 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (common.ChunkReader, erro
 	return dev.Requests.Reader()
 }
 
+// GetAppLogsReader returns a logs reader for the specified application
+// on the given device.
+func (d *DeviceManager) GetAppLogsReader(devID, appID uuid.UUID) (common.ChunkReader, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	dev, ok := d.devices[devID]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", devID.String())
+	}
+	if !d.appExists(devID, appID) {
+		return common.EmptyChunkReader{}, nil
+	}
+	return dev.AppLogs[appID].Reader()
+}
+
+// GetFlowMessageReader returns a flow-message reader for the specified device.
+func (d *DeviceManager) GetFlowMessageReader(devID uuid.UUID) (common.ChunkReader, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	dev, ok := d.devices[devID]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID: %s", devID)
+	}
+	return dev.FlowMessage.Reader()
+}
+
 // refreshCache refresh cache from disk.
 // If isLocked is true the caller already holds d.m; otherwise refreshCache acquires it.
 func (d *DeviceManager) refreshCache(isLocked bool) error {

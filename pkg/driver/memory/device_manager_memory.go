@@ -606,6 +606,32 @@ func (d *DeviceManager) GetRequestsReader(u uuid.UUID) (common.ChunkReader, erro
 	return dev.Requests.Reader()
 }
 
+// GetAppLogsReader returns a logs reader for the specified application
+// on the given device.
+func (d *DeviceManager) GetAppLogsReader(devID, appID uuid.UUID) (common.ChunkReader, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	dev, ok := d.devices[devID]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", devID.String())
+	}
+	if !d.appExists(devID, appID) {
+		return common.EmptyChunkReader{}, nil
+	}
+	return dev.AppLogs[appID].Reader()
+}
+
+// GetFlowMessageReader returns a flow-message reader for the specified device.
+func (d *DeviceManager) GetFlowMessageReader(devID uuid.UUID) (common.ChunkReader, error) {
+	d.m.Lock()
+	defer d.m.Unlock()
+	dev, ok := d.devices[devID]
+	if !ok {
+		return nil, fmt.Errorf("unregistered device UUID %s", devID.String())
+	}
+	return dev.FlowMessage.Reader()
+}
+
 // WriteFlowMessage write FlowMessage
 func (d *DeviceManager) WriteFlowMessage(u uuid.UUID, b []byte) error {
 	// make sure it is not nil
