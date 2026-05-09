@@ -159,6 +159,28 @@ func (h *apiHandlerv2) getAllCerts() (map[string]*certs.ZCert, error) {
 	return allCerts, nil
 }
 
+// controllerCertConfigHash returns a base64-URL-encoded sha256 over the
+// concatenated raw bytes of the signing and encryption cert files. The
+// value is opaque - EVE only compares it to its previously-saved value
+// via handleControllerCertsSha and triggers a /certs refetch when it
+// changes. Any rotation of either file flips the hash.
+//
+// We intentionally hash the file bytes (not the parsed/trimmed cert)
+// because a missing or unreadable file is itself a meaningful state
+// transition: when EVE refetches /certs in response, it gets the
+// current content (which getAllCerts already TrimSpace's).
+func (h *apiHandlerv2) controllerCertConfigHash() string {
+	hasher := sha256.New()
+	for _, p := range []string{h.signingCertPath, h.encryptCertPath} {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		hasher.Write(data)
+	}
+	return base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+}
+
 func verifySignature(signature, payloadHash []byte, cert *x509.Certificate) error {
 
 	switch pub := cert.PublicKey.(type) {
@@ -506,7 +528,7 @@ func (h *apiHandlerv2) config(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	data, code, err := configProcess(h.manager, *u, configRequest, cfg, true)
+	data, code, err := configProcess(h.manager, *u, configRequest, cfg, true, h.controllerCertConfigHash())
 	if err != nil {
 		log.Println(err)
 		http.Error(w, http.StatusText(code), code)

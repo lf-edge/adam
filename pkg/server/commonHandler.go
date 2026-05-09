@@ -66,7 +66,7 @@ func contentTypeJSON(r *http.Request) bool {
 	}
 }
 
-func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *config.ConfigRequest, conf []byte, enforceIntegrityCheck bool) ([]byte, int, error) {
+func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *config.ConfigRequest, conf []byte, enforceIntegrityCheck bool, controllerCertConfigHash string) ([]byte, int, error) {
 	deviceOptions, err := getDeviceOptions(manager, u)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("failed to get device options: %v", err)
@@ -81,6 +81,14 @@ func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *con
 	if err := proto.Unmarshal(conf, &msg); err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error reading device config: %v", err)
 	}
+	// Populate controllercert_confighash so EVE's handleControllerCertsSha
+	// triggers /certs refetch whenever the cert chain changes - including
+	// pure encrypt-cert rotations that don't touch signing.pem and so
+	// don't otherwise raise SenderStatusCertMiss. See lf-edge/eve#5926.
+	// Set this *before* the ConfigHash computation so a cert-chain change
+	// also flips ConfigHash and EVE doesn't get 304 Not Modified.
+	msg.ControllercertConfighash = controllerCertConfigHash
+
 	response := &config.ConfigResponse{}
 
 	hash := sha256.New()
