@@ -129,7 +129,8 @@ func (h *apiHandler) configPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	data, code, err := configProcess(h.manager, *u, configRequest, cfg, false)
+	// v1 API: no controller cert chain, pass empty hash.
+	data, code, err := configProcess(h.manager, *u, configRequest, cfg, false, "")
 	if err != nil {
 		log.Printf("error configProcess: %v", err)
 		http.Error(w, http.StatusText(code), code)
