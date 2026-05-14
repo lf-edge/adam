@@ -17,6 +17,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -88,6 +89,28 @@ func configProcess(manager driver.DeviceManager, u uuid.UUID, configRequest *con
 	// Set this *before* the ConfigHash computation so a cert-chain change
 	// also flips ConfigHash and EVE doesn't get 304 Not Modified.
 	msg.ControllercertConfighash = controllerCertConfigHash
+
+	// Optional debug trace of what we're about to serve. Off by
+	// default; set ADAM_LOG_DEVICE_CONFIG=1 to enable when investigating
+	// "what did adam tell EVE on this poll?" questions. Fires before the
+	// 304 Not Modified check so it surfaces the response shape even on
+	// no-change polls.
+	if os.Getenv("ADAM_LOG_DEVICE_CONFIG") == "1" {
+		var bosVer, bosCTUUID string
+		var bosAct bool
+		if msg.Baseos != nil {
+			bosVer = msg.Baseos.BaseOsVersion
+			bosAct = msg.Baseos.Activate
+			bosCTUUID = msg.Baseos.ContentTreeUuid
+		}
+		log.Printf("config served: uuid=%s version=%s baseos.version=%q "+
+			"baseos.activate=%v baseos.ct=%q baseosconfig_list=%d "+
+			"contentInfo=%d apps=%d networks=%d volumes=%d datastores=%d",
+			u, msg.GetId().GetVersion(),
+			bosVer, bosAct, bosCTUUID,
+			len(msg.Base), len(msg.ContentInfo), len(msg.Apps),
+			len(msg.Networks), len(msg.Volumes), len(msg.Datastores))
+	}
 
 	response := &config.ConfigResponse{}
 
