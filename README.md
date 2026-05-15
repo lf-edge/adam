@@ -100,6 +100,29 @@ Finally, you can embed Adam container into an EVE root filesystem creating an EV
      net: host
 ```
 
+### Debug logging
+
+Adam logs every API request it receives. For investigations where you
+also need to see what was *returned* to the device on each `/config`
+poll, set `ADAM_LOG_DEVICE_CONFIG=1` in adam's environment. With this
+on, every served device config produces a one-line summary on stderr:
+
+```
+config served: uuid=<UUID> version=<N> baseos.version=<V> baseos.activate=<bool> \
+    baseos.ct=<content-tree-UUID> baseosconfig_list=<n> contentInfo=<n> apps=<n> \
+    networks=<n> volumes=<n> datastores=<n>
+```
+
+The variable is off by default; turning it on adds one log line per
+`/config` poll per device, which is modest at typical poll intervals
+(~30 s) but multiplies across N devices.
+
+For example, with `docker run`:
+
+```
+docker run -e ADAM_LOG_DEVICE_CONFIG=1 lfedge/adam server
+```
+
 ## Controlling Adam
 
 Adam provides a CLI management interface and Web UI, both of which wrap an open management API.
