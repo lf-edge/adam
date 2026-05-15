@@ -3,9 +3,9 @@ ENV PKGS alpine-baselayout
 RUN eve-alpine-deploy.sh
 
 WORKDIR /out
-COPY scripts /bin
-COPY samples /adam
-COPY ./bin/adam-linux-amd64 /bin/adam
+COPY scripts /out/bin/
+COPY samples /out/adam/
+COPY ./bin/adam-linux-amd64 /out/bin/adam
 
 FROM scratch
 COPY --from=build /out/ /
