@@ -155,7 +155,14 @@ func registerProcess(manager driver.DeviceManager, registerMessage []byte, onboa
 			_, usedSerial := err.(*common.UsedSerialError)
 			switch {
 			case invalidCert, invalidSerial:
-				return http.StatusUnauthorized, fmt.Errorf("failed authentication %v", err)
+				// The auth-container signature already verified upstream
+				// (apiHandlerv2.register checks SenderCertHash and the
+				// signature before calling here); a well-formed cert or
+				// serial that is simply not pre-registered is the
+				// "valid credentials without authorization" case the
+				// eve-api spec maps to 403 (APIv2.md, /register section
+				// and the table at lines 134-142).
+				return http.StatusForbidden, fmt.Errorf("not pre-registered %v", err)
 			case usedSerial:
 				return http.StatusConflict, fmt.Errorf("used serial %v", err)
 			}
