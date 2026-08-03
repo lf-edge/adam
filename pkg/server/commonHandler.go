@@ -26,6 +26,7 @@ import (
 	"github.com/lf-edge/adam/pkg/driver"
 	"github.com/lf-edge/adam/pkg/driver/common"
 	"github.com/lf-edge/eve-api/go/config"
+	"github.com/lf-edge/eve-api/go/flowlog"
 	"github.com/lf-edge/eve-api/go/info"
 	"github.com/lf-edge/eve-api/go/logs"
 	"github.com/lf-edge/eve-api/go/metrics"
@@ -385,12 +386,17 @@ func randomString(length int) string {
 
 func flowLogProcess(manager driver.DeviceManager, flowlogsStream *stream,
 	u uuid.UUID, flowMessage []byte) (int, error) {
-	var err error
-	flowlogsStream.publish(instanceID{devUUID: u}, flowMessage)
-	err = manager.WriteFlowMessage(u, flowMessage)
+	msg := &flowlog.FlowMessage{}
+	if err := proto.Unmarshal(flowMessage, msg); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("error parsing FlowMessage: %v", err)
+	}
+	jsonBytes, err := protojson.Marshal(msg)
 	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to marshal FlowMessage to json: %v", err)
+	}
+	flowlogsStream.publish(instanceID{devUUID: u}, jsonBytes)
+	if err := manager.WriteFlowMessage(u, append(jsonBytes, '\n')); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write FlowMessage: %v", err)
 	}
-	// send back a 201
 	return http.StatusCreated, nil
 }
