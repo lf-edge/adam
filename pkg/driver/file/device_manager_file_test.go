@@ -1124,6 +1124,44 @@ func TestDeviceManagerConcurrency(t *testing.T) {
 		}()
 		wg.Wait()
 	})
+
+	t.Run("OptionsReadDuringWriteIsComplete", func(t *testing.T) {
+		d, uids := setup(t, 1)
+		opts := []byte(`{"nonce":"` + strings.Repeat("x", 64*1024) + `"}`)
+		if err := d.SetDeviceOptions(uids[0], opts); err != nil {
+			t.Fatalf("SetDeviceOptions: %v", err)
+		}
+		stop := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if err := d.SetDeviceOptions(uids[0], opts); err != nil {
+					t.Errorf("SetDeviceOptions: %v", err)
+					return
+				}
+			}
+		}()
+		for i := 0; i < 2000; i++ {
+			b, err := d.GetDeviceOptions(uids[0])
+			if err != nil {
+				t.Errorf("GetDeviceOptions: %v", err)
+				break
+			}
+			if !bytes.Equal(b, opts) {
+				t.Errorf("read %d bytes of options, want %d", len(b), len(opts))
+				break
+			}
+		}
+		close(stop)
+		wg.Wait()
+	})
 }
 
 // readAllChunks drains every chunk from a ChunkReader, discarding the data.
