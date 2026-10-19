@@ -1099,19 +1099,34 @@ func (d *DeviceManager) writeProtobufToJSONFile(u uuid.UUID, dir, filename strin
 	return d.writeJSONFile(u, dir, filename, b)
 }
 
-// writeJSONFile write json to a named file in the given directory
+// writeJSONFile atomically replaces a named file in the given directory with b.
+// The data goes to a temporary file in the same directory, which is then
+// renamed over the target, so a concurrent reader sees either the previous
+// content or b, never a truncated or partly written file.
 func (d *DeviceManager) writeJSONFile(u uuid.UUID, dir, filename string, b []byte) error {
 	// if dir == "", then path.Join() automatically ignores it
 	fullPath := path.Join(d.getDevicePath(u), dir, filename)
-	f, err := os.Create(fullPath)
+	f, err := os.CreateTemp(path.Dir(fullPath), "."+filename+".tmp-*")
 	if err != nil {
-		return fmt.Errorf("failed to open file %s: %v", fullPath, err)
+		return fmt.Errorf("failed to create temporary file for %s: %v", fullPath, err)
 	}
-	defer f.Close()
+	tmpPath := f.Name()
+	defer os.Remove(tmpPath)
 	if _, err := f.Write(b); err != nil {
+		f.Close()
 		return fmt.Errorf("error writing to file: %v", err)
 	}
-	// no need to f.Close() as it happens automatically
+	// CreateTemp creates the file 0600; match the 0644 of the other device files.
+	if err := f.Chmod(0644); err != nil {
+		f.Close()
+		return fmt.Errorf("failed to set mode on %s: %v", tmpPath, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("failed to close %s: %v", tmpPath, err)
+	}
+	if err := os.Rename(tmpPath, fullPath); err != nil {
+		return fmt.Errorf("failed to rename %s to %s: %v", tmpPath, fullPath, err)
+	}
 	return nil
 }
 
