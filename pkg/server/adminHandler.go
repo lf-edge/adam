@@ -498,12 +498,14 @@ func (h *adminHandler) deviceDataGet(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-type", "application/json")
-		flusher.Flush()
-
+		// Subscribe before telling the client the stream is open, otherwise
+		// entries published between the flush and the subscription are lost.
 		c, unsubscribe := s.subscribe(id)
 		defer unsubscribe()
+
+		w.Header().Set("Content-type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
 
 		for {
 			select {
